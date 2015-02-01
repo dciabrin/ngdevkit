@@ -6,7 +6,6 @@
 *.a
 
 # Generated content
-toolchain/
 build/
 local/
 rom/

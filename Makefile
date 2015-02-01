@@ -32,14 +32,14 @@ download-toolchain: \
 	toolchain/$(SRC_GCC).tar.bz2 \
 	toolchain/$(SRC_NEWLIB).tar.gz
 
-toolchain/$(SRC_BINUTILS).tar.bz2: toolchain
-	curl $(GNU_MIRROR)/binutils/$(notdir $@) -o $@
+toolchain/$(SRC_BINUTILS).tar.bz2:
+	curl $(GNU_MIRROR)/binutils/$(notdir $@) > $@
 
-toolchain/$(SRC_GCC).tar.bz2: toolchain
-	curl $(GNU_MIRROR)/gcc/$(SRC_GCC)/$(notdir $@) -o $@
+toolchain/$(SRC_GCC).tar.bz2:
+	curl $(GNU_MIRROR)/gcc/$(SRC_GCC)/$(notdir $@) > $@
 
-toolchain/$(SRC_NEWLIB).tar.gz: toolchain
-	curl ftp://sourceware.org/pub/newlib/$(notdir $@) -o $@
+toolchain/$(SRC_NEWLIB).tar.gz:
+	curl ftp://sourceware.org/pub/newlib/$(notdir $@) > $@
 
 clean-toolchain:
 	rm -f toolchain/*.tar.*
@@ -66,9 +66,9 @@ toolchain/%:
 
 build-compiler: build/ngbinutils build/nggcc build/ngnewlib
 
-build/ngbinutils: build
+build/ngbinutils:
 	@ echo compiling binutils...; \
-	mkdir build/ngbinutils; \
+	mkdir -p build/ngbinutils; \
 	cd build/ngbinutils; \
 	../../toolchain/$(SRC_BINUTILS)/configure \
 	--prefix=$(LOCALDIR) \
@@ -77,9 +77,9 @@ build/ngbinutils: build
 	make $(HOSTOPTS); \
 	make install
 
-build/nggcc: build
+build/nggcc:
 	@ echo compiling gcc...; \
-	mkdir build/nggcc; \
+	mkdir -p build/nggcc; \
 	cd build/nggcc; \
 	../../toolchain/$(SRC_GCC)/configure \
 	--prefix=$(LOCALDIR) \
@@ -100,7 +100,7 @@ build/nggcc: build
 build/ngnewlib: build
 	@ echo compiling newlib...; \
 	export PATH=$(LOCALDIR)/bin:$$PATH; \
-	mkdir build/ngnewlib; \
+	mkdir -p build/ngnewlib; \
 	cd build/ngnewlib; \
 	../../toolchain/$(SRC_NEWLIB)/configure \
 	--prefix=$(LOCALDIR) \
@@ -114,18 +114,17 @@ build/ngnewlib: build
 
 build-tools:
 	for i in nullbios runtime include tools/tiletool; do \
-	  $(MAKE) -s -C $$i install; \
+	  $(MAKE) -C $$i install; \
 	done
 
-build toolchain:
-	mkdir $@
 
 clean:
 	rm -rf build/ngbinutils build/nggcc build/ngnewlib
 	rm -rf local/*
 
-clean-all: clean
-	rm -rf toolchain build
+distclean: clean
+	find toolchain -mindepth 1 -maxdepth 1 -not -name README.md -exec rm -rf {} \;
+	rm -rf build local
 	find . -name '*~' -exec rm -f {} \;
 
-.PHONY: clean clean-all
+.PHONY: clean distclean
