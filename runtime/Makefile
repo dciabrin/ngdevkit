@@ -29,8 +29,8 @@ all: $(TARGETS)
 install: $(TARGETS)
 	cp -f $^ ngdevkit.ld $(LOCALDIR)/$(PREFIX)/lib; \
 	ver=`$(CC) -dumpspecs | grep -A1 \*version: | tail -1`; \
-	$(CC) -dumpspecs | sed -r 's/(-lc)/\1 -lsyscalls/' | \
-	sed -r 's/(crtbegin.o%s)/-T ngdevkit.ld%s \1/' > \
+	$(CC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls/' | \
+	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit.ld%s \1/' > \
 	$(LOCALDIR)/lib/gcc/$(PREFIX)/$$ver/specs
 
 libsyscalls.a: syscalls.o
