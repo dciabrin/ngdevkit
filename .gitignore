@@ -9,3 +9,12 @@
 build/
 local/
 rom/
+
+# Download area
+toolchain/
+!toolchain/README.md
+
+# Editors tmp
+*~
+\#*#
+.#*
