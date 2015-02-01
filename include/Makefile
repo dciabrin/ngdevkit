@@ -19,7 +19,7 @@ include ../Makefile.config
 PREFIX=m68k-neogeo-elf
 
 install:
-	mkdir $(LOCALDIR)/$(PREFIX)/include/ng
+	mkdir -p $(LOCALDIR)/$(PREFIX)/include/ng
 	cp *.h $(LOCALDIR)/$(PREFIX)/include/ng
 
 clean:
