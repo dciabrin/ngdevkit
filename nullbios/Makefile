@@ -38,17 +38,20 @@ $(ELF):	$(OBJS:%=%.o)
 %.o: %.S
 	$(AS) -c $< -o $@
 
-mrom:
+mrom: rom
 	dd if=/dev/zero bs=1024 count=128 of=rom/sm1.sm1
 
-srom:
+srom: rom
 	dd if=/dev/urandom bs=1024 count=128 of=rom/sfix.sfix
 
-prom: $(ELF)
+prom: $(ELF) rom
 	$(OBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< rom/sp-s2.sp1
 
-zrom:
+zrom: rom
 	./zoom-rom.py -o rom/000-lo.lo
+
+rom:
+	mkdir $@
 
 install: bios
 
