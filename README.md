@@ -17,6 +17,11 @@ AES or MVS hardware. It includes:
 
    * Tools for managing graphics for fix and sprite ROM.
 
+   * Support for source-level debugging with GDB!
+
+   * A modified version of the emulator [GnGeo][gngeo], extended with
+     remote debugging support!
+
 
 
 ## How to compile the devkit
@@ -24,16 +29,20 @@ AES or MVS hardware. It includes:
 ### Pre-requisite
 
 You need to install various dependencies to build gcc, and ImageMagick
-for all the graphics trickery. On a Debian-derived distro, this is
-done via:
+for all the graphics trickery. You also need SDL 1.2 and Python 2.7
+for the emulator and its source-level debugging support.
+On a Debian-derived distro, this is done via:
 
     apt-get build-dep gcc
     apt-get install imagemagick
+    apt-get install libsdl1.2-dev
+    apt-get install python2.7-dev
 
 If running OS X, you will need XCode and brew:
 
     brew deps gcc | xargs brew install
     brew install imagemagick
+    brew install sdl
 
 ### Building the toolchain
 
@@ -52,6 +61,62 @@ You can see how to use the toolchain by compiling demos in directory
 
 This will compile the example and copy the replacement BIOS into
 directory `rom`. You can now run it with you favorite emulator.
+
+## Using the devkit
+
+Once compiled, the devkit is available in subdirectory `local`. In
+order to use it from the terminal, you need to set up various
+environment variables. This can be done automatically with:
+
+    eval $(make shellinit)
+
+You will then have access to all the binaries from the toolchain,
+including the emulator and the debugger.
+
+### Running the emulator
+
+Testing your ROM is quite straightforward. For instance, these are all
+the steps needed to compile and execute the example ROM:
+
+    eval $(make shellinit)
+    cd examples/01-helloworld
+    make
+    make nullbios
+    x86_64-gngeo -i rom puzzledp
+
+### Debugging your programs
+
+The devkit uses a modified version of GnGeo which supports remote
+debugging via GDB. In order to use that feature on the example ROM,
+you first need to start the emulator in debugger mode:
+
+    eval $(make shellinit)
+    cd examples/01-helloworld
+    x86_64-gngeo -i rom puzzledp -D
+
+With argument `-D`, the emulator waits for a connection from a GDB
+client on port `2159` of `localhost`.
+
+Then, run GDB with the original ELF file as a target instead of the
+final ROM file:
+
+    eval $(make shellinit)
+    cd examples/01-helloworld
+    m68k-neogeo-elf-gdb rom.elf
+
+The ELF file contains all the necessary data for the debugger,
+including functions, variables and source-level line information.
+
+Once GDB is started, connect to the emulator to start the the debugging
+session. For example:
+
+    (gdb) target remote :2159
+    Remote debugging using :2159
+    0x00c04300 in ?? ()
+    (gdb) b main.c:52
+    Breakpoint 1 at 0x57a: file main.c, line 52.
+    (gdb) c
+
 
 ## History
 

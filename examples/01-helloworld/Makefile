@@ -35,7 +35,7 @@ $(ELF):	$(OBJS:%=%.o)
 	$(CC) $^ -o $@
 
 %.o: %.c
-	$(CC) -std=c99 -fomit-frame-pointer -c $< -o $@
+	$(CC) -std=c99 -fomit-frame-pointer -g -c $< -o $@
 
 mrom: rom
 	dd if=/dev/zero bs=1024 count=128 of=rom/202-m1.m1
