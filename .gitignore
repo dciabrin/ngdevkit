@@ -14,6 +14,9 @@ rom/
 toolchain/
 !toolchain/README.md
 
+# Config
+Makefile.config
+
 # Editors tmp
 *~
 \#*#
