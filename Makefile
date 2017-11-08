@@ -53,7 +53,12 @@ toolchain/$(SRC_GDB).tar.gz:
 	curl $(GNU_MIRROR)/gdb/$(notdir $@) > $@
 
 toolchain/gngeo:
-	git clone https://github.com/dciabrin/GnGeo-Pi.git $@
+	@ echo downloading and setting up gngeo; \
+	git clone https://github.com/dciabrin/gngeo.git $@; \
+	cd $@; \
+	git merge --no-commit --squash remotes/origin/emudbg; \
+	autoreconf -iv; \
+	echo Done.
 
 clean-toolchain:
 	rm -f toolchain/*.tar.* toolchain/gngeo
@@ -146,11 +151,9 @@ build/gngeo: build
 	export PATH=$(LOCALDIR)/bin:$$PATH; \
 	mkdir -p build/gngeo; \
 	cd build/gngeo; \
-	../../toolchain/gngeo/gngeo/configure \
+	../../toolchain/gngeo/configure \
 	--prefix=$(LOCALDIR) \
-	--disable-i386asm \
-	--target=x86_64 \
-	-v CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"; \
+	CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"; \
 	make $(HOSTOPTS); \
 	make install
 

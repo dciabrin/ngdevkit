@@ -19,8 +19,8 @@ AES or MVS hardware. It includes:
 
    * Support for source-level debugging with GDB!
 
-   * A modified version of the emulator [GnGeo][gngeo], extended with
-     remote debugging support!
+   * A modified version of the emulator [GnGeo][gngeo], with support
+     for libretro's GLSL shaders and remote debugging!
 
 
 
@@ -29,13 +29,13 @@ AES or MVS hardware. It includes:
 ### Pre-requisite
 
 You need to install various dependencies to build gcc, and ImageMagick
-for all the graphics trickery. You also need SDL 1.2 and Python 2.7
+for all the graphics trickery. You also need SDL 2.0 and Python 2.7
 for the emulator and its source-level debugging support.
 On a Debian-derived distro, this is done via:
 
     apt-get build-dep gcc
     apt-get install imagemagick
-    apt-get install libsdl1.2-dev
+    apt-get install libsdl2.0-dev
     apt-get install python2.7-dev
 
 If running OS X, you will need XCode and brew:
@@ -162,5 +162,5 @@ License along with this program. If not, see
 [ngdev]: http://wiki.neogeodev.org
 [sfnet]: http://neogeodev.sourceforge.net
 [cdoty]: http://rastersoft.net
-[gngeo]: https://code.google.com/p/gngeo
+[gngeo]: https://github.com/dciabrin/gngeo
 [mame]: http://mamedev.org/
