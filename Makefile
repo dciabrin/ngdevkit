@@ -22,6 +22,7 @@ SRC_BINUTILS=binutils-2.25
 SRC_GCC=gcc-4.9.2
 SRC_NEWLIB=newlib-1.14.0
 SRC_GDB=gdb-7.8.2
+SRC_SDCC=sdcc-src-20171109-10174
 
 all: \
 	download-toolchain \
@@ -37,6 +38,7 @@ download-toolchain: \
 	toolchain/$(SRC_GCC).tar.bz2 \
 	toolchain/$(SRC_NEWLIB).tar.gz \
 	toolchain/$(SRC_GDB).tar.gz \
+	toolchain/$(SRC_SDCC).tar.bz2 \
 
 download-emulator: toolchain/gngeo
 
@@ -51,6 +53,9 @@ toolchain/$(SRC_NEWLIB).tar.gz:
 
 toolchain/$(SRC_GDB).tar.gz:
 	curl $(GNU_MIRROR)/gdb/$(notdir $@) > $@
+
+toolchain/$(SRC_SDCC).tar.bz2:
+	curl -L http://sourceforge.net/projects/sdcc/files/snapshot_builds/sdcc-src/$(notdir $@) > $@
 
 toolchain/gngeo:
 	@ echo downloading and setting up gngeo; \
@@ -69,14 +74,16 @@ unpack-toolchain: \
 	toolchain/$(SRC_GCC) \
 	toolchain/$(SRC_NEWLIB) \
 	toolchain/$(SRC_GDB) \
+	toolchain/sdcc \
 
 toolchain/$(SRC_BINUTILS): toolchain/$(SRC_BINUTILS).tar.bz2
 toolchain/$(SRC_GCC): toolchain/$(SRC_GCC).tar.bz2
 toolchain/$(SRC_NEWLIB): toolchain/$(SRC_NEWLIB).tar.gz
 toolchain/$(SRC_GDB): toolchain/$(SRC_GDB).tar.gz
+toolchain/sdcc: toolchain/$(SRC_SDCC).tar.bz2
 
 
-toolchain/%: 
+toolchain/%:
 	echo uncompressing $(notdir $@)...; \
 	cd toolchain; \
 	tar $(if $(filter %.gz, $<),z,j)xmf $(notdir $<); \
@@ -85,7 +92,7 @@ toolchain/%:
 	echo Done.
 
 
-build-compiler: build/ngbinutils build/nggcc build/ngnewlib
+build-compiler: build/ngbinutils build/nggcc build/ngnewlib build/ngsdcc
 build-debugger: build/nggdb
 build-emulator: build/gngeo
 
@@ -142,6 +149,32 @@ build/nggdb: build
 	../../toolchain/$(SRC_GDB)/configure \
 	--prefix=$(LOCALDIR) \
 	--target=m68k-neogeo-elf \
+	-v; \
+	make $(HOSTOPTS); \
+	make install
+
+build/ngsdcc: build
+	@ echo compiling sdcc...; \
+	export PATH=$(LOCALDIR)/bin:$$PATH; \
+	mkdir -p build/ngsdcc; \
+	cd build/ngsdcc; \
+	../../toolchain/sdcc/configure \
+	--prefix=$(LOCALDIR) \
+	--disable-non-free \
+	--enable-z80-port \
+	--disable-pic14-port \
+	--disable-pic16-port \
+	--disable-ds390-port \
+	--disable-ds400-port \
+	--disable-hc08-port \
+	--disable-s08-port \
+	--disable-mcs51-port \
+	--disable-z180-port \
+	--disable-r2k-port \
+	--disable-r3ka-port \
+	--disable-gbz80-port \
+	--disable-tlcs90-port \
+	--disable-stm8-port \
 	-v; \
 	make $(HOSTOPTS); \
 	make install
