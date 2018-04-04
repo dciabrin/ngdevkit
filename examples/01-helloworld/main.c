@@ -48,9 +48,9 @@ int main(void) {
 
   // Salute the world!
   const char hello1[]="hello NEO-GEO!";
-  const char hello2[]="http://github.com/dciabrin/ngdevkit";
-  display((40-sizeof(hello1))/2, 10, hello1);
-  display((40-sizeof(hello2))/2, 12, hello2);
+  const char hello2[]="https://github.com/dciabrin/ngdevkit";
+  display((42-sizeof(hello1))/2, 10, hello1);
+  display((42-sizeof(hello2))/2, 12, hello2);
 
   for(;;) {}
   return 0;

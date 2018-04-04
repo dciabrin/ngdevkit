@@ -20,9 +20,13 @@ PREFIX=m68k-neogeo-elf
 CC=$(LOCALDIR)/bin/$(PREFIX)-gcc
 AS=$(LOCALDIR)/bin/$(PREFIX)-gcc
 OBJCOPY=$(LOCALDIR)/bin/$(PREFIX)-objcopy
+Z80OBJCOPY=$(LOCALDIR)/bin/sdobjcopy
 
 OBJS=biosstart
 ELF=prom.elf
+
+NULLSOUND=../sound/nullsound
+Z80HEX=$(NULLSOUND)/nullsound.ihx
 
 VERSION=0.1
 
@@ -39,7 +43,8 @@ $(ELF):	$(OBJS:%=%.o)
 	$(AS) -c $< -o $@
 
 mrom: rom
-	dd if=/dev/zero bs=1024 count=128 of=rom/sm1.sm1
+	$(MAKE) -C $(NULLSOUND) && \
+	$(Z80OBJCOPY) -I ihex -O binary $(Z80HEX) rom/sm1.sm1 --pad-to 131072
 
 srom: rom
 	dd if=/dev/urandom bs=1024 count=128 of=rom/sfix.sfix

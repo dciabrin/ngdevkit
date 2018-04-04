@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Damien Ciabrini
+# Copyright (c) 2015-2017 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -19,15 +19,19 @@ include ../../Makefile.config
 PREFIX=m68k-neogeo-elf
 CC=$(LOCALDIR)/bin/$(PREFIX)-gcc
 OBJCOPY=$(LOCALDIR)/bin/$(PREFIX)-objcopy
+Z80OBJCOPY=$(LOCALDIR)/bin/sdobjcopy
 TILETOOL=$(LOCALDIR)/bin/tiletool.py
 
 OBJS=main
 ELF=rom.elf
 
-cart: prom crom srom mrom vrom
+NULLSOUND=../../sound/nullsound
+Z80HEX=$(NULLSOUND)/nullsound.ihx
+
+cart: prom crom srom vrom mrom
 	cd rom && for i in *.??; do ln -nsf $$i $${i%.*}.bin; done; \
 	/bin/echo -e "\
-http://github.com/dciabrin/ngdevkit\n\
+https://github.com/dciabrin/ngdevkit\n\
 ." | zip -qz puzzledp.zip *.?? *.bin
 	@echo "\n"Type \'make nullbios\' to copy the open source BIOS in ./rom
 
@@ -38,7 +42,8 @@ $(ELF):	$(OBJS:%=%.o)
 	$(CC) -std=c99 -fomit-frame-pointer -g -c $< -o $@
 
 mrom: rom
-	dd if=/dev/zero bs=1024 count=128 of=rom/202-m1.m1
+	$(MAKE) -C $(NULLSOUND) && \
+	$(Z80OBJCOPY) -I ihex -O binary $(Z80HEX) rom/202-m1.m1 --pad-to 131072
 
 vrom: rom
 	dd if=/dev/zero bs=1024 count=512 of=rom/202-v1.v1

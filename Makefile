@@ -193,7 +193,7 @@ build/gngeo: build
 # (find . -name Makefile | xargs sed -i.bk -e 's/-frerun-loop-opt//g' -e 's/-funroll-loops//g' -e 's/-malign-double//g');
 
 build-tools:
-	for i in nullbios runtime include tools/tiletool debugger; do \
+	for i in sound/nullsound nullbios runtime include tools/tiletool debugger; do \
 	  $(MAKE) -C $$i install; \
 	done
 
