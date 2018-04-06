@@ -33,7 +33,7 @@ rom/s1.bin: rom srom.bmp
 	$(TILETOOL) --fix -c srom.bmp -o rom/s1.bin
 
 rom/c1.bin rom/c2.bin: rom
-	$(TILETOOL) --sprite -c gfx/logo.png -o tmp.c1 tmp.c2 -s 1048576; \
+	$(TILETOOL) --sprite -c gfx/logo.png -o tmp.c1 tmp.c2; \
 	(dd bs=64 count=14 if=tmp.c1; dd bs=64 skip=15 if=tmp.c1; dd bs=64 count=1 if=/dev/zero) 2>/dev/null | cat >rom/c1.bin; \
 	(dd bs=64 count=14 if=tmp.c2; dd bs=64 skip=15 if=tmp.c2; dd bs=64 count=1 if=/dev/zero) 2>/dev/null | cat >rom/c2.bin
 
