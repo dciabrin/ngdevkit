@@ -111,7 +111,7 @@ RESET:
 
 	/* Mark init as done, and jmp to cart's main function */
         move    #0x2000, %sr
-	bclr    #7, 0x10fd80
+	bset    #7, 0x10fd80
         jmp.l   0x122
 
 /**

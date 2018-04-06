@@ -28,12 +28,12 @@ ELF=prom.elf
 NULLSOUND=../sound/nullsound
 Z80HEX=$(NULLSOUND)/nullsound.ihx
 
-VERSION=0.1
+VERSION=0.2
 
 bios: prom zrom srom mrom
 	cd rom && /bin/echo -e "\
 nullbios $(VERSION), an open source BIOS for Neo Geo\n\
-http://github.com/dciabrin/ngdevkit\n\
+https://github.com/dciabrin/ngdevkit\n\
 ." | zip -qz neogeo.zip *.lo *.s*
 
 $(ELF):	$(OBJS:%=%.o)
