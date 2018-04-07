@@ -1,6 +1,6 @@
 /* 
  * Header for C development on Neo Geo
- * Copyright (c) 2015 Damien Ciabrini
+ * Copyright (c) 2015-2018 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -33,3 +33,5 @@ typedef signed int     s32;
 #define MMAP_PALBANK1	((volatile u16*)0x400000)
 
 #define REG_WATCHDOGW   ((volatile u8*)0x300001)
+
+#define REG_P1CNT       ((volatile u8*)0x300000)
