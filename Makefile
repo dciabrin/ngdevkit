@@ -22,7 +22,7 @@ SRC_BINUTILS=binutils-2.25
 SRC_GCC=gcc-4.9.2
 SRC_NEWLIB=newlib-1.14.0
 SRC_GDB=gdb-7.8.2
-SRC_SDCC=sdcc-src-20171109-10174
+SRC_SDCC=sdcc-src-3.7.0
 
 all: \
 	download-toolchain \
@@ -55,7 +55,7 @@ toolchain/$(SRC_GDB).tar.gz:
 	curl $(GNU_MIRROR)/gdb/$(notdir $@) > $@
 
 toolchain/$(SRC_SDCC).tar.bz2:
-	curl -L http://sourceforge.net/projects/sdcc/files/snapshot_builds/sdcc-src/$(notdir $@) > $@
+	curl -L http://sourceforge.net/projects/sdcc/files/sdcc/$(SRC_SDCC:sdcc-src-%=%)/$(notdir $@) > $@
 
 toolchain/gngeo:
 	@ echo downloading and setting up gngeo; \

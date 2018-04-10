@@ -12,6 +12,9 @@ AES or MVS hardware. It includes:
    * Helpers for declaring ROM information (name, DIP, interrupt
      handlers...)
 
+   * A C and ASM cross-compiler for the z80 (SDCC 3.7), for developping
+     your music and sound driver.
+
    * An open source replacement BIOS for testing your ROMs
      under you favorite emulator.
 
