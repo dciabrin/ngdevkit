@@ -25,6 +25,8 @@ AES or MVS hardware. It includes:
    * A modified version of the emulator [GnGeo][gngeo], with support
      for libretro's GLSL shaders and remote debugging!
 
+   * A simple scanline pixel shader for a nice retro look!
+
 
 
 ## How to compile the devkit
@@ -85,7 +87,7 @@ the steps needed to compile and execute the example ROM:
     cd examples/01-helloworld
     make
     make nullbios
-    x86_64-gngeo -i rom puzzledp
+    make gngeo # or make gngeo-fullscreen for more fun
 
 ### Debugging your programs
 

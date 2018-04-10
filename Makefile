@@ -31,7 +31,8 @@ all: \
 	build-debugger \
 	build-tools \
 	download-emulator \
-	build-emulator
+	build-emulator \
+	download-shaders
 
 download-toolchain: \
 	toolchain/$(SRC_BINUTILS).tar.bz2 \
@@ -41,6 +42,8 @@ download-toolchain: \
 	toolchain/$(SRC_SDCC).tar.bz2 \
 
 download-emulator: toolchain/gngeo
+
+download-shaders: toolchain/qcrt-glsl
 
 toolchain/$(SRC_BINUTILS).tar.bz2:
 	curl $(GNU_MIRROR)/binutils/$(notdir $@) > $@
@@ -65,8 +68,12 @@ toolchain/gngeo:
 	autoreconf -iv; \
 	echo Done.
 
+toolchain/qcrt-glsl:
+	@ echo downloading example pixel shaders; \
+	git clone https://github.com/dciabrin/qcrt-glsl.git $@
+
 clean-toolchain:
-	rm -f toolchain/*.tar.* toolchain/gngeo
+	rm -f toolchain/*.tar.* toolchain/gngeo toolchain/qcrt-glsl
 
 
 unpack-toolchain: \

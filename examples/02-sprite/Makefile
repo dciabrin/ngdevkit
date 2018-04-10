@@ -72,4 +72,10 @@ assets:
 rom:
 	mkdir $@
 
-.PHONY: cart assets nullbios clean
+gngeo:
+	$(LOCALDIR)/bin/gngeo -b glsl --scale 3 --no-resize --shaderpath=$(LOCALDIR)/../toolchain/qcrt-glsl --shader qcrt-flat.glslp -i rom puzzledp
+
+gngeo-fullscreen:
+	$(LOCALDIR)/bin/gngeo -b glsl --fullscreen --scale 5 --no-resize --shaderpath=$(LOCALDIR)/../toolchain/qcrt-glsl --shader qcrt-flat.glslp -i rom puzzledp
+
+.PHONY: cart assets nullbios clean gngeo gngeo-fullscreen
