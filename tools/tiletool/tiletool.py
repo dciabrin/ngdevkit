@@ -224,7 +224,7 @@ class sprite_converter(converter):
     A 16x16 sprite tile takes 16 * 16 * 4bits = 1024bits = 128bytes.
     It's split into 4 8x8 blocks, stored as sequences of horizontal rows.
     Each row is encoded in 4 successive bitplanes of 8 bits
-    over roms c2 (plane 4; plane 3) and c1 (plane 2; plane 1).
+    over roms c1 (plane 1; plane 2) and c2 (plane 3; plane 4).
     """
 
     def __init__(self, args):
@@ -284,10 +284,10 @@ class sprite_converter(converter):
             surf_off = tile8x8_off
 
             for y in xrange(8):
-                row_bitplane1 = ord(self.fd2.read(1))
-                row_bitplane2 = ord(self.fd2.read(1))
-                row_bitplane3 = ord(self.fd1.read(1))
-                row_bitplane4 = ord(self.fd1.read(1))
+                row_bitplane1 = ord(self.fd1.read(1))
+                row_bitplane2 = ord(self.fd1.read(1))
+                row_bitplane3 = ord(self.fd2.read(1))
+                row_bitplane4 = ord(self.fd2.read(1))
 
                 for x in xrange(8):
                     bp1 = (row_bitplane1 >> x) & 1
@@ -322,8 +322,8 @@ class sprite_converter(converter):
                     row_bitplane4 += ((col >> 3) & 1) << x
                     surf_off += 1
 
-                self.fd2.write(struct.pack('2B', row_bitplane1, row_bitplane2))
-                self.fd1.write(struct.pack('2B', row_bitplane3, row_bitplane4))
+                self.fd1.write(struct.pack('2B', row_bitplane1, row_bitplane2))
+                self.fd2.write(struct.pack('2B', row_bitplane3, row_bitplane4))
                 surf_off += 8
 
 
