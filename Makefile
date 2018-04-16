@@ -64,7 +64,7 @@ toolchain/gngeo:
 	@ echo downloading and setting up gngeo; \
 	git clone https://github.com/dciabrin/gngeo.git $@; \
 	cd $@; \
-	git merge --no-commit --squash remotes/origin/emudbg; \
+	git checkout -b ngdevkit origin/ngdevkit; \
 	autoreconf -iv; \
 	echo Done.
 
