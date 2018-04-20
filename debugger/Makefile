@@ -17,10 +17,9 @@
 include ../Makefile.config
 
 CC=gcc
-INCFLAGS=$(shell python2.7-config --includes)
-LDFLAGS=$(shell python2.7-config --libs)
+INCFLAGS=
+LDFLAGS=
 
-SCRIPTS=emudbgserver.py
 INCFILES=emudbg.h
 
 ifeq ($(shell uname), Darwin)
@@ -29,7 +28,7 @@ else
 EXT=so
 endif
 
-OBJS=emudbg.o
+OBJS=emudbg.o gdbserver.o
 TARGET=libemudbg.$(EXT)
 
 all: $(TARGET)
@@ -37,13 +36,16 @@ all: $(TARGET)
 install: $(TARGET)
 	cp $(TARGET) $(LOCALDIR)/lib
 	cp $(INCFILES) $(LOCALDIR)/include
-	cp $(SCRIPTS) $(LOCALDIR)/bin
 
 $(TARGET): $(OBJS)
-	$(CC) -shared $< -o $@ $(LDFLAGS)
+	$(CC) -shared $^ -o $@ $(LDFLAGS)
 
-emudbg.o: emudbg.c emudbg.h
-	$(CC) $(INCFLAGS) -fPIC -g -c $< -o $@
+%.o: %.c
+	$(CC) -std=c99 $(INCFLAGS) -fPIC -g -c $< -o $@
+
+emudbg_ctx.h: emudbg.h
+emudbg.o: emudbg.c emudbg.h emudbg_ctx.h gdbserver.h
+gdbserver.o: gdbserver.c gdbserver.h emudbg_ctx.h
 
 clean:
 	rm -f $(TARGET) *.o *~

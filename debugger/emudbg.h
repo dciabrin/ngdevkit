@@ -1,6 +1,6 @@
 /*
  * emudbg - emulator-agnostic source level debugging API
- * Copyright (c) 2015 Damien Ciabrini
+ * Copyright (c) 2015-2018 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -16,6 +16,9 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#ifndef __EMUDBG_H__
+#define __EMUDBG_H__
 
 #include <stdint.h>
 
@@ -48,7 +51,6 @@ struct emudbg_api_t {
     void (*clear_breakpoints)();
 };
 
-
 /**
  * Next run state to be executed by the emulator
  */
@@ -59,25 +61,26 @@ struct emudbg_cmd_t {
     uint32_t step_range_min, step_range_max;
 };
 
+
 /**
  * Initialize the remote debugger API
  * @param impl the set of debugging features that must \
  *             be implemented by the emulator
  * @return initialization status
  */
-int emudbg_init(struct emudbg_api_t *impl);
+int emudbg_init(struct emudbg_api_t *impl, void **emudbg_ctx);
 
 /**
  * Wait for an incoming connection from a remote debugger
  * @return state of the connection
  */
-int emudbg_wait_for_client(void);
+int emudbg_wait_for_client(void *emudbg_ctx);
 
 /**
  * Check for pending command issued by the remote debugger
  * @return whether there are pending data from the remote debugger
  */
-int emudbg_client_command_pending(void);
+int emudbg_client_command_pending(void *emudbg_ctx);
 
 /**
  * Go into debugger interactive loop
@@ -88,9 +91,11 @@ int emudbg_client_command_pending(void);
  *                the remote debugger
  * @return status of the remote loop
  */
-int emudbg_server_loop(int emu_suspended, struct emudbg_cmd_t *next);
+int emudbg_server_loop(void *emudbg_ctx, int emu_suspended, struct emudbg_cmd_t *next);
 
 /**
  * Clean debugging session associated with a disconnected remote debugger
  */
-void emudbg_disconnect_from_client(void);
+void emudbg_disconnect_from_client(void *emudbg_ctx);
+
+#endif /* __EMUDBG_H__ */

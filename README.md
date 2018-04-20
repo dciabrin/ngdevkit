@@ -34,8 +34,8 @@ AES or MVS hardware. It includes:
 ### Pre-requisite
 
 You need to install various dependencies to build gcc, sdcc and
-ImageMagick for all the graphics trickery. You also need SDL 2.0 and
-Python 2.7 for the emulator and its source-level debugging support.
+ImageMagick for all the graphics trickery. You also need SDL 2.0
+for the emulator and its source-level debugging support.
 On a Debian-derived distro, this can be done with:
 
     apt-get install gcc curl
@@ -44,10 +44,9 @@ On a Debian-derived distro, this can be done with:
     apt-get build-dep sdcc
     apt-get install imagemagick
     apt-get install libsdl2-dev
-    apt-get install python2.7-dev
     apt-get install python-pygame
 
-If running OS X, you will need XCode, python and brew:
+If running OS X, you will need XCode and brew:
 
     brew deps gcc | xargs brew install
     brew deps sdcc | xargs brew install
