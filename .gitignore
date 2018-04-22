@@ -1,14 +1,23 @@
 # Object files
 *.o
 *.elf
+*.ihx
+*.rel
 
 # Libraries
 *.a
+*.so
 
 # Generated content
 build/
 local/
 rom/
+sprites/
+*.c1
+*.c2
+*.pal
+*/assets/*.bmp
+*/assets/*.png
 
 # Download area
 toolchain/
