@@ -19,7 +19,7 @@ include Makefile.config
 
 # Version of external dependencies
 SRC_BINUTILS=binutils-2.25
-SRC_GCC=gcc-4.9.2
+SRC_GCC=gcc-5.5.0
 SRC_NEWLIB=newlib-1.14.0
 SRC_GDB=gdb-7.8.2
 SRC_SDCC=sdcc-src-3.7.0
@@ -36,7 +36,7 @@ all: \
 
 download-toolchain: \
 	toolchain/$(SRC_BINUTILS).tar.bz2 \
-	toolchain/$(SRC_GCC).tar.bz2 \
+	toolchain/$(SRC_GCC).tar.xz \
 	toolchain/$(SRC_NEWLIB).tar.gz \
 	toolchain/$(SRC_GDB).tar.gz \
 	toolchain/$(SRC_SDCC).tar.bz2 \
@@ -48,7 +48,7 @@ download-shaders: toolchain/qcrt-glsl
 toolchain/$(SRC_BINUTILS).tar.bz2:
 	curl $(GNU_MIRROR)/binutils/$(notdir $@) > $@
 
-toolchain/$(SRC_GCC).tar.bz2:
+toolchain/$(SRC_GCC).tar.xz:
 	curl $(GNU_MIRROR)/gcc/$(SRC_GCC)/$(notdir $@) > $@
 
 toolchain/$(SRC_NEWLIB).tar.gz:
@@ -84,7 +84,7 @@ unpack-toolchain: \
 	toolchain/sdcc \
 
 toolchain/$(SRC_BINUTILS): toolchain/$(SRC_BINUTILS).tar.bz2
-toolchain/$(SRC_GCC): toolchain/$(SRC_GCC).tar.bz2
+toolchain/$(SRC_GCC): toolchain/$(SRC_GCC).tar.xz
 toolchain/$(SRC_NEWLIB): toolchain/$(SRC_NEWLIB).tar.gz
 toolchain/$(SRC_GDB): toolchain/$(SRC_GDB).tar.gz
 toolchain/sdcc: toolchain/$(SRC_SDCC).tar.bz2
@@ -93,7 +93,7 @@ toolchain/sdcc: toolchain/$(SRC_SDCC).tar.bz2
 toolchain/%:
 	echo uncompressing $(notdir $@)...; \
 	cd toolchain; \
-	tar $(if $(filter %.gz, $<),z,j)xmf $(notdir $<); \
+	tar $(if $(filter %.gz, $<),z,$(if $(filter %.xz, $<),J,j))xmf $(notdir $<); \
 	f=../patch/$(subst /,.diff,$(dir $(subst -,/,$(notdir $@)))); \
 	if [ -f $$f ]; then (cd $(notdir $@); patch -p1 < ../$$f); fi; \
 	echo Done.

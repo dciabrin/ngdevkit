@@ -4,7 +4,7 @@ ngdevkit is a C/C++ software development kit for the Neo-Geo
 AES or MVS hardware. It includes:
 
    * A toolchain for cross compiling to m68k, based on GCC
-     4.9 and newlib for the C standard library.
+     5.5 and newlib for the C standard library.
 
    * C headers for accessing the hardware. The headers follow the
      naming convention found at the [NeoGeo Development Wiki][ngdev].
