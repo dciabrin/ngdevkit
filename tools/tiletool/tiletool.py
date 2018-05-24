@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2015 Damien Ciabrini
+# Copyright (c) 2015-2018 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -328,9 +328,6 @@ class sprite_converter(converter):
 
 
 def main():
-    pygame.init()
-    pygame.display.init()
-
     parser = argparse.ArgumentParser(
         description='Neo Geo graphics ROM management.')
 

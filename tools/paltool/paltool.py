@@ -42,9 +42,6 @@ def output_c_anonymous_palette(pal, outfile):
 
 
 def main():
-    pygame.init()
-    pygame.display.init()
-
     parser = argparse.ArgumentParser(
         description='Extract palette from a 2D image and convert it.')
     parser.add_argument('FILE', help='file to process')
