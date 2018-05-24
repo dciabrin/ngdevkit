@@ -32,6 +32,7 @@ all: \
 	build-tools \
 	download-emulator \
 	build-emulator \
+	build-emulator-config \
 	download-shaders
 
 download-toolchain: \
@@ -102,6 +103,12 @@ toolchain/%:
 build-compiler: build/ngbinutils build/nggcc build/ngnewlib build/ngsdcc
 build-debugger: build/nggdb
 build-emulator: build/gngeo
+build-emulator-config: $(GNGEO_CFG)
+
+$(GNGEO_CFG): export INPUT_SETTINGS:=$(GNGEO_DEFAULT_INPUT_SETTINGS)
+$(GNGEO_CFG):
+	@ echo generating a default input config for gngeo; \
+	echo "$$INPUT_SETTINGS" > $(GNGEO_CFG)
 
 build/ngbinutils:
 	@ echo compiling binutils...; \
