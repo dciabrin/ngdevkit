@@ -49,6 +49,9 @@ On a Debian-derived distro, this can be done with:
 If running OS X, you will need XCode and brew:
 
     brew deps gcc | xargs brew install
+    # gcc 5.5 currently only works with isl <= 0.18
+    brew remove --force isl
+    brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/87ddc3513e1d15f23d2bb270f63827a5daf1259c/Formula/isl.rb
     brew deps sdcc | xargs brew install
     brew install imagemagick
     brew install sdl
@@ -94,6 +97,12 @@ the steps needed to compile and execute the example ROM:
     make
     make nullbios
     make gngeo # or make gngeo-fullscreen for more fun
+
+If you're running a recent macOS, [System Integrity Protection][sip]
+will prevent running gngeo from make, so you'll need to run it from
+your terminal:
+
+    eval $(make -n gngeo)
 
 ### Debugging your programs
 
@@ -175,3 +184,4 @@ License along with this program. If not, see
 [cdoty]: http://rastersoft.net
 [gngeo]: https://github.com/dciabrin/gngeo
 [mame]: http://mamedev.org/
+[sip]: https://support.apple.com/en-us/HT204899
