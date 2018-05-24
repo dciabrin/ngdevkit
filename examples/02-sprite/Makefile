@@ -14,27 +14,15 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-include ../../Makefile.config
-
-PREFIX=m68k-neogeo-elf
-CC=$(LOCALDIR)/bin/$(PREFIX)-gcc
-OBJCOPY=$(LOCALDIR)/bin/$(PREFIX)-objcopy
-Z80OBJCOPY=$(LOCALDIR)/bin/sdobjcopy
-TILETOOL=$(LOCALDIR)/bin/tiletool.py
+include ../Makefile.common
 
 OBJS=main
 ELF=rom.elf
 
-ASSETS=../assets
 NULLSOUND=../../sound/nullsound
 Z80HEX=$(NULLSOUND)/nullsound.ihx
 
-cart: assets prom crom srom vrom mrom
-	cd rom && for i in *.??; do ln -nsf $$i $${i%.*}.bin; done; \
-	/bin/echo -e "\
-https://github.com/dciabrin/ngdevkit\n\
-." | zip -qz puzzledp.zip *.?? *.bin
-	@echo "\n"Type \'make nullbios\' to copy the open source BIOS in ./rom
+all: cart
 
 $(ELF):	$(OBJS:%=%.o)
 	$(CC) $^ -o $@
@@ -51,11 +39,11 @@ vrom: rom
 
 crom: rom
 	$(TILETOOL) --sprite -c $(ASSETS)/gfx/logo.png -o tmp.c1 tmp.c2; \
-	cat $(ASSETS)/rom/c1.bin tmp.c1 > rom/202-c1.c1; truncate -s 1048576 rom/202-c1.c1; \
-	cat $(ASSETS)/rom/c2.bin tmp.c2 > rom/202-c2.c2; truncate -s 1048576 rom/202-c2.c2
+	cat $(ASSETS)/rom/c1.bin tmp.c1 > rom/202-c1.c1; $(TRUNCATE) -s 1048576 rom/202-c1.c1; \
+	cat $(ASSETS)/rom/c2.bin tmp.c2 > rom/202-c2.c2; $(TRUNCATE) -s 1048576 rom/202-c2.c2
 
 srom: rom
-	cp $(ASSETS)/rom/s1.bin	rom/202-s1.s1; truncate -s 1048576 rom/202-s1.s1
+	cp $(ASSETS)/rom/s1.bin	rom/202-s1.s1; $(TRUNCATE) -s 1048576 rom/202-s1.s1
 
 prom: $(ELF) rom
 	$(OBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< rom/202-p1.p1
@@ -63,19 +51,4 @@ prom: $(ELF) rom
 clean:
 	rm -f *.png *.o *~ $(ELF) tmp.* rom/*.*
 
-nullbios:
-	cp ../../nullbios/rom/neogeo.zip rom
-
-assets:
-	$(MAKE) -C $(ASSETS) all
-
-rom:
-	mkdir $@
-
-gngeo:
-	$(LOCALDIR)/bin/gngeo -b glsl --scale 3 --no-resize --shaderpath=$(LOCALDIR)/../toolchain/qcrt-glsl --shader qcrt-flat.glslp -i rom puzzledp
-
-gngeo-fullscreen:
-	$(LOCALDIR)/bin/gngeo -b glsl --fullscreen --scale 5 --no-resize --shaderpath=$(LOCALDIR)/../toolchain/qcrt-glsl --shader qcrt-flat.glslp -i rom puzzledp
-
-.PHONY: cart assets nullbios clean gngeo gngeo-fullscreen
+.PHONY: clean
