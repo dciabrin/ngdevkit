@@ -58,6 +58,11 @@ If running OS X, you will need XCode and brew:
     # "easy_install pip" if you don't have pip yet, then
     pip install pygame
 
+Compiling the devkit for Windows 10 is supported via [WSL][wsl],
+detailed setup and build instructions are available in the
+[the dedicated README](README-mingw.md).
+
+
 ### Building the toolchain
 
 You may want to change `Makefile.config` to select a GNU mirror which
@@ -185,3 +190,4 @@ License along with this program. If not, see
 [gngeo]: https://github.com/dciabrin/gngeo
 [mame]: http://mamedev.org/
 [sip]: https://support.apple.com/en-us/HT204899
+[wsl]: https://docs.microsoft.com/en-us/windows/wsl/install-win10

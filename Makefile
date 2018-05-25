@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Damien Ciabrini
+# Copyright (c) 2015-2018 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -143,7 +143,7 @@ build/nggcc:
 
 build/ngnewlib: build
 	@ echo compiling newlib...; \
-	export PATH=$(LOCALDIR)/bin:$$PATH; \
+	export PATH="$(LOCALDIR)/bin:$$PATH"; \
 	mkdir -p build/ngnewlib; \
 	cd build/ngnewlib; \
 	../../toolchain/$(SRC_NEWLIB)/configure \
@@ -157,7 +157,7 @@ build/ngnewlib: build
 
 build/nggdb: build
 	@ echo compiling gdb...; \
-	export PATH=$(LOCALDIR)/bin:$$PATH; \
+	export PATH="$(LOCALDIR)/bin:$$PATH"; \
 	mkdir -p build/nggdb; \
 	cd build/nggdb; \
 	../../toolchain/$(SRC_GDB)/configure \
@@ -169,7 +169,7 @@ build/nggdb: build
 
 build/ngsdcc: build
 	@ echo compiling sdcc...; \
-	export PATH=$(LOCALDIR)/bin:$$PATH; \
+	export PATH="$(LOCALDIR)/bin:$$PATH"; \
 	mkdir -p build/ngsdcc; \
 	cd build/ngsdcc; \
 	../../toolchain/sdcc/configure \
@@ -193,15 +193,15 @@ build/ngsdcc: build
 	make $(HOSTOPTS); \
 	make install
 
+GNGEO_BUILD_FLAGS=--prefix=$(LOCALDIR) CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"
+
 build/gngeo: build
 	@ echo compiling gngeo...; \
-	export PATH=$(LOCALDIR)/bin:$$PATH; \
+	export PATH="$(LOCALDIR)/bin:$$PATH"; \
 	mkdir -p build/gngeo; \
 	cd build/gngeo; \
-	../../toolchain/gngeo/configure \
-	--prefix=$(LOCALDIR) \
-	CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"; \
-	make $(HOSTOPTS); \
+	../../toolchain/gngeo/configure $(GNGEO_BUILD_FLAGS) && \
+	make $(HOSTOPTS) && \
 	make install
 
 # (find . -name Makefile | xargs sed -i.bk -e 's/-frerun-loop-opt//g' -e 's/-funroll-loops//g' -e 's/-malign-double//g');
@@ -213,13 +213,13 @@ build-tools:
 
 shellinit:
 	@ echo Variables set with eval $$\(make shellinit\) >&2
-	@ echo export PATH=$(LOCALDIR)/bin:\$$PATH
+	@ echo export PATH="$(LOCALDIR)/bin:\$$PATH"
 ifeq ($(shell uname), Darwin)
-	@ echo export DYLD_LIBRARY_PATH=$(LOCALDIR)/lib:\$$DYLD_LIBRARY_PATH
+	@ echo export DYLD_LIBRARY_PATH="$(LOCALDIR)/lib:\$$DYLD_LIBRARY_PATH"
 else
-	@ echo export LD_LIBRARY_PATH=$(LOCALDIR)/lib:\$$LD_LIBRARY_PATH
+	@ echo export LD_LIBRARY_PATH="$(LOCALDIR)/lib:\$$LD_LIBRARY_PATH"
 endif
-	@ echo export PYTHONPATH=$(LOCALDIR)/bin:\$$PYTHONPATH
+	@ echo export PYTHONPATH="$(LOCALDIR)/bin:\$$PYTHONPATH"
 
 clean:
 	rm -rf build/ngbinutils build/nggcc build/ngnewlib

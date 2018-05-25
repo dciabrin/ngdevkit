@@ -64,6 +64,10 @@ common-clean:
 	rm -rf *.elf *.o *~ rom
 
 
+# Emulator targets
+#
+ifeq ($(strip $(SDL2_DLL)),)
+# regular case: pass the rompath to the emulator
 $(call export_path,gngeo)
 gngeo:
 	$(LOCALDIR)/bin/gngeo -b glsl --scale 3 --no-resize --shaderpath=$(LOCALDIR)/../toolchain/qcrt-glsl --shader qcrt-flat.glslp -i rom puzzledp
@@ -71,5 +75,15 @@ gngeo:
 $(call export_path,gngeo-fullscreen)
 gngeo-fullscreen:
 	$(LOCALDIR)/bin/gngeo -b glsl --fullscreen --scale 5 --no-resize --shaderpath=$(LOCALDIR)/../toolchain/qcrt-glsl --shader qcrt-flat.glslp -i rom puzzledp
+
+else
+# MinGW: copy ROMs to the gngeo dir
+gngeo:
+	cp rom/puzzledp.zip rom/neogeo.zip $(GNGEO_INSTALL_PATH)/roms && (cd $(GNGEO_INSTALL_PATH) &&  ./gngeo.exe --scale 3 --no-resize puzzledp)
+
+gngeo-fullscreen:
+	cp rom/puzzledp.zip rom/neogeo.zip $(GNGEO_INSTALL_PATH)/roms && (cd $(GNGEO_INSTALL_PATH) &&  ./gngeo.exe --fullscreen --scale 5 --no-resize puzzledp)
+
+endif
 
 .PHONY: cart nullbios common-clean gngeo gngeo-fullscreen
