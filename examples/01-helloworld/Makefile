@@ -24,6 +24,9 @@ Z80HEX=$(NULLSOUND)/nullsound.ihx
 
 all: cart
 
+$(ASSETS)/rom/c1.bin $(ASSETS)/rom/s1.bin:
+	$(MAKE) -C $(ASSETS)
+
 $(ELF):	$(OBJS:%=%.o)
 	$(CC) $^ -o $@
 
@@ -37,12 +40,12 @@ mrom: rom
 vrom: rom
 	dd if=/dev/zero bs=1024 count=512 of=rom/202-v1.v1
 
-crom: rom
-	cp $(ASSETS)/rom/c1.bin	rom/202-c1.c1; $(TRUNCATE) -s 1048576 rom/202-c1.c1; \
-	cp $(ASSETS)/rom/c2.bin	rom/202-c2.c2; $(TRUNCATE) -s 1048576 rom/202-c2.c2
+crom: rom $(ASSETS)/rom/c1.bin
+	cp $(ASSETS)/rom/c1.bin	rom/202-c1.c1 && $(TRUNCATE) -s 1048576 rom/202-c1.c1 && \
+	cp $(ASSETS)/rom/c2.bin	rom/202-c2.c2 && $(TRUNCATE) -s 1048576 rom/202-c2.c2
 
-srom: rom
-	cp $(ASSETS)/rom/s1.bin	rom/202-s1.s1; $(TRUNCATE) -s 1048576 rom/202-s1.s1
+srom: rom $(ASSETS)/rom/s1.bin
+	cp $(ASSETS)/rom/s1.bin	rom/202-s1.s1 && $(TRUNCATE) -s 1048576 rom/202-s1.s1
 
 prom: $(ELF) rom
 	$(OBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< rom/202-p1.p1

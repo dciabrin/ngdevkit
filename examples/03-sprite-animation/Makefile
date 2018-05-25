@@ -26,6 +26,9 @@ SPRITES_IMGS=sprites/idle.gif sprites/walk.gif
 
 all: cart
 
+$(ASSETS)/rom/c1.bin $(ASSETS)/rom/s1.bin:
+	$(MAKE) -C $(ASSETS)
+
 # fix up the transparent color on all GIFs
 sprites/%.gif: gfx/spr_m_traveler_%_anim.gif sprites
 	cp $< $@ ; \
@@ -56,12 +59,12 @@ mrom: rom
 vrom: rom
 	dd if=/dev/zero bs=1024 count=512 of=rom/202-v1.v1
 
-crom: rom sprites/all.c1
-	cat $(ASSETS)/rom/c1.bin sprites/all.c1 > rom/202-c1.c1; $(TRUNCATE) -s 1048576 rom/202-c1.c1; \
-	cat $(ASSETS)/rom/c2.bin sprites/all.c2 > rom/202-c2.c2; $(TRUNCATE) -s 1048576 rom/202-c2.c2
+crom: rom sprites/all.c1 $(ASSETS)/rom/c1.bin
+	cat $(ASSETS)/rom/c1.bin sprites/all.c1 > rom/202-c1.c1 && $(TRUNCATE) -s 1048576 rom/202-c1.c1 && \
+	cat $(ASSETS)/rom/c2.bin sprites/all.c2 > rom/202-c2.c2 && $(TRUNCATE) -s 1048576 rom/202-c2.c2
 
-srom: rom
-	cp $(ASSETS)/rom/s1.bin	rom/202-s1.s1; $(TRUNCATE) -s 1048576 rom/202-s1.s1
+srom: rom $(ASSETS)/rom/s1.bin
+	cp $(ASSETS)/rom/s1.bin	rom/202-s1.s1 && $(TRUNCATE) -s 1048576 rom/202-s1.s1
 
 prom: $(ELF) rom
 	$(OBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< rom/202-p1.p1
