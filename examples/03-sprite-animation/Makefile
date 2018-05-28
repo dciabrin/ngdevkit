@@ -36,7 +36,7 @@ sprites/%.gif: gfx/spr_m_traveler_%_anim.gif sprites
 
 # prepare the sprites for 64x64, and use same palette for all sprites
 sprites/all.png: $(SPRITES_IMGS)
-	convert  -alpha off -coalesce $^ -append +repage xc:'#ff00ff[64x1024!]' -compose dstover -composite PNG8:$@
+	convert -coalesce $^ -append +repage xc:'#ff00ff[64x1024!]' -compose dstover -composite PNG8:$@
 
 sprites/all.c1: sprites/all.png sprites
 	$(TILETOOL) --sprite -c $< -o $@ $(@:%.c1=%).c2
