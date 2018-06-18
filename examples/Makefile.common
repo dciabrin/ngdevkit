@@ -78,11 +78,16 @@ gngeo-fullscreen:
 
 else
 # MinGW: copy ROMs to the gngeo dir
+ifneq ($(strip $(GLEW_BIN_PATH)),)
+SHADEROPTS=-b glsl --shader qcrt-flat.glslp
+else
+SHADEROPTS=
+endif
 gngeo:
-	cp rom/puzzledp.zip rom/neogeo.zip $(GNGEO_INSTALL_PATH)/roms && (cd $(GNGEO_INSTALL_PATH) &&  ./gngeo.exe --scale 3 --no-resize puzzledp)
+	cp rom/puzzledp.zip rom/neogeo.zip $(GNGEO_INSTALL_PATH)/roms && (cd $(GNGEO_INSTALL_PATH) &&  ./gngeo.exe $(SHADEROPTS) --scale 3 --no-resize puzzledp)
 
 gngeo-fullscreen:
-	cp rom/puzzledp.zip rom/neogeo.zip $(GNGEO_INSTALL_PATH)/roms && (cd $(GNGEO_INSTALL_PATH) &&  ./gngeo.exe --fullscreen --scale 5 --no-resize puzzledp)
+	cp rom/puzzledp.zip rom/neogeo.zip $(GNGEO_INSTALL_PATH)/roms && (cd $(GNGEO_INSTALL_PATH) &&  ./gngeo.exe $(SHADEROPTS) --fullscreen --scale 5 --no-resize puzzledp)
 
 endif
 

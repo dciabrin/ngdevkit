@@ -35,9 +35,22 @@ ifeq ($(strip $(ZLIB1_DLL)),)
 ZLIB1_DLL=$(shell $(MINGW_GCC) -print-file-name=zlib1.dll)
 endif
 
-GNGEO_BUILD_FLAGS=--enable-mingw --host=x86_64-w64-mingw32 --prefix=$(GNGEO_INSTALL_PATH) CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"
+# GLEW compile flags if configured
+ifneq ($(strip $(GLEW_BIN_PATH)),)
+GLEW_FLAGS=--with-glew=$(GLEW_BIN_PATH)
+ifeq ($(strip $(shell uname -p)),x86_64)
+GLEW_DIR=$(GLEW_BIN_PATH)/bin/Release/x64
+else
+GLEW_DIR=$(GLEW_BIN_PATH)/bin/Release/Win32
+endif
+GLEW_DLL=$(GLEW_DIR)/glew32.dll
+else
+GLEW_FLAGS=
+GLEW_DLL=
+endif
+
+GNGEO_BUILD_FLAGS=--enable-mingw --host=x86_64-w64-mingw32 $(GLEW_FLAGS) --prefix=$(GNGEO_INSTALL_PATH) CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"
 
 all: install-emulator-dll
 install-emulator-dll: build-emulator
-	cp $(SDL2_DLL) $(GNGEO_INSTALL_PATH) && \
-	cp $(ZLIB1_DLL) $(GNGEO_INSTALL_PATH)
+	cp $(SDL2_DLL) $(ZLIB1_DLL) $(GLEW_DLL) $(GNGEO_INSTALL_PATH)

@@ -91,6 +91,28 @@ Note: even if Ubuntu's mingw package installs in `/usr`, SDL2 expects
 mingw to be located in `/usr/local`; so extract into that destination
 path, and let GnGeo autodetect it automatically during compilation.
 
+### Download GLEW runtime and development files
+
+As an optional requirement, if you want to enable the GLSL blitter in
+GnGeo (which allows you to use libretro's pixel shaders for
+rendering), you need to download GLEW's headers and pre-compiled
+binaries from the [GLEW website](http://glew.sourceforge.net/). For
+example:
+
+    cd $HOME
+    curl -LO https://downloads.sourceforge.net/project/glew/glew/2.1.0/glew-2.1.0-win32.zip
+
+Then extract the GLEW files somewhere and remember that path for
+later, including the name of the extracted directory:
+
+    cd $HOME
+    unzip glew-2.1.0-win32.zip
+    # this yields a directory $HOME/glew-2.1.0
+
+Note that the minimal OpenGL requirement for the GLSL backend is
+version 3.2 or above. Version 3.1 is not enough, so hardware with
+an old integrated chipset probably won't work.
+
 
 ### Building the toolchain
 
@@ -110,6 +132,15 @@ copied to the GnGeo installation directory automatically when building
 the devkit. For example:
 
     SDL2_DLL=/home/ngdevkit/SDL2.dll
+
+If you downloaded GLEW and want to enable the GLSL blitter backend,
+update `Makefile.config` to specify the location of the extracted
+GLEW directory. That directory provides the necessary header files
+for compilation, and provides the runtime glew32.dll which will be
+copied to the GnGeo installation directory automatically. For
+example:
+
+    GLEW_BIN_PATH=/home/ngdevkit/glew-2.1.0
 
 Once this is done, you can build the devkit by using the dedicated
 mingw makefile:
