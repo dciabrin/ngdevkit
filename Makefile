@@ -108,6 +108,7 @@ build-emulator-config: $(GNGEO_CFG)
 $(GNGEO_CFG): export INPUT_SETTINGS:=$(GNGEO_DEFAULT_INPUT_SETTINGS)
 $(GNGEO_CFG):
 	@ echo generating a default input config for gngeo; \
+	mkdir $(dir $(GNGEO_CFG)) && \
 	echo "$$INPUT_SETTINGS" > $(GNGEO_CFG)
 
 build/ngbinutils:
