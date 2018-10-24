@@ -38,22 +38,21 @@ ImageMagick for all the graphics trickery. You also need SDL 2.0
 for the emulator and its source-level debugging support.
 On a Debian-derived distro, this can be done with:
 
-    apt-get install gcc curl
+    apt-get install gcc curl imagemagick
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     apt-get build-dep $GCC_VERSION_PKG
     apt-get build-dep sdcc
-    apt-get install imagemagick
     apt-get install libsdl2-dev
     apt-get install python-pygame
 
 If running OS X, you will need XCode and brew:
 
+    brew install imagemagick
     brew deps gcc | xargs brew install
     # gcc 5.5 currently only works with isl <= 0.18
     brew remove --force isl
     brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/87ddc3513e1d15f23d2bb270f63827a5daf1259c/Formula/isl.rb
     brew deps sdcc | xargs brew install
-    brew install imagemagick
     brew install sdl
     # "easy_install pip" if you don't have pip yet, then
     pip install pygame
