@@ -50,7 +50,7 @@ tools:
     sudo apt-get install gcc curl unzip imagemagick
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     sudo apt-get build-dep $GCC_VERSION_PKG
-    sudo apt-get build-dep sdcc
+    sudo apt-get build-dep --arch-only sdcc
     sudo apt-get install libsdl2-dev
     sudo apt-get install python-pygame
     sudo apt-get install automake

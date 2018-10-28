@@ -41,7 +41,7 @@ On a Debian-derived distro, this can be done with:
     apt-get install gcc curl imagemagick
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     apt-get build-dep $GCC_VERSION_PKG
-    apt-get build-dep sdcc
+    apt-get build-dep --arch-only sdcc
     apt-get install libsdl2-dev
     apt-get install python-pygame
 
