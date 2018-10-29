@@ -21,14 +21,23 @@
 #define __EMUDBG_CTX__
 
 #include "emudbg.h"
+#if defined(__WIN32__)
+#include <winsock2.h>
+#include <windows.h>
+#define EMUDBG_SOCKET SOCKET
+#define EMUDBG_SOCKET_ERRNO WSAGetLastError()
+#else
+#define EMUDBG_SOCKET int
+#define EMUDBG_SOCKET_ERRNO errno
+#endif
 
 #define FD_NONE -1
 
 struct emudbg_ctx_t {
     /// socket to listen to gdb clients
-    int listen_socket;
+    EMUDBG_SOCKET listen_socket;
     /// currently connected gdb client
-    int client_socket;
+    EMUDBG_SOCKET client_socket;
 
     /// data received from gdb client
     char data[1024];

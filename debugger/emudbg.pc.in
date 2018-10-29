@@ -1,0 +1,14 @@
+# emudbg pkg-config source file
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: emudbg
+Description: emulator-agnostic source level debugging API and server
+Version: @VERSION@
+Requires:
+Conflicts:
+Libs: -L${libdir} -lemudbg @EMUDBG_PKGLIB@
+Cflags: -I${includedir}

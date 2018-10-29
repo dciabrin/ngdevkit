@@ -22,11 +22,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-
 #include "emudbg.h"
 #include "emudbg_ctx.h"
+
+#if defined(__WIN32__)
+#include <ws2tcpip.h>
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#endif
+
 
 #ifndef DBG
 #define DBG(x, ...)
@@ -319,8 +324,12 @@ int emudbg_gdb_server_loop(void *emudbg_ctx, int emu_suspended, struct emudbg_cm
         // Read packet from GDB client
         int len_recv = recv(ctx->client_socket, ctx->data, 1024, 0);
         if (!len_recv) break;
+	if (len_recv == -1) {
+	  DBG("READ ERROR: %x - %d\n", ctx->client_socket, EMUDBG_SOCKET_ERRNO);
+	  break;
+	}
         ctx->data[len_recv] = '\0';
-        DBG("READ: %s - %d\n", ctx->data, len_recv);
+	DBG("READ: %s - %d\n", ctx->data, len_recv);
 
         char *pos = ctx->data;
         char *end = pos + len_recv;
@@ -342,9 +351,9 @@ int emudbg_gdb_server_loop(void *emudbg_ctx, int emu_suspended, struct emudbg_cm
         ctx->pkt_end = end-3;
         int return_pkt_len = process_packet(ctx);
         if (return_pkt_len) {
-            DBG("SEND: %s - %d\n",ctx->send_data, return_pkt_len);
-            send(ctx->client_socket, ctx->send_data, return_pkt_len, 0);
+	  DBG("SEND: %s - %d\n",ctx->send_data, return_pkt_len);
 
+	    send(ctx->client_socket, ctx->send_data, return_pkt_len, 0);
             // wait for GDB to acknowledge the response
             int len_recv = recv(ctx->client_socket, ctx->data, 1, 0);
             ctx->data[len_recv] = 0;

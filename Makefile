@@ -31,6 +31,7 @@ all: \
 	build-debugger \
 	build-tools \
 	download-emulator \
+	build-emudbg \
 	build-emulator \
 	build-emulator-config \
 	download-shaders
@@ -102,7 +103,8 @@ toolchain/%:
 
 build-compiler: build/ngbinutils build/nggcc build/ngnewlib build/ngsdcc
 build-debugger: build/nggdb
-build-emulator: build/gngeo
+build-emudbg: build/emudbg
+build-emulator: build-emudbg build/gngeo
 build-emulator-config: $(GNGEO_CFG)
 
 $(GNGEO_CFG): export INPUT_SETTINGS:=$(GNGEO_DEFAULT_INPUT_SETTINGS)
@@ -194,21 +196,30 @@ build/ngsdcc: build
 	make $(HOSTOPTS); \
 	make install
 
-GNGEO_BUILD_FLAGS=--prefix=$(LOCALDIR) CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"
+GNGEO_BUILD_FLAGS=--prefix=$(LOCALDIR) CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib" PKG_CONFIG_PATH="$(LOCALDIR)/lib/pkgconfig"
+
+build/emudbg: build
+	@ echo compiling emudbg...; \
+	(cd debugger &&	autoreconf -iv); \
+	mkdir -p build/emudbg; \
+	cd build/emudbg; \
+	../../debugger/configure $(GNGEO_BUILD_FLAGS) && \
+	make $(HOSTOPTS) && \
+	make install
 
 build/gngeo: build
 	@ echo compiling gngeo...; \
 	export PATH="$(LOCALDIR)/bin:$$PATH"; \
 	mkdir -p build/gngeo; \
 	cd build/gngeo; \
-	../../toolchain/gngeo/configure $(GNGEO_BUILD_FLAGS) && \
+	../../toolchain/gngeo/configure $(GNGEO_BUILD_FLAGS) --with-emudbg && \
 	make $(HOSTOPTS) && \
 	make install
 
 # (find . -name Makefile | xargs sed -i.bk -e 's/-frerun-loop-opt//g' -e 's/-funroll-loops//g' -e 's/-malign-double//g');
 
 build-tools:
-	for i in sound/nullsound nullbios runtime include tools debugger; do \
+	for i in sound/nullsound nullbios runtime include tools; do \
 	  $(MAKE) -C $$i install; \
 	done
 

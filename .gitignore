@@ -8,6 +8,21 @@
 *.a
 *.so
 
+# emudbg's automake files
+debugger/autom4te.cache/
+debugger/*/Makefile.in
+debugger/Makefile.in
+debugger/*/Makefile
+debugger/INSTALL
+debugger/aclocal.m4
+debugger/ar-lib
+debugger/compile
+debugger/config.*
+debugger/depcomp
+debugger/missing
+debugger/install-sh
+debugger/configure
+
 # Generated content
 build/
 local/

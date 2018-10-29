@@ -49,7 +49,7 @@ GLEW_FLAGS=
 GLEW_DLL=
 endif
 
-GNGEO_BUILD_FLAGS=--enable-mingw --host=x86_64-w64-mingw32 $(GLEW_FLAGS) --prefix=$(GNGEO_INSTALL_PATH) CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib"
+GNGEO_BUILD_FLAGS=--enable-mingw --host=x86_64-w64-mingw32 $(GLEW_FLAGS) --prefix=$(GNGEO_INSTALL_PATH) CPPFLAGS="-I$(LOCALDIR)/include" CFLAGS="-I$(LOCALDIR)/include" LDFLAGS="-L$(LOCALDIR)/lib" PKG_CONFIG_PATH="$(LOCALDIR)/lib/pkgconfig"
 
 all: install-emulator-dll
 install-emulator-dll: build-emulator
