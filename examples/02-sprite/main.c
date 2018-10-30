@@ -82,9 +82,9 @@ s16 y=-80;
 
 // Sprite setup.
 //
-// The sprite is 16 tiles long x 4 tiles tall
+// The sprite is 15 tiles long x 4 tiles tall
 // For the Neo Geo hardware, it's a series of
-// 16 concatenated vertical sprites of 4 tiles
+// 15 concatenated vertical sprites of 4 tiles
 void init_sprite() {
     // Every write to the VRAM will increment the
     // VRAM address pointer by 1 byte.
@@ -92,7 +92,7 @@ void init_sprite() {
 
     // Set the tile information (tile number, color, mirror)
     // in the Sprite Control Block 1 (SCB1)
-    for (u8 i=0; i<16; i++) {
+    for (u8 i=0; i<15; i++) {
          // address of the i-th sprite in SCB1
         *REG_VRAMADDR=ADDR_SCB1+(i*64); // i-th sprite in SCB1
 
@@ -129,7 +129,7 @@ void init_sprite() {
     // SCB4: x position
     *REG_VRAMRW=(x<<7);
 
-    // the remaining 15 vertical sprites are sticky
+    // the remaining 14 vertical sprites are sticky
     for (u16 i=1; i<15; i++) {
         *REG_VRAMADDR=ADDR_SCB2+i;      // i-th sprite
         *REG_VRAMRW=0xFFF;              // max zoom
