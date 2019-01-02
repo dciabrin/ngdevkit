@@ -10,8 +10,6 @@ Compiling the devkit for Windows 10 is supported via [WSL][wsl]:
      can call it from both Linux and Windows and don't need a
      X server to run it.
 
-   * The source-level debugging extension is not available yet.
-
 You need to run a couple of manual steps before being able to compile
 the devkit. This documentation explains how to compile ngdevkit with
 Ubuntu on Windows.
