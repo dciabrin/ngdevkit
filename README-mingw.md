@@ -49,6 +49,9 @@ tools:
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     sudo apt-get build-dep $GCC_VERSION_PKG
     sudo apt-get build-dep --arch-only sdcc
+    # gcc 5.5 currently only works with isl <= 0.18
+    # recent distros ship a specific package for isl 0.18
+    sudo apt-get install libisl-0.18-dev || true
     sudo apt-get install libsdl2-dev
     sudo apt-get install python-pygame
     sudo apt-get install automake

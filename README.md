@@ -38,10 +38,13 @@ ImageMagick for all the graphics trickery. You also need SDL 2.0
 for the emulator and its source-level debugging support.
 On a Debian-derived distro, this can be done with:
 
-    apt-get install gcc curl imagemagick
+    apt-get install gcc curl unzip imagemagick
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     apt-get build-dep $GCC_VERSION_PKG
     apt-get build-dep --arch-only sdcc
+    # gcc 5.5 currently only works with isl <= 0.18
+    # recent distros ship a specific package for isl 0.18
+    apt-get install libisl-0.18-dev || true
     apt-get install libsdl2-dev
     apt-get install python-pygame
 
