@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2015-2018 Damien Ciabrini
+# Copyright (c) 2015-2019 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -29,6 +29,7 @@ import sys
 import argparse
 from random import randint
 
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 
 

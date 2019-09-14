@@ -1,0 +1,193 @@
+# Copyright (c) 2015-2019 Damien Ciabrini
+# This file is part of ngdevkit
+#
+# ngdevkit is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# ngdevkit is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
+
+
+include Makefile.config
+
+# External subpackages
+EMUDBG_GIT=https://github.com/dciabrin/emudbg
+GNGEO_GIT=https://github.com/dciabrin/gngeo
+QCRT_GIT=https://github.com/dciabrin/qcrt-glsl
+TOOLCHAIN_GIT=https://github.com/dciabrin/ngdevkit-toolchain
+EXAMPLES_GIT=https://github.com/dciabrin/ngdevkit-examples
+
+
+# ------ base targets ------
+# <all> and <install> may be extended with targets from
+# toolchain, emudbg and gngeo if enabled
+
+all: build-tools download-examples
+
+install: install-tools install-pkgconfig
+
+clean: clean-tools
+
+clean:
+	rm -rf local/*
+
+distclean: clean
+	rm -rf build local
+	find . -name '*~' -exec rm -f {} \;
+
+build local:
+	mkdir $@
+
+.PHONY: clean distclean
+
+
+
+# ------ toolchain (gcc, binutils, newlib, gdb) ------
+
+ifeq ($(EXTERNAL_TOOLCHAIN), no)
+build-tools: build-toolchain | $(prefix)/bin
+endif
+
+download-toolchain: toolchain
+
+toochain:
+	$(GIT) clone $(TOOLCHAIN_GIT) $@
+
+build-toolchain: | download-toolchain build
+	$(MAKE) -Ctoolchain all BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
+
+install-toolchain:
+	$(MAKE) -Ctoolchain install BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
+
+$(prefix)/bin: build-toolchain
+	$(MAKE) install-toolchain
+
+
+
+# ------ ngdevkit ------
+
+build-tools:
+	for i in nullsound nullbios runtime include tools; do \
+	  $(MAKE) -C $$i; \
+	done
+
+install-tools:
+	for i in nullsound nullbios runtime include tools; do \
+	  $(MAKE) -C $$i install; \
+	done
+
+install-pkgconfig:
+	./install-sh -d $(DESTDIR)$(prefix)/lib/pkgconfig && \
+	./install-sh -t $(DESTDIR)$(prefix)/lib/pkgconfig ngdevkit.pc
+
+clean-tools:
+	for i in nullsound nullbios runtime include tools; do \
+	  $(MAKE) -C $$i clean; \
+	done
+
+
+
+# ------ emudbg ------
+
+ifeq ($(EXTERNAL_EMUDBG), no)
+all: build-emudbg
+build-gngeo: install-emudbg
+install: install-emudbg
+endif
+
+emudbg:
+	$(GIT) clone $(EMUDBG_GIT) $@
+
+build-emudbg: build/emudbg
+
+build/emudbg: emudbg
+	@echo compiling emudbg...
+	(cd emudbg && autoreconf -iv) && \
+	CURPWD=$$(pwd) && \
+	mkdir -p build/emudbg && \
+	cd build/emudbg && \
+	$$CURPWD/emudbg/configure \
+	-v && $(MAKE)
+
+install-emudbg: $(prefix)/lib/libemudbg.a
+
+$(prefix)/lib/libemudbg.a: build/emudbg
+	$(MAKE) -C build/emudbg install
+
+
+
+# ------ gngeo ------
+
+ifeq ($(EXTERNAL_GNGEO), no)
+all: build-gngeo
+install: install-gngeo
+endif
+
+gngeo:
+	$(GIT) clone --branch ngdevkit $(GNGEO_GIT) $@
+
+build-gngeo: build/gngeo
+
+build-emulator-config: $(GNGEO_CFG)
+
+build/gngeo: gngeo
+	@echo compiling gngeo...
+	(cd gngeo && autoreconf -iv) && \
+	CURPWD=$$(pwd) && \
+	mkdir -p build/gngeo && \
+	cd build/gngeo && \
+	$$CURPWD/gngeo/configure $(GNGEO_BUILD_FLAGS) \
+	-v && $(MAKE) -j1 pkgdatadir=/usr/share/ngdevkit-gngeo
+
+install-gngeo: $(prefix)/bin/ngdevkit-gngeo
+
+$(prefix)/bin/ngdevkit-gngeo: build/gngeo
+	$(MAKE) -C build/gngeo install pkgdatadir=/usr/share/ngdevkit-gngeo
+
+$(GNGEO_CFG): export INPUT_SETTINGS:=$(GNGEO_DEFAULT_INPUT_SETTINGS)
+$(GNGEO_CFG):
+	@ echo generating a default input config for gngeo; \
+	mkdir -p $(dir $(GNGEO_CFG)) && \
+	echo "$$INPUT_SETTINGS" > $(GNGEO_CFG)
+
+
+
+# ------ qcrt example GLSL shader for gngeo ------
+
+ifeq ($(EXTERNAL_GNGEO), no)
+ifeq ($(EXTERNAL_QCRT), no)
+all: download-qcrt
+install: install-qcrt
+endif
+endif
+
+download-qcrt: qcrt-glsl
+
+qcrt-glsl:
+	$(GIT) clone $(QCRT_GIT) $@
+
+install-qcrt:
+	echo TODO
+
+
+
+# ------ Target to set up shell environment ------
+
+shellinit:
+	@ echo Variables set with eval $$\(make shellinit\) >&2
+	@ echo export PATH="$(prefix)/bin:\$$PATH"
+	@ echo export PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig:\$$PKG_CONFIG_PATH"
+ifeq ($(shell uname), Darwin)
+	@ echo export DYLD_LIBRARY_PATH="$(prefix)/lib:\$$DYLD_LIBRARY_PATH"
+else
+	@ echo export LD_LIBRARY_PATH="$(prefix)/lib:\$$LD_LIBRARY_PATH"
+endif
+	@ echo export PYTHONPATH="$(prefix)/bin:\$$PYTHONPATH"
+

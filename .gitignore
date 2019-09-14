@@ -8,38 +8,29 @@
 *.a
 *.so
 
-# emudbg's automake files
-debugger/autom4te.cache/
-debugger/*/Makefile.in
-debugger/Makefile.in
-debugger/*/Makefile
-debugger/INSTALL
-debugger/aclocal.m4
-debugger/ar-lib
-debugger/compile
-debugger/config.*
-debugger/depcomp
-debugger/missing
-debugger/install-sh
-debugger/configure
+# sub-packages
+toolchain
+examples
+gngeo
+emudbg
+qcrt-glsl
+
+# autoconf's cache
+autom4te.cache
+aclocal.m4
+configure
+config.*
+install-sh
 
 # Generated content
+Makefile
 build/
 local/
 rom/
-sprites/
-*.c1
-*.c2
-*.pal
-*/assets/*.bmp
-*/assets/*.png
-
-# Download area
-toolchain/
-!toolchain/README.md
 
 # Config
 Makefile.config
+ngdevkit.pc
 
 # Editors tmp
 *~

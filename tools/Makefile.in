@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Damien Ciabrini
+# Copyright (c) 2015-2019 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,11 +14,17 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-TOOLS=tiletool paltool
+all:
 
-all: install
+-include ../Makefile.config
 
-install clean:
-	for dir in $(TOOLS); do $(MAKE) -C $$dir $@; done
+TOOLS=paltool.py tiletool.py
 
-.PHONY: all install clean
+install: $(TOOLS)
+	../install-sh -d $(DESTDIR)$(prefix)/bin && \
+	../install-sh -t $(DESTDIR)$(prefix)/bin $^
+
+clean:
+	rm -f *~
+
+.PHONY: install clean

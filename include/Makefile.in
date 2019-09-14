@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Damien Ciabrini
+# Copyright (c) 2015-2019 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,10 +14,13 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-include ../../Makefile.config
+all:
+
+-include ../Makefile.config
 
 install:
-	cp tiletool.py $(LOCALDIR)/bin
+	../install-sh -d $(DESTDIR)$(prefix)/include/ngdevkit && \
+	../install-sh -t $(DESTDIR)$(prefix)/include/ngdevkit *.h
 
 clean:
 	rm -f *~

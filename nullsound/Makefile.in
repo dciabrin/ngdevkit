@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Damien Ciabrini
+# Copyright (c) 2018 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,12 +14,26 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-include ../../Makefile.config
+all: nullsound.ihx
 
-install:
-	cp paltool.py $(LOCALDIR)/bin
+-include ../Makefile.config
+
+OBJS=nullsound
+HEX=nullsound.ihx
+
+VERSION=@version@
+
+$(HEX):	$(OBJS:%=%.rel)
+	$(NGSDLD) -i $@ $<
+
+%.rel: %.S
+	$(NGSDAS) -o $@ $<
+
+install: nullsound.ihx
+	../install-sh -d $(DESTDIR)$(prefix)/share/ngdevkit && \
+	../install-sh -t $(DESTDIR)$(prefix)/share/ngdevkit $<
 
 clean:
-	rm -f *~
+	rm -f *.rel *~ $(HEX)
 
-.PHONY: install clean
+.PHONY: clean
