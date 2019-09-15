@@ -16,6 +16,10 @@ emudbg
 qcrt-glsl
 
 # autoconf's cache
+ar-lib
+compile
+depcomp
+missing
 autom4te.cache
 aclocal.m4
 configure
@@ -23,6 +27,7 @@ config.*
 install-sh
 
 # Generated content
+runtime/ngdevkit-specs
 Makefile
 build/
 local/
