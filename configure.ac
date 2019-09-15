@@ -75,6 +75,7 @@ AC_CONFIG_FILES([
  Makefile
  Makefile.config
  runtime/Makefile
+ include/Makefile
  nullbios/Makefile
  nullsound/Makefile
  tools/Makefile

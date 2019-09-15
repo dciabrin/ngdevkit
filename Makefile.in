@@ -38,9 +38,10 @@ clean: clean-tools
 clean:
 	rm -rf local/*
 
-distclean: clean
+distclean: clean distclean-examples
 	rm -rf build local
-	find . -name '*~' -exec rm -f {} \;
+	find . \( -name '*~' -or -name Makefile -or -name Makefile.config \) \
+	-exec echo {} \;
 
 build local:
 	mkdir $@
@@ -53,21 +54,24 @@ build local:
 
 ifeq ($(EXTERNAL_TOOLCHAIN), no)
 build-tools: build-toolchain | $(prefix)/bin
+distclean: distclean-toolchain
 endif
 
-download-toolchain: toolchain
+download-toolchain: | toolchain
 
-toochain:
+toolchain:
 	$(GIT) clone $(TOOLCHAIN_GIT) $@
 
 build-toolchain: | download-toolchain build
 	$(MAKE) -Ctoolchain all BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
 
-install-toolchain:
+install-toolchain: $(prefix)/bin
+
+$(prefix)/bin: build/ngbinutils build/nggcc build/nggdb build/ngnewlib build/ngsdcc
 	$(MAKE) -Ctoolchain install BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
 
-$(prefix)/bin: build-toolchain
-	$(MAKE) install-toolchain
+distclean-toolchain:
+	rm -rf toolchain
 
 
 
@@ -92,6 +96,15 @@ clean-tools:
 	  $(MAKE) -C $$i clean; \
 	done
 
+download-examples: | examples
+
+examples:
+	$(GIT) clone $(EXAMPLES_GIT) $@ && \
+	cd examples && autoreconf -iv
+
+distclean-examples:
+	rm -rf examples
+
 
 
 # ------ emudbg ------
@@ -100,26 +113,30 @@ ifeq ($(EXTERNAL_EMUDBG), no)
 all: build-emudbg
 build-gngeo: install-emudbg
 install: install-emudbg
+distclean: distclean-emudbg
 endif
 
 emudbg:
-	$(GIT) clone $(EMUDBG_GIT) $@
+	$(GIT) clone $(EMUDBG_GIT) $@ && \
+	cd emudbg && autoreconf -iv
 
 build-emudbg: build/emudbg
 
 build/emudbg: emudbg
 	@echo compiling emudbg...
-	(cd emudbg && autoreconf -iv) && \
 	CURPWD=$$(pwd) && \
 	mkdir -p build/emudbg && \
 	cd build/emudbg && \
-	$$CURPWD/emudbg/configure \
+	$$CURPWD/emudbg/configure --prefix=$(prefix) \
 	-v && $(MAKE)
 
 install-emudbg: $(prefix)/lib/libemudbg.a
 
 $(prefix)/lib/libemudbg.a: build/emudbg
 	$(MAKE) -C build/emudbg install
+
+distclean-emudbg:
+	rm -rf emudbg
 
 
 
@@ -128,10 +145,12 @@ $(prefix)/lib/libemudbg.a: build/emudbg
 ifeq ($(EXTERNAL_GNGEO), no)
 all: build-gngeo
 install: install-gngeo
+distclean: distclean-gngeo
 endif
 
 gngeo:
-	$(GIT) clone --branch ngdevkit $(GNGEO_GIT) $@
+	$(GIT) clone --branch ngdevkit $(GNGEO_GIT) $@ && \
+	cd gngeo && autoreconf -iv
 
 build-gngeo: build/gngeo
 
@@ -139,7 +158,6 @@ build-emulator-config: $(GNGEO_CFG)
 
 build/gngeo: gngeo
 	@echo compiling gngeo...
-	(cd gngeo && autoreconf -iv) && \
 	CURPWD=$$(pwd) && \
 	mkdir -p build/gngeo && \
 	cd build/gngeo && \
@@ -157,6 +175,9 @@ $(GNGEO_CFG):
 	mkdir -p $(dir $(GNGEO_CFG)) && \
 	echo "$$INPUT_SETTINGS" > $(GNGEO_CFG)
 
+distclean-gngeo:
+	rm -rf gngeo
+
 
 
 # ------ qcrt example GLSL shader for gngeo ------
@@ -165,16 +186,20 @@ ifeq ($(EXTERNAL_GNGEO), no)
 ifeq ($(EXTERNAL_QCRT), no)
 all: download-qcrt
 install: install-qcrt
+distclean: distclean-qcrt
 endif
 endif
 
-download-qcrt: qcrt-glsl
+download-qcrt: | qcrt-glsl
 
 qcrt-glsl:
 	$(GIT) clone $(QCRT_GIT) $@
 
 install-qcrt:
 	echo TODO
+
+distclean-qcrt:
+	rm -rf qcrt-glsl
 
 
 
