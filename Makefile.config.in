@@ -36,10 +36,12 @@ NGSDOBJCOPY=@ngsdobjcopy@
 NGSDRANLIB=@ngsdranlib@
 
 # common devkit tools
+PYTHON=@python@
 GIT=@git@
 ZIP=@zip@
+INSTALL=@install@
 
-GNGEO_BUILD_FLAGS=--program-prefix=ngdevkit- --prefix=$(prefix) CPPFLAGS="-I$(prefix)/include" CFLAGS="-I$(prefix)/include" LDFLAGS="-L$(prefix)/lib" PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig"
+GNGEO_BUILD_FLAGS=--prefix=$(prefix) CPPFLAGS="-I$(prefix)/include" CFLAGS="-I$(prefix)/include" LDFLAGS="-L$(prefix)/lib" PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig"
 
 # Default input config for gngeo
 GNGEO_CFG=$(HOME)/.gngeo/gngeorc

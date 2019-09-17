@@ -30,8 +30,8 @@ $(HEX):	$(OBJS:%=%.rel)
 	$(NGSDAS) -o $@ $<
 
 install: nullsound.ihx
-	../install-sh -d $(DESTDIR)$(prefix)/share/ngdevkit && \
-	../install-sh -t $(DESTDIR)$(prefix)/share/ngdevkit $<
+	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
+	$(INSTALL) -t $(DESTDIR)$(prefix)/share/ngdevkit $<
 
 clean:
 	rm -f *.rel *~ $(HEX)

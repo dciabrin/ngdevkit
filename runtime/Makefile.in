@@ -36,10 +36,10 @@ ngdevkit-specs:
 install: install-objs install-specs
 
 install-objs: $(OBJS) ngdevkit.ld
-	../install-sh -t $(DESTDIR)$$(dirname $$($(NGGCC) --print-file-name=crt0.o)) $^
+	$(INSTALL) -t $(DESTDIR)$$(dirname $$($(NGGCC) --print-file-name=crt0.o)) $^
 
 install-specs: ngdevkit-specs
-	../install-sh -t $(DESTDIR)$$(dirname $$($(NGGCC) --print-libgcc-file-name)) $<
+	$(INSTALL) -t $(DESTDIR)$$(dirname $$($(NGGCC) --print-libgcc-file-name)) $<
 
 clean:
 	rm -f *.o *~ *.a ngdevkit-specs

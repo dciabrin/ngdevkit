@@ -21,8 +21,8 @@ all:
 TOOLS=paltool.py tiletool.py
 
 install: $(TOOLS)
-	../install-sh -d $(DESTDIR)$(prefix)/bin && \
-	../install-sh -t $(DESTDIR)$(prefix)/bin $^
+	$(INSTALL) -d $(DESTDIR)$(prefix)/bin && \
+	$(INSTALL) -t $(DESTDIR)$(prefix)/bin $^
 
 clean:
 	rm -f *~

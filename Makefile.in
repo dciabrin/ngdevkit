@@ -88,8 +88,8 @@ install-tools:
 	done
 
 install-pkgconfig:
-	./install-sh -d $(DESTDIR)$(prefix)/lib/pkgconfig && \
-	./install-sh -t $(DESTDIR)$(prefix)/lib/pkgconfig ngdevkit.pc
+	$(INSTALL) -d $(DESTDIR)$(prefix)/lib/pkgconfig && \
+	$(INSTALL) -t $(DESTDIR)$(prefix)/lib/pkgconfig ngdevkit.pc
 
 clean-tools:
 	for i in nullsound nullbios runtime include tools; do \
@@ -161,13 +161,13 @@ build/gngeo: gngeo
 	CURPWD=$$(pwd) && \
 	mkdir -p build/gngeo && \
 	cd build/gngeo && \
-	$$CURPWD/gngeo/configure $(GNGEO_BUILD_FLAGS) \
-	-v && $(MAKE) -j1 pkgdatadir=/usr/share/ngdevkit-gngeo
+	$$CURPWD/gngeo/configure --program-prefix=ngdevkit- $(GNGEO_BUILD_FLAGS) \
+	-v && $(MAKE) -j1 pkgdatadir=$(prefix)/share/ngdevkit-gngeo
 
 install-gngeo: $(prefix)/bin/ngdevkit-gngeo
 
 $(prefix)/bin/ngdevkit-gngeo: build/gngeo
-	$(MAKE) -C build/gngeo install pkgdatadir=/usr/share/ngdevkit-gngeo
+	$(MAKE) -C build/gngeo install pkgdatadir=$(prefix)/share/ngdevkit-gngeo
 
 $(GNGEO_CFG): export INPUT_SETTINGS:=$(GNGEO_DEFAULT_INPUT_SETTINGS)
 $(GNGEO_CFG):

@@ -19,8 +19,8 @@ all:
 -include ../Makefile.config
 
 install:
-	../install-sh -d $(DESTDIR)$(prefix)/include/ngdevkit && \
-	../install-sh -t $(DESTDIR)$(prefix)/include/ngdevkit *.h
+	$(INSTALL) -d $(DESTDIR)$(prefix)/include/ngdevkit && \
+	$(INSTALL) -t $(DESTDIR)$(prefix)/include/ngdevkit *.h
 
 clean:
 	rm -f *~

@@ -49,7 +49,7 @@ $(PROM): $(ELF) | rom
 	$(NGOBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< $@
 
 $(ZROM): | rom
-	./zoom-rom.py -o $@
+	$(PYTHON) zoom-rom.py -o $@
 
 rom:
 	mkdir $@
@@ -64,8 +64,8 @@ $(SOUND_DRIVER):
 	$(MAKE) -C $(NULLSOUND)
 
 install: $(BIOS)
-	../install-sh -d $(DESTDIR)$(prefix)/share/ngdevkit && \
-	../install-sh -t $(DESTDIR)$(prefix)/share/ngdevkit $<
+	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
+	$(INSTALL) -t $(DESTDIR)$(prefix)/share/ngdevkit $<
 
 
 clean:
