@@ -9,7 +9,7 @@ sharedir=@datarootdir@/ngdevkit
 
 Name: ngdevkit
 Description: Opensource development for the Neo-Geo
-Version: @VERSION@
+Version: @PACKAGE_VERSION@
 Requires:
 Conflicts:
 Libs: -L${libdir} -specs ngdevkit-specs
