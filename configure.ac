@@ -33,6 +33,22 @@ AC_ARG_ENABLE([external-gngeo],
               [EXTERNAL_GNGEO="no"])
 AC_SUBST([EXTERNAL_GNGEO])
 
+dnl
+dnl MinGW-specific options
+dnl
+AC_ARG_ENABLE([mingw],
+	      AS_HELP_STRING([--enable-mingw], [Build Win10-native versions of emudbg and gngeo]),
+	      AS_IF([test "x$enable_mingw" = xyes], [ENABLE_MINGW="yes"], [ENABLE_MINGW="no"]),
+              [ENABLE_MINGW="no"])
+AC_SUBST([EXTERNAL_MINGW])
+
+AC_ARG_WITH([sdl2],
+            AS_HELP_STRING([--with-sdl2=path], [Absolute path to file SDL2.dll]))
+
+AC_ARG_WITH([glew],
+            AS_HELP_STRING([--with-glew=path], [Absolute path to GLEW binary development distribution]))
+
+
 dnl if ngdevkit-toolkit is already installed system-wide, use it
 if test x"$EXTERNAL_TOOLCHAIN" = x"yes"; then
 AC_PATH_PROG([nggcc], [m68k-neogeo-elf-gcc], [no])
@@ -79,6 +95,64 @@ fi
 
 AC_PATH_PROG([git], [git])
 AC_PATH_PROG([zip], [zip])
+
+if test x"$ENABLE_MINGW" = x"yes"; then
+  AC_PATH_PROG([mingwgcc], [`uname -m`-w64-mingw32-gcc], [no])
+  AS_IF([test x"$mingwgcc" = x"no"], [AC_MSG_ERROR([MinGW gcc not found in path.])])
+
+  AC_MSG_CHECKING([for zlib1.dll in MinGW distribution])
+  ZLIB1_DLL=`$mingwgcc -print-file-name=zlib1.dll`
+  if test -f "$ZLIB1_DLL"; then
+    AC_MSG_RESULT([$ZLIB1_DLL])
+  else
+    AC_MSG_ERROR([Could not find zlib1.dll on disk])
+  fi
+
+  AC_MSG_CHECKING([for SDL2])
+  if test -n "$with_sdl2" && test x"$with_sdl2" != x"no" && test -f "$with_sdl2"; then
+    AC_MSG_RESULT([$with_sdl2])
+    SDL2_DLL=$with_sdl2
+  else
+    AC_MSG_ERROR(['$with_sdl2' is not a valid file on disk])
+  fi
+
+  AC_MSG_CHECKING([for GLEW binary development distribution])
+  if test -n "$with_glew" && test x"$with_glew" != x"no" && test -d "$with_glew"; then
+    if test x"`uname -m`" = x"x86_64"; then
+      glew_dir=${with_glew}/bin/Release/x64
+    else
+      glew_dir=${with_glew}/bin/Release/Win32
+    fi
+    GLEW_FLAGS=--with-glew=$with_glew
+    GLEW_DLL=$glew_dir/glew32.dll
+    AC_MSG_RESULT([$with_glew])
+  else
+    AC_MSG_RESULT([no])
+  fi
+
+  if test x"$EXTERNAL_GNGEO" != x"yes"; then
+    AC_MSG_CHECKING([for GnGeo installation directory])
+    if test -z "$GNGEO_INSTALL_PATH"; then
+      GNGEO_INSTALL_PATH="$prefix/ngdevkit-gngeo"
+    fi
+    AC_MSG_RESULT([$GNGEO_INSTALL_PATH])
+  fi
+
+  EMUDBG_BUILD_FLAGS="--host=x86_64-w64-mingw32"
+  GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-mingw --host=x86_64-w64-mingw32 $GLEW_FLAGS"
+else
+  GNGEO_BUILD_FLAGS="--prefix=$prefix"
+fi
+
+AC_SUBST([ENABLE_MINGW])
+AC_SUBST([ZLIB1_DLL])
+AC_SUBST([SDL2_DLL])
+AC_SUBST([GLEW_FLAGS])
+AC_SUBST([GLEW_DLL])
+AC_SUBST([EMUDBG_BUILD_FLAGS])
+AC_SUBST([GNGEO_BUILD_FLAGS])
+AC_SUBST([GNGEO_INSTALL_PATH])
+
 
 dnl AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
