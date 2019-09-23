@@ -20,7 +20,6 @@ include Makefile.config
 # External subpackages
 EMUDBG_GIT=https://github.com/dciabrin/emudbg
 GNGEO_GIT=https://github.com/dciabrin/gngeo
-QCRT_GIT=https://github.com/dciabrin/qcrt-glsl
 TOOLCHAIN_GIT=https://github.com/dciabrin/ngdevkit-toolchain
 EXAMPLES_GIT=https://github.com/dciabrin/ngdevkit-examples
 
@@ -99,7 +98,7 @@ clean-tools:
 download-examples: | examples
 
 examples:
-	$(GIT) clone $(EXAMPLES_GIT) $@ && \
+	$(GIT) clone --recursive $(EXAMPLES_GIT) $@ && \
 	cd examples && autoreconf -iv
 
 distclean-examples:
@@ -177,29 +176,6 @@ $(GNGEO_CFG):
 
 distclean-gngeo:
 	rm -rf gngeo
-
-
-
-# ------ qcrt example GLSL shader for gngeo ------
-
-ifeq ($(EXTERNAL_GNGEO), no)
-ifeq ($(EXTERNAL_QCRT), no)
-all: download-qcrt
-install: install-qcrt
-distclean: distclean-qcrt
-endif
-endif
-
-download-qcrt: | qcrt-glsl
-
-qcrt-glsl:
-	$(GIT) clone $(QCRT_GIT) $@
-
-install-qcrt:
-	echo TODO
-
-distclean-qcrt:
-	rm -rf qcrt-glsl
 
 
 
