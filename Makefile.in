@@ -143,7 +143,11 @@ distclean-emudbg:
 
 ifeq ($(EXTERNAL_GNGEO), no)
 all: build-gngeo
-install: install-gngeo install-gngeo-dll
+install: install-gngeo
+ifeq ($(ENABLE_MINGW), yes)
+install: install-gngeo-dll
+install-gngeo-dll: install-gngeo
+endif
 distclean: distclean-gngeo
 endif
 
