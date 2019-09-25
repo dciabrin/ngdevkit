@@ -199,9 +199,16 @@ distclean-gngeo:
 
 # ------ Target to set up shell environment ------
 
+SHELL_BIN_PATH := $(prefix)/bin
+ifeq ($(EXTERNAL_GNGEO), no)
+ifeq ($(ENABLE_MINGW), yes)
+SHELL_BIN_PATH := $(SHELL_BIN_PATH):$(GNGEO_INSTALL_PATH)
+endif
+endif
+
 shellinit:
 	@ echo Variables set with eval $$\(make shellinit\) >&2
-	@ echo export PATH="$(prefix)/bin:\$$PATH"
+	@ echo export PATH="$(SHELL_BIN_PATH):\$$PATH"
 	@ echo export PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig:\$$PKG_CONFIG_PATH"
 ifeq ($(shell uname), Darwin)
 	@ echo export DYLD_LIBRARY_PATH="$(prefix)/lib:\$$DYLD_LIBRARY_PATH"
@@ -209,8 +216,3 @@ else
 	@ echo export LD_LIBRARY_PATH="$(prefix)/lib:\$$LD_LIBRARY_PATH"
 endif
 	@ echo export PYTHONPATH="$(prefix)/bin:\$$PYTHONPATH"
-ifeq ($(EXTERNAL_GNGEO), no)
-ifeq ($(ENABLE_MINGW), yes)
-	@ echo export PATH="$(GNGEO_INSTALL_PATH):\$$PATH"
-endif
-endif
