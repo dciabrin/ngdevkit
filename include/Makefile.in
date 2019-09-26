@@ -20,7 +20,7 @@ all:
 
 install:
 	$(INSTALL) -d $(DESTDIR)$(prefix)/include/ngdevkit && \
-	$(INSTALL) -t $(DESTDIR)$(prefix)/include/ngdevkit *.h
+	$(INSTALL) *.h $(DESTDIR)$(prefix)/include/ngdevkit
 
 clean:
 	rm -f *~

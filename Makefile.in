@@ -88,7 +88,7 @@ install-tools:
 
 install-pkgconfig:
 	$(INSTALL) -d $(DESTDIR)$(prefix)/lib/pkgconfig && \
-	$(INSTALL) -t $(DESTDIR)$(prefix)/lib/pkgconfig ngdevkit.pc
+	$(INSTALL) ngdevkit.pc $(DESTDIR)$(prefix)/lib/pkgconfig
 
 clean-tools:
 	for i in nullsound nullbios runtime include tools; do \

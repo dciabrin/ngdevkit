@@ -31,7 +31,7 @@ $(HEX):	$(OBJS:%=%.rel)
 
 install: nullsound.ihx
 	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
-	$(INSTALL) -t $(DESTDIR)$(prefix)/share/ngdevkit $<
+	$(INSTALL) $< $(DESTDIR)$(prefix)/share/ngdevkit
 
 clean:
 	rm -f *.rel *~ $(HEX)

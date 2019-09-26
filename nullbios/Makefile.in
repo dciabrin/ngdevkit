@@ -65,7 +65,7 @@ $(SOUND_DRIVER):
 
 install: $(BIOS)
 	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
-	$(INSTALL) -t $(DESTDIR)$(prefix)/share/ngdevkit $<
+	$(INSTALL) $< $(DESTDIR)$(prefix)/share/ngdevkit
 
 
 clean:
