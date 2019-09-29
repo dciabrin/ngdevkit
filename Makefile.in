@@ -40,7 +40,7 @@ clean:
 distclean: clean distclean-examples
 	rm -rf build local
 	find . \( -name '*~' -or -name Makefile -or -name Makefile.config \) \
-	-exec echo {} \;
+	-exec rm {} \;
 
 build local:
 	mkdir $@
