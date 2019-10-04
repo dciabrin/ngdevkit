@@ -36,29 +36,29 @@ AES or MVS hardware. It includes:
 You need to install various dependencies to build gcc, sdcc and
 ImageMagick for all the graphics trickery. You also need SDL 2.0
 for the emulator and its source-level debugging support.
-On a Debian-derived distro, this can be done with:
+For example, on Debian buster, this can be done with:
 
     apt-get install gcc curl unzip imagemagick
-    GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
-    apt-get build-dep $GCC_VERSION_PKG
-    apt-get build-dep --arch-only sdcc
-    # gcc 5.5 currently only works with isl <= 0.18
-    # recent distros ship a specific package for isl 0.18
-    apt-get install libisl-0.18-dev || true
+    apt-get install autoconf-archive
     apt-get install libsdl2-dev
     apt-get install python-pygame
+    GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
+    # make sure you have src packages enabled for dependency information
+    echo "deb-src http://deb.debian.org/debian buster main" > /etc/apt/sources.list.d/ngdevkit.list
+    apt-get update
+    # install build-dependency packages
+    apt-get build-dep $GCC_VERSION_PKG
+    apt-get build-dep --arch-only sdcc
 
 If running OS X, you will need XCode and brew:
 
+    brew install autoconf-archive
     brew install imagemagick
-    brew deps gcc | xargs brew install
-    # gcc 5.5 currently only works with isl <= 0.18
-    brew remove --force isl
-    brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/87ddc3513e1d15f23d2bb270f63827a5daf1259c/Formula/isl.rb
-    brew deps sdcc | xargs brew install
     brew install sdl
     # "easy_install pip" if you don't have pip yet, then
     pip install pygame
+    brew deps gcc | xargs brew install
+    brew deps sdcc | xargs brew install
 
 Compiling the devkit for Windows 10 is supported via [WSL][wsl],
 detailed setup and build instructions are available in the

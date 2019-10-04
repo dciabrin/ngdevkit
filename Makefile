@@ -137,6 +137,7 @@ build/nggcc:
 	--with-gnu-as \
 	--with-gnu-ld \
 	--with-newlib \
+	--without-isl \
 	--disable-multilib \
 	--disable-libssp \
 	--enable-languages=c \
