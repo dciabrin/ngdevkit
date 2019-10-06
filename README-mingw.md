@@ -45,7 +45,7 @@ Install the packages required to build the devkit's compilers and
 tools:
 
     sudo apt-get update
-    sudo apt-get install gcc curl unzip imagemagick
+    sudo apt-get install gcc curl zip unzip imagemagick
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     sudo apt-get build-dep $GCC_VERSION_PKG
     sudo apt-get build-dep --arch-only sdcc
