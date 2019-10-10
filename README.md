@@ -69,6 +69,8 @@ For example, on Debian buster, you can install the dependencies with:
     # install build-dependency packages
     apt-get build-dep $GCC_VERSION_PKG
     apt-get build-dep --arch-only sdcc
+    # optional: install GLEW for OpenGL+GLSL shaders in GnGeo
+    apt-get install libglew-dev
 
 If running OS X, you will need XCode, brew and GNU Make 4.x. Please
 note that the version of GNU Make shipped with XCode is tool old,
