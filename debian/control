@@ -1,0 +1,22 @@
+Source: ngdevkit
+Section: devel
+Priority: optional
+Maintainer: Damien Ciabrini <damien.ciabrini@gmail.com>
+Build-Depends: debhelper (>= 10), ngdevkit-gngeo, ngdevkit-toolkit, git, autoconf, python3, zip
+Standards-Version: 4.1.2
+Homepage: https://github.com/dciabrin/ngdevkit
+Vcs-Git: https://github.com/dciabrin/ngdevkit.git
+
+Package: ngdevkit
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Open source development for Neo-Geo
+
+ ngdevkit is a ASM/C/C++ software development kit for
+ the Neo-Geo AES or MVS hardware. It provides a complete
+ toolchain for cross compiling to the m68k and z80 CPUs,
+ a C library for easy hardware access, and a set of tools
+ for managing character and sprite ROMs. It also comes with
+ an open-source BIOS replacement for running your ROM under
+ your favorite emulator, and a m68k-enabled GDB for
+ source-level-debugging.
