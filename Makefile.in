@@ -38,7 +38,7 @@ clean:
 	rm -rf local/*
 
 distclean: clean distclean-examples
-	rm -rf build local
+	rm -rf build local config.log config.status
 	find . \( -name '*~' -or -name Makefile -or -name Makefile.config \) \
 	-exec rm {} \;
 
