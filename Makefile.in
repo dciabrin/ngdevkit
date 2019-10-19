@@ -32,7 +32,7 @@ all: build-tools download-examples
 
 install: install-tools install-pkgconfig
 
-clean: clean-tools
+clean: clean-tools clean-pkgconfig
 
 clean:
 	rm -rf local/*
@@ -87,13 +87,16 @@ install-tools:
 	done
 
 install-pkgconfig:
-	$(INSTALL) -d $(DESTDIR)$(prefix)/lib/pkgconfig && \
-	$(INSTALL) ngdevkit.pc $(DESTDIR)$(prefix)/lib/pkgconfig
+	$(INSTALL) -d $(DESTDIR)$(prefix)/share/pkgconfig && \
+	$(INSTALL) ngdevkit.pc $(DESTDIR)$(prefix)/share/pkgconfig
 
 clean-tools:
 	for i in nullsound nullbios runtime include tools; do \
 	  $(MAKE) -C $$i clean; \
 	done
+
+clean-pkgconfig:
+	rm -f ngdevkit.pc
 
 download-examples: | examples
 
@@ -209,7 +212,7 @@ endif
 shellinit:
 	@ echo Variables set with eval $$\(make shellinit\) >&2
 	@ echo export PATH="$(SHELL_BIN_PATH):\$$PATH"
-	@ echo export PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig:\$$PKG_CONFIG_PATH"
+	@ echo export PKG_CONFIG_PATH="$(prefix)/share/pkgconfig:\$$PKG_CONFIG_PATH"
 ifeq ($(shell uname), Darwin)
 	@ echo export DYLD_LIBRARY_PATH="$(prefix)/lib:\$$DYLD_LIBRARY_PATH"
 else
