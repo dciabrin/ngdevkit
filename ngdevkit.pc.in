@@ -3,8 +3,8 @@
 prefix=@prefix@
 exec_prefix=@exec_prefix@
 bindir=@bindir@
-libdir=@libdir@
-includedir=@includedir@
+libdir=@prefix@/m68k-neogeo-elf/lib
+includedir=@prefix@/m68k-neogeo-elf/include
 sharedir=@datarootdir@/ngdevkit
 
 Name: ngdevkit
