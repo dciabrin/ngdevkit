@@ -60,7 +60,7 @@ class converter(object):
         """Simple generator for iterating tiles in an image"""
         y = 0
         while True:
-            for x in xrange(0, width, self.edge):
+            for x in range(0, width, self.edge):
                 yield (x, y)
             y += self.edge
 
@@ -80,7 +80,7 @@ class converter(object):
 
     def extract(self):
         """Extract contents of ROM to a 2D image"""
-        self.open_rom('r')
+        self.open_rom('rb')
         num_tiles = os.path.getsize(self.in1)/self.multiple
         tiles_per_line = 20 if not self.args.width \
             else self.args.width/self.edge
@@ -90,15 +90,15 @@ class converter(object):
         dest_height = lines*self.edge
 
         if self.args.verbose:
-            print "input has %d tiles" % (num_tiles)
-            print "destination will hold %d tiles (%dpx x %dpx)" % \
-                (tiles_per_line*lines, dest_width, dest_height)
+            print("input has %d tiles" % (num_tiles))
+            print("destination will hold %d tiles (%dpx x %dpx)" % \
+                (tiles_per_line*lines, dest_width, dest_height))
 
         d = pygame.Surface((dest_width, dest_height), depth=8)
         d.set_palette([(0, 0, 0)] +
                       [(randint(100, 255),
                         randint(100, 255),
-                        randint(100, 255)) for i in xrange(1, 16)])
+                        randint(100, 255)) for i in range(1, 16)])
         dpa = pygame.PixelArray(d)
 
         edge = self.edge
@@ -129,11 +129,9 @@ class converter(object):
 
     def create(self):
         """Create a graphics ROM from the contents of a 2D image"""
-        self.open_rom('w')
+        self.open_rom('wb')
         edge = self.edge
-        # num_tiles = self.size/self.multiple if self.size \
-        #     else (self.img.get_width() / edge) * (self.img.get_height() / edge)
-        num_tiles = (self.img.get_width() / edge) * (self.img.get_height() / edge)
+        num_tiles = int((self.img.get_width() / edge) * (self.img.get_height() / edge))
         # limit the processing of tiles up to size bytes
         if self.size:
             if self.size/self.multiple<num_tiles:
@@ -142,7 +140,7 @@ class converter(object):
         i = self.pos2D_iterator(self.img.get_width())
 
         for n in range(num_tiles):
-            (x, y) = i.next()
+            (x, y) = next(i)
             t = pygame.Surface((edge, edge), depth=8)
             tpa = pygame.PixelArray(t)
             tpa[0:edge, 0:edge] = dpa[x:x+edge, y:y+edge]
@@ -161,7 +159,7 @@ class fix_converter(converter):
 
     def open_rom(self, mode):
         """I/O for ROM file xxx.s1"""
-        self.fd1 = open(self.in1 if mode == 'r' else self.out1, mode)
+        self.fd1 = open(self.in1 if mode == 'rb' else self.out1, mode)
 
     def close_rom(self):
         if self.size:
@@ -199,8 +197,8 @@ class fix_converter(converter):
         """Fix tile loader"""
         surf_buf = bytearray(64)
         for xa, xb in ((4, 5), (6, 7), (0, 1), (2, 3)):
-            for y in xrange(8):
-                twopix = ord(self.fd1.read(1))
+            for y in range(8):
+                twopix = self.fd1.read(1)
                 pixa = twopix & 0xf
                 pixb = (twopix >> 0x4) & 0xf
                 surf_buf[(8*y)+xa] = pixa
@@ -213,9 +211,9 @@ class fix_converter(converter):
         """Fix tile writer"""
         surf_buf = t.get_buffer().raw
         for xa, xb in ((4, 5), (6, 7), (0, 1), (2, 3)):
-            for y in xrange(8):
-                pixa = ord(surf_buf[(8*y)+xa])
-                pixb = ord(surf_buf[(8*y)+xb]) << 4
+            for y in range(8):
+                pixa = surf_buf[(8*y)+xa]
+                pixb = surf_buf[(8*y)+xb] << 4
                 self.fd1.write(struct.pack('B', pixb | pixa))
 
 
@@ -235,8 +233,8 @@ class sprite_converter(converter):
 
     def open_rom(self, mode):
         """I/O for pair of ROM files xxx-c1.c1 and xxx-c2.c2"""
-        self.fd1 = open(self.in1 if mode == 'r' else self.out1, mode)
-        self.fd2 = open(self.in2 if mode == 'r' else self.out2, mode)
+        self.fd1 = open(self.in1 if mode == 'rb' else self.out1, mode)
+        self.fd2 = open(self.in2 if mode == 'rb' else self.out2, mode)
 
     def close_rom(self):
         if self.size:
@@ -284,13 +282,13 @@ class sprite_converter(converter):
         for tile8x8_off in (8, 136, 0, 128):
             surf_off = tile8x8_off
 
-            for y in xrange(8):
-                row_bitplane1 = ord(self.fd1.read(1))
-                row_bitplane2 = ord(self.fd1.read(1))
-                row_bitplane3 = ord(self.fd2.read(1))
-                row_bitplane4 = ord(self.fd2.read(1))
+            for y in range(8):
+                row_bitplane1 = self.fd1.read(1)
+                row_bitplane2 = self.fd1.read(1)
+                row_bitplane3 = self.fd2.read(1)
+                row_bitplane4 = self.fd2.read(1)
 
-                for x in xrange(8):
+                for x in range(8):
                     bp1 = (row_bitplane1 >> x) & 1
                     bp2 = (row_bitplane2 >> x) & 1
                     bp3 = (row_bitplane3 >> x) & 1
@@ -309,14 +307,14 @@ class sprite_converter(converter):
         for tile8x8_off in (8, 136, 0, 128):
             surf_off = tile8x8_off
 
-            for y in xrange(8):
+            for y in range(8):
                 row_bitplane1 = 0
                 row_bitplane2 = 0
                 row_bitplane3 = 0
                 row_bitplane4 = 0
 
-                for x in xrange(8):
-                    col = ord(surf_buf[surf_off])
+                for x in range(8):
+                    col = surf_buf[surf_off]
                     row_bitplane1 += ((col >> 0) & 1) << x
                     row_bitplane2 += ((col >> 1) & 1) << x
                     row_bitplane3 += ((col >> 2) & 1) << x
