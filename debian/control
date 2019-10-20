@@ -9,7 +9,7 @@ Vcs-Git: https://github.com/dciabrin/ngdevkit.git
 
 Package: ngdevkit
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, ngdevkit-toolchain, python3
 Description: Open source development for Neo-Geo
  ngdevkit is a ASM/C/C++ software development kit for
  the Neo-Geo AES or MVS hardware. It provides a complete
