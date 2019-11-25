@@ -4,7 +4,7 @@
 	dh $@
 
 override_dh_auto_configure:
-	dh_auto_configure -- --prefix=/usr --enable-external-toolchain --enable-external-emudbg --enable-external-gngeo
+	dh_auto_configure -- --prefix=/usr --enable-external-toolchain --enable-external-emudbg --enable-external-gngeo --enable-examples=no
 
 # do not try to strip the m68k libraries
 override_dh_strip:
