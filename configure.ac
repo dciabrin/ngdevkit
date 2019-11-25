@@ -33,6 +33,12 @@ AC_ARG_ENABLE([external-gngeo],
               [EXTERNAL_GNGEO="no"])
 AC_SUBST([EXTERNAL_GNGEO])
 
+AC_ARG_ENABLE([examples],
+              AS_HELP_STRING([--enable-examples], [Clone and build the ngdevkit-examples repository]),
+              AS_IF([test "x$enable_examples" = xyes], [EXAMPLES="yes"], [EXAMPLES="no"]),
+              [EXAMPLES="yes"])
+AC_SUBST([EXAMPLES])
+
 dnl
 dnl MinGW-specific options
 dnl

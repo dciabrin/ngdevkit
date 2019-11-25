@@ -28,7 +28,7 @@ EXAMPLES_GIT=https://github.com/dciabrin/ngdevkit-examples
 # <all> and <install> may be extended with targets from
 # toolchain, emudbg and gngeo if enabled
 
-all: build-tools download-examples
+all: build-tools
 
 install: install-tools install-pkgconfig
 
@@ -37,7 +37,7 @@ clean: clean-tools clean-pkgconfig
 clean:
 	rm -rf local/*
 
-distclean: clean distclean-examples
+distclean: clean
 	rm -rf build local config.log config.status
 	find . \( -name '*~' -or -name Makefile -or -name Makefile.config \) \
 	-exec rm {} \;
@@ -97,6 +97,11 @@ clean-tools:
 
 clean-pkgconfig:
 	rm -f ngdevkit.pc
+
+ifneq ($(EXAMPLES), no)
+all: download-examples
+distclean: distclean-examples
+endif
 
 download-examples: | examples
 
