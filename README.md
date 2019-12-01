@@ -29,7 +29,36 @@ AES or MVS hardware. It includes:
 
 
 
-## How to compile the devkit
+## How to use the devkit
+
+### Installing pre-built binary packages
+
+If you're running an Ubuntu or Debian distribution, you can install
+pre-built nightly binary packages, so you get the most up-to-date
+devkit without recompiling the entire toolchain at every update.
+
+You need to install enable the ngdevkit PPA and install a couple
+of dependencies:
+
+    add-apt-repository -y ppa:dciabrin/ngdevkit
+    apt-get update
+    apt-get install -y ngdevkit ngdevkit-gngeo
+    apt-get install -y pkg-config autoconf automake zip imagemagick
+
+Once ngdevkit packages are installed, you can clone the
+[ngdevkit-examples][examples] repository and build all the examples
+with the following commands:
+
+    git clone --recursive https://github.com/dciabrin/ngdevkit-examples examples
+    autoreconf -iv
+    ./configure
+    make
+
+You can learn how to use the devkit and how to build your first
+Neo-Geo program by reading the dedicated examples/README.md.
+
+
+### Building the devkit from sources
 
 The devkit itself is a collection of various git repositories. This
 repository is the main entry point: it provides the necessary tools,
@@ -48,10 +77,11 @@ are automatically cloned at build time:
      configuration to run your roms with a "CRT scanline" pixel
      shader.
 
-### Pre-requisite
+
+#### Pre-requisite
 
 In order to build the devkit you need autoconf, autoconf-archive and
-GNU Make 4.x. The devkit tools uses Python 3 and PyGames. The emulator
+GNU Make 4.x. The devkit tools uses Python 3 and PyGame. The emulator
 requires SDL 2.0 and optionally OpenGL libraries. The examples require
 ImageMagick for all the graphics trickery. Various additional
 dependencies are required to build the toolchain modules such as GCC
@@ -91,7 +121,7 @@ detailed setup and build instructions are available in the
 [the dedicated README](README-mingw.md).
 
 
-### Building the toolchain
+#### Building the toolchain
 
 The devkit relies on autotools to check for dependencies and
 autodetect the proper build flags. You can build the entire devkit
@@ -129,7 +159,7 @@ This will compile all the examples available in the directory.
 
 ### Running the emulator
 
-Once you have built the examples, go into an subdirectory to
+Once you have built the examples, go into a subdirectory to
 test the compiled example and run GnGeo from the makefile:
 
     cd examples/01-helloworld
