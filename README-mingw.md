@@ -23,7 +23,7 @@ Follow the
 to enable the WSL subsystem on your Windows host.
 
 Then go on the Windows store and choose a Linux distribution to
-install on your Windows 10 host. This documentation uses Ubuntu 16.04,
+install on your Windows 10 host. This documentation uses Ubuntu 18.04,
 but any other `apt`-based distribution should work the same.
 
 ## Building the devkit
@@ -36,8 +36,8 @@ resolve the packages that need to be installed to build gcc and
 sdcc. Those two lines should be uncommented in
 `/etc/apt/sources.list`:
 
-    deb-src http://archive.ubuntu.com/ubuntu/ xenial main restricted
-    deb-src http://archive.ubuntu.com/ubuntu/ xenial universe
+    deb-src http://archive.ubuntu.com/ubuntu/ bionic main restricted
+    deb-src http://archive.ubuntu.com/ubuntu/ bionic universe
 
 ### Install the dependencies
 
@@ -45,13 +45,10 @@ Install the packages required to build the devkit's compilers and
 tools:
 
     sudo apt-get update
-    sudo apt-get install gcc curl unzip imagemagick
+    sudo apt-get install gcc curl zip unzip imagemagick
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     sudo apt-get build-dep $GCC_VERSION_PKG
     sudo apt-get build-dep --arch-only sdcc
-    # gcc 5.5 currently only works with isl <= 0.18
-    # recent distros ship a specific package for isl 0.18
-    sudo apt-get install libisl-0.18-dev || true
     sudo apt-get install libsdl2-dev
     sudo apt-get install python-pygame
     sudo apt-get install automake
@@ -118,37 +115,31 @@ an old integrated chipset probably won't work.
 
 Unlike other platforms, a native Windows 10 GnGeo requires all
 its files to be located under a common directory. You need to
-configure that GnGeo installation directory directly in file
-`Makefile.config`. For example:
+configure ngdevkit to install GnGeo into a custom directory.
+For example:
 
-    GNGEO_INSTALL_PATH=/mnt/c/Users/ngdevkit/Desktop/gngeo
+    GNGEO_DIR=/mnt/c/Users/ngdevkit/Desktop/gngeo
 
 Note: it's a good idea to choose a directory under `/mnt/c` if you
 want to run GnGeo easily from the Windows explorer.
 
-You also need to update `Makefile.config` to specify the location of
-file `SDL2.dll` that you extracted previously. This file will be
-copied to the GnGeo installation directory automatically when building
-the devkit. For example:
+At this point, if you downloaded all the dependencies in the home
+directory as describe in the example above, you can build the
+toolkit with:
 
-    SDL2_DLL=/home/ngdevkit/SDL2.dll
+    eval $(make shellinit)
+    cd examples
+    ./configure --prefix=$PWD/local --enable-mingw --with-sdl2=$HOME/SDL2.dll --with-glew=$HOME/glew-2.1.0 GNGEO_INSTALL_PATH=${GNGEO_DIR}
+    make
+    make install
 
-If you downloaded GLEW and want to enable the GLSL blitter backend,
-update `Makefile.config` to specify the location of the extracted
-GLEW directory. That directory provides the necessary header files
-for compilation, and provides the runtime glew32.dll which will be
-copied to the GnGeo installation directory automatically. For
-example:
+The `install` target will copy all the Windows 10 dependencies in
+the GnGeo directory: the `SDL2.dll`, a mingw-compiled `zlib.dll`,
+and the optional GLEW library if you enabled the GLSL blitter
+backend.
 
-    GLEW_BIN_PATH=/home/ngdevkit/glew-2.1.0
-
-Once this is done, you can build the devkit by using the dedicated
-mingw makefile:
-
-    make -f Makefile.mingw
-
-And voilà! You can now use the devkit and the emulator as described
-in [the main README](README.md) file.
+And voilà! You now have a devkit and a Windows-10-native GnGeo.
+You can now build the examples as explained in [the main README](README.md) file.
 
 [wsl]: https://docs.microsoft.com/en-us/windows/wsl/install-win10
 [interop]: https://docs.microsoft.com/en-us/windows/wsl/interop

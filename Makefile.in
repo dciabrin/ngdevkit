@@ -1,0 +1,226 @@
+# Copyright (c) 2015-2019 Damien Ciabrini
+# This file is part of ngdevkit
+#
+# ngdevkit is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# ngdevkit is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
+
+
+include Makefile.config
+
+# External subpackages
+EMUDBG_GIT=https://github.com/dciabrin/emudbg
+GNGEO_GIT=https://github.com/dciabrin/gngeo
+TOOLCHAIN_GIT=https://github.com/dciabrin/ngdevkit-toolchain
+EXAMPLES_GIT=https://github.com/dciabrin/ngdevkit-examples
+
+
+# ------ base targets ------
+# <all> and <install> may be extended with targets from
+# toolchain, emudbg and gngeo if enabled
+
+all: build-tools
+
+install: install-tools install-pkgconfig
+
+clean: clean-tools clean-pkgconfig
+
+clean:
+	rm -rf local/*
+
+distclean: clean
+	rm -rf build local config.log config.status
+	find . \( -name '*~' -or -name Makefile -or -name Makefile.config \) \
+	-exec rm {} \;
+
+build local:
+	mkdir $@
+
+.PHONY: clean distclean
+
+
+
+# ------ toolchain (gcc, binutils, newlib, gdb) ------
+
+ifeq ($(EXTERNAL_TOOLCHAIN), no)
+build-tools: build-toolchain | $(prefix)/bin
+distclean: distclean-toolchain
+endif
+
+download-toolchain: | toolchain
+
+toolchain:
+	$(GIT) clone $(TOOLCHAIN_GIT) $@
+
+build-toolchain: | download-toolchain build
+	$(MAKE) -Ctoolchain all BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
+
+install-toolchain: $(prefix)/bin
+
+$(prefix)/bin: build/ngbinutils build/nggcc build/nggdb build/ngnewlib build/ngsdcc
+	$(MAKE) -Ctoolchain install BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
+
+distclean-toolchain:
+	rm -rf toolchain
+
+
+
+# ------ ngdevkit ------
+
+build-tools:
+	for i in nullsound nullbios runtime include tools; do \
+	  $(MAKE) -C $$i; \
+	done
+
+install-tools:
+	for i in nullsound nullbios runtime include tools; do \
+	  $(MAKE) -C $$i install; \
+	done
+
+install-pkgconfig:
+	$(INSTALL) -d $(DESTDIR)$(prefix)/share/pkgconfig && \
+	$(INSTALL) ngdevkit.pc $(DESTDIR)$(prefix)/share/pkgconfig
+
+clean-tools:
+	for i in nullsound nullbios runtime include tools; do \
+	  $(MAKE) -C $$i clean; \
+	done
+
+clean-pkgconfig:
+	rm -f ngdevkit.pc
+
+ifneq ($(EXAMPLES), no)
+all: download-examples
+distclean: distclean-examples
+endif
+
+download-examples: | examples
+
+examples:
+	$(GIT) clone --recursive $(EXAMPLES_GIT) $@ && \
+	cd examples && autoreconf -iv
+
+distclean-examples:
+	rm -rf examples
+
+
+
+# ------ emudbg ------
+
+ifeq ($(EXTERNAL_EMUDBG), no)
+all: build-emudbg
+build-gngeo: install-emudbg
+install: install-emudbg
+distclean: distclean-emudbg
+endif
+
+emudbg:
+	$(GIT) clone $(EMUDBG_GIT) $@ && \
+	cd emudbg && autoreconf -iv
+
+build-emudbg: build/emudbg
+
+build/emudbg: emudbg
+	@echo compiling emudbg...
+	CURPWD=$$(pwd) && \
+	mkdir -p build/emudbg && \
+	cd build/emudbg && \
+	$$CURPWD/emudbg/configure --prefix=$(prefix) \
+	$(EMUDBG_BUILD_FLAGS) -v && $(MAKE)
+
+install-emudbg: $(prefix)/lib/libemudbg.a
+
+$(prefix)/lib/libemudbg.a: build/emudbg
+	$(MAKE) -C build/emudbg install
+
+distclean-emudbg:
+	rm -rf emudbg
+
+
+
+# ------ gngeo ------
+
+ifeq ($(EXTERNAL_GNGEO), no)
+all: build-gngeo
+install: install-gngeo
+ifeq ($(ENABLE_MINGW), yes)
+install: install-gngeo-dll
+install-gngeo-dll: install-gngeo
+endif
+distclean: distclean-gngeo
+endif
+
+ifeq ($(ENABLE_MINGW), yes)
+GNGEO=$(GNGEO_INSTALL_PATH)/ngdevkit-gngeo.exe
+GNGEOPKGDATADIR=$(GNGEO_INSTALL_PATH)/share
+else
+GNGEO=$(prefix)/bin/ngdevkit-gngeo
+GNGEOPKGDATADIR=$(prefix)/share/ngdevkit-gngeo
+endif
+
+gngeo:
+	$(GIT) clone --branch ngdevkit $(GNGEO_GIT) $@ && \
+	cd gngeo && autoreconf -iv
+
+build-gngeo: build/gngeo
+
+build-emulator-config: $(GNGEO_CFG)
+
+build/gngeo: gngeo
+	@echo compiling gngeo...
+	CURPWD=$$(pwd) && \
+	mkdir -p build/gngeo && \
+	cd build/gngeo && \
+	$$CURPWD/gngeo/configure --program-prefix=ngdevkit- $(GNGEO_BUILD_FLAGS) \
+	CPPFLAGS="-I$(prefix)/include" CFLAGS="-I$(prefix)/include -DGNGEORC=\\\"ngdevkit-gngeorc\\\"" LDFLAGS="-L$(prefix)/lib" PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig" \
+	-v && $(MAKE) -j1 pkgdatadir=$(GNGEOPKGDATADIR)
+
+install-gngeo: $(GNGEO)
+
+$(GNGEO): build/gngeo
+	$(MAKE) -C build/gngeo install pkgdatadir=$(GNGEOPKGDATADIR)
+
+ifeq ($(ENABLE_MINGW), yes)
+install-gngeo-dll: build/gngeo
+	cp $(SDL2_DLL) $(ZLIB1_DLL) $(GLEW_DLL) $(GNGEO_INSTALL_PATH)
+endif
+
+$(GNGEO_CFG): export INPUT_SETTINGS:=$(GNGEO_DEFAULT_INPUT_SETTINGS)
+$(GNGEO_CFG):
+	@ echo generating a default input config for gngeo; \
+	mkdir -p $(dir $(GNGEO_CFG)) && \
+	echo "$$INPUT_SETTINGS" > $(GNGEO_CFG)
+
+distclean-gngeo:
+	rm -rf gngeo
+
+
+
+# ------ Target to set up shell environment ------
+
+SHELL_BIN_PATH := $(prefix)/bin
+ifeq ($(EXTERNAL_GNGEO), no)
+ifeq ($(ENABLE_MINGW), yes)
+SHELL_BIN_PATH := $(SHELL_BIN_PATH):$(GNGEO_INSTALL_PATH)
+endif
+endif
+
+shellinit:
+	@ echo Variables set with eval $$\(make shellinit\) >&2
+	@ echo export PATH="$(SHELL_BIN_PATH):\$$PATH"
+	@ echo export PKG_CONFIG_PATH="$(prefix)/share/pkgconfig:\$$PKG_CONFIG_PATH"
+ifeq ($(shell uname), Darwin)
+	@ echo export DYLD_LIBRARY_PATH="$(prefix)/lib:\$$DYLD_LIBRARY_PATH"
+else
+	@ echo export LD_LIBRARY_PATH="$(prefix)/lib:\$$LD_LIBRARY_PATH"
+endif
+	@ echo export PYTHONPATH="$(prefix)/bin:\$$PYTHONPATH"

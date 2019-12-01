@@ -1,6 +1,6 @@
 /* 
  * Header for C development on Neo Geo
- * Copyright (c) 2015-2018 Damien Ciabrini
+ * Copyright (c) 2015-2019 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -16,6 +16,8 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#ifndef __NGDEVKIT_NEOGEO_H__
 
 typedef unsigned char  u8;
 typedef signed char    s8;
@@ -35,3 +37,5 @@ typedef signed int     s32;
 #define REG_WATCHDOGW   ((volatile u8*)0x300001)
 
 #define REG_P1CNT       ((volatile u8*)0x300000)
+
+#endif /* __NGDEVKIT_NEOGEO_H__ */

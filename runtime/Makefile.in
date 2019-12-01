@@ -14,35 +14,36 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-include ../Makefile.config
+OBJS=libsyscalls.a ngdevkit-crt0.o
 
-PREFIX=m68k-neogeo-elf
-CC=$(LOCALDIR)/bin/$(PREFIX)-gcc
-AS=$(LOCALDIR)/bin/$(PREFIX)-gcc
-AR=$(LOCALDIR)/bin/$(PREFIX)-ar
-RANLIB=$(LOCALDIR)/bin/$(PREFIX)-ranlib
+all: $(OBJS) ngdevkit-specs
 
-TARGETS=libsyscalls.a crt0.o
-
-all: $(TARGETS)
-
-install: $(TARGETS)
-	cp -f $^ ngdevkit.ld $(LOCALDIR)/$(PREFIX)/lib; \
-	ver=`$(CC) -dumpspecs | grep -A1 \*version: | tail -1`; \
-	$(CC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls/' | \
-	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit.ld%s \1/' > \
-	$(LOCALDIR)/lib/gcc/$(PREFIX)/$$ver/specs
+-include ../Makefile.config
 
 libsyscalls.a: syscalls.o
-	$(AR) cru $@ $^ && $(RANLIB) $@ 
+	$(NGAR) cru $@ $^ && $(NGRANLIB) $@ 
+
+ngdevkit-specs:
+	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls/' | \
+	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit.ld%s \1/' > $@
 
 %.o: %.c
-	$(CC) -std=c99 -fomit-frame-pointer -c $< -o $@
+	$(NGGCC) -std=c99 -fomit-frame-pointer -c $< -o $@
 
 %.o: %.S
-	$(AS) -c $< -o $@
+	$(NGAS) -c $< -o $@
+
+install: install-objs install-specs
+
+install-objs: $(OBJS) ngdevkit.ld
+	DIR=$(DESTDIR)$$(dirname $$($(NGGCC) --print-file-name=crt0.o)) && \
+	$(INSTALL) -d $$DIR && $(INSTALL) $^ $$DIR
+
+install-specs: ngdevkit-specs
+	DIR=$(DESTDIR)$$(dirname $$($(NGGCC) --print-libgcc-file-name)) && \
+	$(INSTALL) -d $$DIR && $(INSTALL) $< -t $$DIR
 
 clean:
-	rm -f *.o *~ *.a
+	rm -f *.o *~ *.a ngdevkit-specs
 
 .PHONY: install clean

@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# Copyright (c) 2015 Damien Ciabrini
+#!/usr/bin/env python3
+# Copyright (c) 2015-2019 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@ import argparse
 
 def write_zoom_level(zoom, out):
     """Write a zoom level to a file descriptor."""
-    level = bytearray('\xff' * 256)
+    level = bytearray([255] * 256)
     for i, v in enumerate(filter(lambda x: x != None, zoom)):
         level[i] = v
     out.write(level)
@@ -45,10 +45,10 @@ def write_zoom_lookup_table(out):
 def main():
     parser=argparse.ArgumentParser(
         description='Generate the Neo Geo zoom lookup table.')
-    parser.add_argument('-o', '--output', type=argparse.FileType('w'),
+    parser.add_argument('-o', '--output', type=argparse.FileType('wb'),
                         help='name of generated ROM')
     args = parser.parse_args()
-    outf = args.output if args.output else open("000-lo.lo","w")
+    outf = args.output if args.output else open("000-lo.lo","wb")
 
     write_zoom_lookup_table(outf)
 

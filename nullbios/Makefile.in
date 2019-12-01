@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Damien Ciabrini
+# Copyright (c) 2015-2019 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,51 +14,59 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-include ../Makefile.config
+MROM=rom/sm1.sm1
+SROM=rom/sfix.sfix
+PROM=rom/sp-s2.sp1
+ZROM=rom/000-lo.lo
 
-PREFIX=m68k-neogeo-elf
-CC=$(LOCALDIR)/bin/$(PREFIX)-gcc
-AS=$(LOCALDIR)/bin/$(PREFIX)-gcc
-OBJCOPY=$(LOCALDIR)/bin/$(PREFIX)-objcopy
-Z80OBJCOPY=$(LOCALDIR)/bin/sdobjcopy
+BIOS=rom/neogeo.zip
+
+all: $(BIOS)
+
+-include ../Makefile.config
 
 OBJS=biosstart
 ELF=prom.elf
 
-NULLSOUND=../sound/nullsound
-Z80HEX=$(NULLSOUND)/nullsound.ihx
+NULLSOUND=../nullsound
+SOUND_DRIVER=$(NULLSOUND)/nullsound.ihx
 
-VERSION=0.2
+VERSION=@PACKAGE_VERSION@
 
-bios: prom zrom srom mrom
+$(BIOS): $(PROM) $(ZROM) $(SROM) $(MROM)
 	cd rom && /bin/echo -e "\
 nullbios $(VERSION), an open source BIOS for Neo Geo\n\
 https://github.com/dciabrin/ngdevkit\n\
-." | zip -qz neogeo.zip *.lo *.s*
+." | @zip@ -qz neogeo.zip *.lo *.s*
 
-$(ELF):	$(OBJS:%=%.o)
-	$(CC) -nostartfiles -T bios.ld $^ -o $(ELF)
+$(MROM): $(SOUND_DRIVER) | rom
+	$(NGSDOBJCOPY) -I ihex -O binary $< $@ --pad-to 131072
 
-%.o: %.S
-	$(AS) -c $< -o $@
+$(SROM): | rom
+	dd if=/dev/zero bs=1024 count=128 of=$@
 
-mrom: rom
-	$(MAKE) -C $(NULLSOUND) && \
-	$(Z80OBJCOPY) -I ihex -O binary $(Z80HEX) rom/sm1.sm1 --pad-to 131072
+$(PROM): $(ELF) | rom
+	$(NGOBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< $@
 
-srom: rom
-	dd if=/dev/urandom bs=1024 count=128 of=rom/sfix.sfix
-
-prom: $(ELF) rom
-	$(OBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< rom/sp-s2.sp1
-
-zrom: rom
-	./zoom-rom.py -o rom/000-lo.lo
+$(ZROM): | rom
+	$(PYTHON) zoom-rom.py -o $@
 
 rom:
 	mkdir $@
 
-install: bios
+$(ELF):	$(OBJS:%=%.o)
+	$(NGGCC) -nostartfiles -T bios.ld $^ -o $(ELF)
+
+%.o: %.S
+	$(NGAS) -c $< -o $@
+
+$(SOUND_DRIVER):
+	$(MAKE) -C $(NULLSOUND)
+
+install: $(BIOS)
+	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
+	$(INSTALL) $< $(DESTDIR)$(prefix)/share/ngdevkit
+
 
 clean:
 	rm -f *.o *~ $(ELF) rom/*.*

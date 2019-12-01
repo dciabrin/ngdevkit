@@ -20,7 +20,7 @@
 /* add crt0 here to ensure it is always included and come first,
  * even when gcc is called with -nostartfiles
  */
-STARTUP(crt0.o)
+STARTUP(ngdevkit-crt0.o)
 
 /* Add implementation of syscalls as expected by newlib */
 GROUP(-lsyscalls)

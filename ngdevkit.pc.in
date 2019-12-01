@@ -1,0 +1,16 @@
+# ngdevkit pkg-config source file
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+bindir=@bindir@
+libdir=@prefix@/m68k-neogeo-elf/lib
+includedir=@prefix@/m68k-neogeo-elf/include
+sharedir=@datarootdir@/ngdevkit
+
+Name: ngdevkit
+Description: Opensource development for the Neo-Geo
+Version: @PACKAGE_VERSION@
+Requires:
+Conflicts:
+Libs: -L${libdir} -specs ngdevkit-specs
+Cflags: -I${includedir}

@@ -1,0 +1,56 @@
+# Copyright (c) 2019 Damien Ciabrini
+# This file is part of ngdevkit
+#
+# ngdevkit is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# ngdevkit is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
+
+prefix=@prefix@
+
+EXTERNAL_TOOLCHAIN=@EXTERNAL_TOOLCHAIN@
+EXTERNAL_EMUDBG=@EXTERNAL_EMUDBG@
+EXTERNAL_GNGEO=@EXTERNAL_GNGEO@
+EXTERNAL_QCRT=@EXTERNAL_QCRT@
+EXAMPLES=@EXAMPLES@
+
+# toolkit binaries
+NGAR=@ngar@
+NGAS=@ngas@
+NGGCC=@nggcc@
+NGLD=@ngld@
+NGOBJCOPY=@ngobjcopy@
+NGRANLIB=@ngranlib@
+NGSDAR=@ngsdar@
+NGSDAS=@ngsdas@
+NGSDCC=@ngsdcc@
+NGSDLD=@ngsdld@
+NGSDOBJCOPY=@ngsdobjcopy@
+NGSDRANLIB=@ngsdranlib@
+
+# common devkit tools
+PYTHON=@python@
+GIT=@git@
+ZIP=@zip@
+INSTALL=@install@
+
+# build flags
+EMUDBG_BUILD_FLAGS=@EMUDBG_BUILD_FLAGS@
+GNGEO_BUILD_FLAGS=@GNGEO_BUILD_FLAGS@
+
+# MinGW configuration bits
+GNGEO_INSTALL_PATH=@GNGEO_INSTALL_PATH@
+ENABLE_MINGW=@ENABLE_MINGW@
+ZLIB1_DLL=@ZLIB1_DLL@
+SDL2_DLL=@SDL2_DLL@
+GLEW_FLAGS=@GLEW_FLAGS@
+GLEW_DLL=@GLEW_DLL@
+# GLEW_BIN_PATH=@GLEW_BIN_PATH@

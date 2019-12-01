@@ -12,7 +12,7 @@ AES or MVS hardware. It includes:
    * Helpers for declaring ROM information (name, DIP, interrupt
      handlers...)
 
-   * A C and ASM cross-compiler for the z80 (SDCC 3.7), for developping
+   * A C and ASM cross-compiler for the z80 (SDCC 3.7), for developing
      your music and sound driver.
 
    * An open source replacement BIOS for testing your ROMs
@@ -29,85 +29,146 @@ AES or MVS hardware. It includes:
 
 
 
-## How to compile the devkit
+## How to use the devkit
 
-### Pre-requisite
+### Installing pre-built binary packages
 
-You need to install various dependencies to build gcc, sdcc and
-ImageMagick for all the graphics trickery. You also need SDL 2.0
-for the emulator and its source-level debugging support.
-On a Debian-derived distro, this can be done with:
+If you're running an Ubuntu or Debian distribution, you can install
+pre-built nightly binary packages, so you get the most up-to-date
+devkit without recompiling the entire toolchain at every update.
 
-    apt-get install gcc curl unzip imagemagick
-    GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
-    apt-get build-dep $GCC_VERSION_PKG
-    apt-get build-dep --arch-only sdcc
-    # gcc 5.5 currently only works with isl <= 0.18
-    # recent distros ship a specific package for isl 0.18
-    apt-get install libisl-0.18-dev || true
+You need to install enable the ngdevkit PPA and install a couple
+of dependencies:
+
+    add-apt-repository -y ppa:dciabrin/ngdevkit
+    apt-get update
+    apt-get install -y ngdevkit ngdevkit-gngeo
+    apt-get install -y pkg-config autoconf automake zip imagemagick
+
+Once ngdevkit packages are installed, you can clone the
+[ngdevkit-examples][examples] repository and build all the examples
+with the following commands:
+
+    git clone --recursive https://github.com/dciabrin/ngdevkit-examples examples
+    autoreconf -iv
+    ./configure
+    make
+
+You can learn how to use the devkit and how to build your first
+Neo-Geo program by reading the dedicated examples/README.md.
+
+
+### Building the devkit from sources
+
+The devkit itself is a collection of various git repositories. This
+repository is the main entry point: it provides the necessary tools,
+headers, link scripts and open source bios to build your homebrew roms.
+The rest of the devkit is split into separate git repositories that
+are automatically cloned at build time:
+
+   * [ngdevkit-toolchain][toolchain] provides the GNU toolchain,
+     newlib, SDCC and GDB.
+
+   * [gngeo][gngeo] and [emudbg][emudbg] provide a custom GnGeo with
+     support for GLSL shaders and remote gdb debugging.
+
+   * [ngdevkit-examples][examples] shows how to use the devkit and how
+     to program the Neo Geo hardware. It comes with a GnGeo
+     configuration to run your roms with a "CRT scanline" pixel
+     shader.
+
+
+#### Pre-requisite
+
+In order to build the devkit you need autoconf, autoconf-archive and
+GNU Make 4.x. The devkit tools uses Python 3 and PyGame. The emulator
+requires SDL 2.0 and optionally OpenGL libraries. The examples require
+ImageMagick for all the graphics trickery. Various additional
+dependencies are required to build the toolchain modules such as GCC
+and SDCC.
+
+For example, on Debian buster, you can install the dependencies with:
+
+    apt-get install autoconf autoconf-archive gcc curl zip unzip imagemagick
     apt-get install libsdl2-dev
     apt-get install python-pygame
+    GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
+    # make sure you have src packages enabled for dependency information
+    echo "deb-src http://deb.debian.org/debian buster main" > /etc/apt/sources.list.d/ngdevkit.list
+    apt-get update
+    # install build-dependency packages
+    apt-get build-dep $GCC_VERSION_PKG
+    apt-get build-dep --arch-only sdcc
+    # optional: install GLEW for OpenGL+GLSL shaders in GnGeo
+    apt-get install libglew-dev
 
-If running OS X, you will need XCode and brew:
+If running OS X, you will need XCode, brew and GNU Make 4.x. Please
+note that the version of GNU Make shipped with XCode is tool old,
+so you need to install it from brew and use `gmake` instead of `make`
+as explained later in this manual. Install the dependencies with:
 
+    brew install gmake
+    brew install autoconf-archive
     brew install imagemagick
-    brew deps gcc | xargs brew install
-    # gcc 5.5 currently only works with isl <= 0.18
-    brew remove --force isl
-    brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/87ddc3513e1d15f23d2bb270f63827a5daf1259c/Formula/isl.rb
-    brew deps sdcc | xargs brew install
     brew install sdl
     # "easy_install pip" if you don't have pip yet, then
     pip install pygame
+    brew deps gcc | xargs brew install
+    brew deps sdcc | xargs brew install
 
 Compiling the devkit for Windows 10 is supported via [WSL][wsl],
 detailed setup and build instructions are available in the
 [the dedicated README](README-mingw.md).
 
 
-### Building the toolchain
+#### Building the toolchain
 
-You may want to change `Makefile.config` to select a GNU mirror which
-is close to you for maximum download speed. Then, build the entire
-toolchain with:
+The devkit relies on autotools to check for dependencies and
+autodetect the proper build flags. You can build the entire devkit
+in your local git repository with:
 
+    autoreconf -iv
+    ./configure --prefix=$PWD/local
     make
+    make install
 
-You can see how to use the toolchain by compiling demos in directory
-`examples`. For instance:
+If compiling on OS X, please use `gmake` instead of `make` as
+the version of GNU Make shiped with XCode is too old (currently 3.x)
+and the devkit won't compile with it.
 
-    cd examples/01-helloworld
-    make
-    make nullbios
+## Building examples ROMs with the devkit
 
-This will compile the example and copy the replacement BIOS into
-directory `rom`. You can now run it with you favorite emulator.
+Bundled with the devkit is a series of examples that is automatically
+downloaded when you build ngdevkit.
 
-## Using the devkit
-
-Once compiled, the devkit is available in subdirectory `local`. In
-order to use it from the terminal, you need to set up various
-environment variables. This can be done automatically with:
+In order to build the examples, you need to have the devkit binaries
+available in your path. This can be done automatically with:
 
     eval $(make shellinit)
 
-You will then have access to all the binaries from the toolchain,
-including the emulator and the debugger.
+This configures your environment variables to have access to all the
+binaries from the toolchain, including the emulator and the debugger.
+Then, you can just jump into the `examples` directory and let the
+`configure` script autodetect everything for you:
+
+    cd examples
+    ./configure
+    make
+
+This will compile all the examples available in the directory.
 
 ### Running the emulator
 
-Testing your ROM is quite straightforward. For instance, these are all
-the steps needed to compile and execute the example ROM:
+Once you have built the examples, go into a subdirectory to
+test the compiled example and run GnGeo from the makefile:
 
-    eval $(make shellinit)
     cd examples/01-helloworld
-    make
-    make nullbios
-    make gngeo # or make gngeo-fullscreen for more fun
+    make gngeo
+    # or run "make gngeo-fullscreen" for a more immersive test
 
 If you're running a recent macOS, [System Integrity Protection][sip]
-will prevent running gngeo from make, so you'll need to run it from
-your terminal:
+may prevent you from running GnGeo from make, so you may need to run
+it from your terminal:
 
     eval $(make -n gngeo)
 
@@ -119,7 +180,8 @@ you first need to start the emulator in debugger mode:
 
     eval $(make shellinit)
     cd examples/01-helloworld
-    x86_64-gngeo -i rom puzzledp -D
+    # example ROM is named puzzledp
+    ngdevkit-gngeo -i rom puzzledp -D
 
 With argument `-D`, the emulator waits for a connection from a GDB
 client on port `2159` of `localhost`.
@@ -186,6 +248,9 @@ License along with this program. If not, see
 <http://www.gnu.org/licenses/>.
 
 
+[toolchain]: https://github.com/dciabrin/ngdevkit-toolchain
+[emudbg]: https://github.com/dciabrin/emudbg
+[examples]: https://github.com/dciabrin/ngdevkit-examples
 [ngdev]: http://wiki.neogeodev.org
 [sfnet]: http://neogeodev.sourceforge.net
 [cdoty]: http://rastersoft.net
