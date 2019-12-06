@@ -1,0 +1,38 @@
+language: c
+dist: bionic
+matrix:
+  include:
+    - name: "Linux"
+      os: linux
+      dist: bionic
+      addons:
+        apt:
+          sources:
+            - sourceline: 'ppa:dciabrin/ngdevkit'
+          packages:
+            - ngdevkit-toolchain
+            - python3
+            # bionic doesn't have python3-pygame, so use pip
+            - python3-pip
+            - zip
+            - pkg-config
+            # ngdevkit-examples deps
+            - ngdevkit-gngeo
+            - imagemagick
+            - libglew-dev
+            - libsdl2-dev
+      env:
+      - PREFIX="/usr"
+
+before_script:
+  - pip3 install pygame
+
+script:
+  # build
+  - autoreconf -iv
+  - ./configure --prefix=$PREFIX --enable-external-toolchain --enable-external-emudbg --enable-external-gngeo
+  - make && sudo make install
+  # tests
+  - cd examples
+  - export XDG_RUNTIME_DIR=$HOME
+  - ./configure && make
