@@ -11,11 +11,11 @@ jobs:
         apt:
           sources:
             - sourceline: 'ppa:dciabrin/ngdevkit'
+            # bionic lacks python3-pygame, so install it from this ppa
+            - sourceline: 'ppa:thopiekar/pygame'
           packages:
             - ngdevkit-toolchain
             - python3
-            # bionic doesn't have python3-pygame, so use pip
-            - python3-pip
             - zip
             - pkg-config
             # ngdevkit-examples deps
@@ -30,17 +30,13 @@ jobs:
       if: branch = master
       name: Launchpad - deb
       script: skip
-      before_script: skip
       deploy:
         provider: launchpad
         slug: "~dciabrin/ngdevkit/+git/ngdevkit"
         oauth_token:
-          secure: "FTGsMtq7gANj2ATcKaT6/onkJqHcjM+eSUt1c8jLCKE8yfslrfvjonFZLQVrnI2ObaRigFd1rIHbnqAddVHm/ujmrxtvBJD7MOl275jNWrWJ8ghB9smyOiea220YLH5V7lcbM/ZjK3Ic7g8gerRuCoC+7teoLV47QaNThgRB8NrQabH49m8nXlQc/rQDvI7pwFe8kvPbSX1Vqz3gk4Uxt9+/PqvYK5F8EHYXtL3xraeThZiwN0LrGNeWhGAX5iPfkCvfJvL2xzgXEgwxqPH6KnWCQtsHMfLSSFoVXjKA5dOzK0M32uTgCbTRDZli4Hx64o1w+27peX5RHPyrxTvPhcgZq4SRKTuSSnxtm+0ne3343/mExliWy4a2hec/Qx6ma2E7I1hBEX9UBZYCKde6AJx4K9Z6d4IgV6hM/nvAMb+12nr37X2noNr4OzRCjzxf2zLfNMvnFI8HNUvk9kV7PiGv8sND6QB8FtdHkyqN/X55GFnfcg0YvL5/zK9FylUDwQVzMlTGj0Zx0CBE+lho/AYv451JnCkYj2+aQWGrzXC/a+Q4CMAp3yzQfpQyqnyRuD7O+Y5C442kdHyFPzgavrQJvVkMMUnbCuXsN9WuFQhLoloFm+1mRwHDvhPcZksgoBunPqV+Rm+SM6jpvbt+GPCpM6whhnl1ZoM9ldTzCLQ="
+          secure: "qWe3EuGb7GP0gtlJ6Dyi/U5aI2yfiNg8TzpDA0BonKuE61QcQ4NMDJD58oQNMXL5SY0F+i3LcO/+J20IsxPrBE85Er8P9HUzDT2uaOEAd1EgaL3am+1DyHH4tbF1jfRlbkpYWYR1Ta4r1T/Y9SBZyewRLYJ4jT4MzAjJrFfl/ikvh80d6/xrAESvtM/E1KEUhl/8p7sn3FHvUA0aVhxX1NhPQUzloLGhH986xAnmMqohLwFJqwbK0NNbefsk/qtEG6WMgR07mWIoMR1mIo/IQexZCMqzYwZaNRslvoCfHZaptBsKtC7gUsl2AB8m/O3CDzUuL0Tm2m3gwynyIDm0t9JggcLgDB8ClikaGffjxfKuMLAh7yPCRyDVmE7XJDrFKwc4Wmpoyfvkwg8ojujaX20BusuZxHx60N1sAy37V0+jMHE8UMzEWrm+oYG9qpyP+hfhIsepIWsRHrQLq+MS9kK5lnQGVv5hprCq/YODbTwVvAjhEPRe3Hout4RqlLAeLEjUS7WP5ISXZapSKJMg55Qfo6V+SGqTOLDJWyU8o4xmkqMNpOL1JRoScrvj9vSGQP/NnHmapaNGdzehU73MOBqJz7Gx0fmqLtXhsssL8siwt7cCAr5FOMPbjv2cy6JK6fwoMzRPT04xWHUaZWyiIQCL0OWSQCQ6cOs9AqLUvMU="
         oauth_token_secret:
-          secure: "pdqOR3oZbsHsargcs0e+hyUhQzSjqAhiOrkPnua7iCWRjrBtSHb+OCYIzmnLdnSKoT/7+VRMXUG3h572bzsJEMpPJx5vPtbN1oenhAOtfoZP3bjzggiWeQmh+eNl7BleNuepoKdAOR4tIGLCdYJTmt6FMKgr6pXKprR4Yp2YVtEUDMcF1frHmrrXt5UfKY7h7vIp4ioIjo2aZ2EGN619dO400UCI9skDEUqrfV+bXqz8HBflI0zwiXCUMnZIAca4PZ78h9yQuOdzALHtUK3sg0124kFWtntrFBw2pOcN1E8SjtlnX+23l2M2S8d4AfbB3BuEHnFGcPuSWXuVVu6ds/jupA9TJun7fHuU668ZDEytVa8oVomIrfJEEKfh60OJlpOdUAXfpfGsAXmepP2l2YcOLleXKWfxLOlqXGIFSDH3alzQn4bXaKQj6WFz34wjImyNB42e6bo4z+ABUUDRJN4RSGMb8rjVfbno5Wz4gc8p/w0YC0A5Br7Uvvh8xjY+ViKTKyiSK3ZA+PSDGUkrkjbqIidF/toS8OYPLeEDnLLpOf0ImI4BdS3aepV0fNeDlmOv1MpmHB4nuhkEDJ7cgFs/tPeZE2mtxz9TYPn07S++ubvrrmWsIaBi3sy9yNy5hxZEZmMIhAP3LmO4DoJ/LhEcp7W6O/f0L18fZ6IQ03g="
-
-before_script:
-  - pip3 install pygame
+          secure: "f4PkHZ31F53yQwBiFG4BHtsj50jbtVbCWbezj9Ap8dxUHKM9DgbIbcO8gw/JT/2GM4CPQKky9iFeRHtd5SoMslPCv92lnyLnNT8TGlYszx5MmRARZT+3luNohIywGugcti5BPGAbETblyo0rcnOjbJPCefXSHVdgMsNJRkEtVfZEOBZXn7O6eV7M3lmRjlDzesClX418cOX3Mf1frZZ4W4NScYqDo4eQApZNPWbXq5UIMVzNRbKqx4U3RdQKr2BTH9+n1O5kHhLTuMhWVIZKosYmiW3Ak8Wt3YZrFNHQ+lqPYxvsLkAblugBPT6n5r7Odi/HjgI/4Tr9RdmSSB1/OauBhH7xVFRJ6nTEMFlixZSgf5V0dzD4nPatOIMN6NxQ2xkxYmQFpTj/L9o8MIhObd8cezcU12Yk8C6tLn+6aN90EGM357l3qjL5rQdlWgPPA/DiuVKMmPVOR0509pGH1nKmgZhefC8wFKQzZGKZeA+VSc+/+LNRgEBcAzZGzng9oK73rfspTVHGJsafwkL83e6q/XmZ2S7+1QHbaq3J3mlFCkcgzoyHcoNCiZvVpfrzdNGRiyGXGvUpKpGIRxMCBCNDAGXXXB8kKL1Q00MyQqHj8Qu2hqS5pLEk96Am9ZLA5nH/4JfLSFpO+vh3D01Rw7wHlUEje8vVNvHUcMp/1N0="
 
 script:
   # build
