@@ -30,6 +30,7 @@ jobs:
       if: branch = master
       name: Launchpad - deb
       script: skip
+      before_script: skip
       deploy:
         provider: launchpad
         slug: "~dciabrin/ngdevkit/+git/ngdevkit"
