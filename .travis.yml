@@ -1,8 +1,10 @@
 language: c
 dist: bionic
-matrix:
+
+jobs:
   include:
-    - name: "Linux"
+    - stage: Tests
+      name: "Linux"
       os: linux
       dist: bionic
       addons:
@@ -23,6 +25,19 @@ matrix:
             - libsdl2-dev
       env:
       - PREFIX="/usr"
+
+    - stage: Daily packages
+      if: branch = master
+      name: Launchpad - deb
+      script: skip
+      before_script: skip
+      deploy:
+        provider: launchpad
+        slug: "~dciabrin/ngdevkit/+git/ngdevkit"
+        oauth_token:
+          secure: "FTGsMtq7gANj2ATcKaT6/onkJqHcjM+eSUt1c8jLCKE8yfslrfvjonFZLQVrnI2ObaRigFd1rIHbnqAddVHm/ujmrxtvBJD7MOl275jNWrWJ8ghB9smyOiea220YLH5V7lcbM/ZjK3Ic7g8gerRuCoC+7teoLV47QaNThgRB8NrQabH49m8nXlQc/rQDvI7pwFe8kvPbSX1Vqz3gk4Uxt9+/PqvYK5F8EHYXtL3xraeThZiwN0LrGNeWhGAX5iPfkCvfJvL2xzgXEgwxqPH6KnWCQtsHMfLSSFoVXjKA5dOzK0M32uTgCbTRDZli4Hx64o1w+27peX5RHPyrxTvPhcgZq4SRKTuSSnxtm+0ne3343/mExliWy4a2hec/Qx6ma2E7I1hBEX9UBZYCKde6AJx4K9Z6d4IgV6hM/nvAMb+12nr37X2noNr4OzRCjzxf2zLfNMvnFI8HNUvk9kV7PiGv8sND6QB8FtdHkyqN/X55GFnfcg0YvL5/zK9FylUDwQVzMlTGj0Zx0CBE+lho/AYv451JnCkYj2+aQWGrzXC/a+Q4CMAp3yzQfpQyqnyRuD7O+Y5C442kdHyFPzgavrQJvVkMMUnbCuXsN9WuFQhLoloFm+1mRwHDvhPcZksgoBunPqV+Rm+SM6jpvbt+GPCpM6whhnl1ZoM9ldTzCLQ="
+        oauth_token_secret:
+          secure: "pdqOR3oZbsHsargcs0e+hyUhQzSjqAhiOrkPnua7iCWRjrBtSHb+OCYIzmnLdnSKoT/7+VRMXUG3h572bzsJEMpPJx5vPtbN1oenhAOtfoZP3bjzggiWeQmh+eNl7BleNuepoKdAOR4tIGLCdYJTmt6FMKgr6pXKprR4Yp2YVtEUDMcF1frHmrrXt5UfKY7h7vIp4ioIjo2aZ2EGN619dO400UCI9skDEUqrfV+bXqz8HBflI0zwiXCUMnZIAca4PZ78h9yQuOdzALHtUK3sg0124kFWtntrFBw2pOcN1E8SjtlnX+23l2M2S8d4AfbB3BuEHnFGcPuSWXuVVu6ds/jupA9TJun7fHuU668ZDEytVa8oVomIrfJEEKfh60OJlpOdUAXfpfGsAXmepP2l2YcOLleXKWfxLOlqXGIFSDH3alzQn4bXaKQj6WFz34wjImyNB42e6bo4z+ABUUDRJN4RSGMb8rjVfbno5Wz4gc8p/w0YC0A5Br7Uvvh8xjY+ViKTKyiSK3ZA+PSDGUkrkjbqIidF/toS8OYPLeEDnLLpOf0ImI4BdS3aepV0fNeDlmOv1MpmHB4nuhkEDJ7cgFs/tPeZE2mtxz9TYPn07S++ubvrrmWsIaBi3sy9yNy5hxZEZmMIhAP3LmO4DoJ/LhEcp7W6O/f0L18fZ6IQ03g="
 
 before_script:
   - pip3 install pygame
