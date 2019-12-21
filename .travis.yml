@@ -20,6 +20,7 @@ jobs:
             - pkg-config
             # ngdevkit-examples deps
             - ngdevkit-gngeo
+            - python3-pygame
             - imagemagick
             - libglew-dev
             - libsdl2-dev
