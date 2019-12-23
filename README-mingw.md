@@ -44,13 +44,15 @@ sdcc. Those two lines should be uncommented in
 Install the packages required to build the devkit's compilers and
 tools:
 
+    # Ubuntu 18.04 (Bionic) needs that ppa for PyGame in python3
+    add-apt-repository ppa:thopiekar/pygame
     sudo apt-get update
     sudo apt-get install gcc curl zip unzip imagemagick
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     sudo apt-get build-dep $GCC_VERSION_PKG
     sudo apt-get build-dep --arch-only sdcc
     sudo apt-get install libsdl2-dev
-    sudo apt-get install python-pygame
+    sudo apt-get install python3-pygame
     sudo apt-get install automake
     sudo apt-get install autoconf-archive
 

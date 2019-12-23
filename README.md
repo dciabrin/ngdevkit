@@ -41,6 +41,8 @@ You need to install enable the ngdevkit PPA and install a couple
 of dependencies:
 
     add-apt-repository -y ppa:dciabrin/ngdevkit
+    # if you're running Ubuntu Bionic, add the following ppa for PyGame
+    # add-apt-repository -y ppa:thopiekar/pygame
     apt-get update
     apt-get install -y ngdevkit ngdevkit-gngeo
     apt-get install -y pkg-config autoconf automake zip imagemagick
@@ -91,7 +93,7 @@ For example, on Debian buster, you can install the dependencies with:
 
     apt-get install autoconf autoconf-archive gcc curl zip unzip imagemagick
     apt-get install libsdl2-dev
-    apt-get install python-pygame
+    apt-get install python3-pygame
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     # make sure you have src packages enabled for dependency information
     echo "deb-src http://deb.debian.org/debian buster main" > /etc/apt/sources.list.d/ngdevkit.list
