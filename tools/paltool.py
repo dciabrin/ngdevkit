@@ -34,9 +34,17 @@ import pygame
 
 
 def rgb24_to_packed15(col):
-    r, g, b = col
-    lsb = (r&1 << 2) + (g&1 << 1) + b&1
-    packed = lsb<<12 | (r>>4) << 8 | (g>>4) << 4 | (b>>4)
+    r, g, b = [c >> 2 for c in col]
+    # heuristic: set the dark bit only when the
+    # LSB of all components is null. Just follow
+    # the same rule when you design your palette
+    # for your sprites and tiles, for them to
+    # match when converted for the Neo Geo.
+    darkbit = 1 if ((r & 1) + (g & 1) + (b & 1)) == 0 else 0
+    r, g, b = r >> 1, g >> 1, b >> 1
+    lsb = ((r & 1) << 2) | ((g & 1) << 1) | (b & 1)
+    r, g, b = r >> 1, g >> 1, b >> 1
+    packed = darkbit << 15 | lsb << 12 | r << 8 | g << 4 | b
     return packed
 
 
