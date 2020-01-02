@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2015-2019 Damien Ciabrini
+# Copyright (c) 2015-2020 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -83,10 +83,10 @@ class converter(object):
     def extract(self):
         """Extract contents of ROM to a 2D image"""
         self.open_rom('rb')
-        num_tiles = os.path.getsize(self.in1)/self.multiple
+        num_tiles = os.path.getsize(self.in1)//self.multiple
         tiles_per_line = 20 if not self.args.width \
-            else self.args.width/self.edge
-        lines = (num_tiles+(tiles_per_line-1))/tiles_per_line
+            else self.args.width//self.edge
+        lines = (num_tiles+(tiles_per_line-1))//tiles_per_line
         dest_width = tiles_per_line*self.edge if not self.args.width \
             else self.args.width
         dest_height = lines*self.edge
@@ -106,7 +106,7 @@ class converter(object):
         edge = self.edge
         i = self.pos2D_iterator(dest_width)
         for n in range(num_tiles):
-            (x, y) = i.next()
+            (x, y) = next(i)
             t = self.read_tile_from_rom()
             tpa = pygame.PixelArray(t)
             dpa[x:x+edge, y:y+edge] = tpa
@@ -136,8 +136,8 @@ class converter(object):
         num_tiles = int((self.img.get_width() / edge) * (self.img.get_height() / edge))
         # limit the processing of tiles up to size bytes
         if self.size:
-            if self.size/self.multiple<num_tiles:
-                num_tiles = self.size/self.multiple
+            if self.size//self.multiple<num_tiles:
+                num_tiles = self.size//self.multiple
         dpa = pygame.PixelArray(self.img)
         i = self.pos2D_iterator(self.img.get_width())
 
@@ -200,13 +200,13 @@ class fix_converter(converter):
         surf_buf = bytearray(64)
         for xa, xb in ((4, 5), (6, 7), (0, 1), (2, 3)):
             for y in range(8):
-                twopix = self.fd1.read(1)
+                twopix = ord(self.fd1.read(1))
                 pixa = twopix & 0xf
                 pixb = (twopix >> 0x4) & 0xf
                 surf_buf[(8*y)+xa] = pixa
                 surf_buf[(8*y)+xb] = pixb
 
-        t = pygame.image.fromstring(str(surf_buf), (8, 8), "P")
+        t = pygame.image.fromstring(bytes(surf_buf), (8, 8), "P")
         return t
 
     def write_tile_to_rom(self, t):
@@ -285,10 +285,10 @@ class sprite_converter(converter):
             surf_off = tile8x8_off
 
             for y in range(8):
-                row_bitplane1 = self.fd1.read(1)
-                row_bitplane2 = self.fd1.read(1)
-                row_bitplane3 = self.fd2.read(1)
-                row_bitplane4 = self.fd2.read(1)
+                row_bitplane1 = ord(self.fd1.read(1))
+                row_bitplane2 = ord(self.fd1.read(1))
+                row_bitplane3 = ord(self.fd2.read(1))
+                row_bitplane4 = ord(self.fd2.read(1))
 
                 for x in range(8):
                     bp1 = (row_bitplane1 >> x) & 1
@@ -300,7 +300,7 @@ class sprite_converter(converter):
 
                     surf_off += 1
                 surf_off += 8
-        t = pygame.image.fromstring(str(surf_buf), (16, 16), "P")
+        t = pygame.image.fromstring(bytes(surf_buf), (16, 16), "P")
         return t
 
     def write_tile_to_rom(self, t):
@@ -329,6 +329,8 @@ class sprite_converter(converter):
 
 
 def main():
+    pygame.display.init()
+
     parser = argparse.ArgumentParser(
         description='Neo Geo graphics ROM management.')
 
