@@ -56,7 +56,7 @@ _start:
 	dc.l	0x00100000              /* Program size in bytes */
 	dc.l	0x00100000		/* Debug DIP pointer */
 	dc.w   	0x0000                  /* Size of DIP data */
-	dc.b	0x00                    /* BIOS shows logo at startup */
+	dc.b	rom_eye_catcher         /* BIOS shows logo at startup */
         dc.b    0x00			/* 1st tile of the logo */
 
 	/* Pointer to static Cartridge information (name, DIP, ...) */

@@ -43,6 +43,10 @@ SECTIONS {
     rom_info_US = DEFINED(rom_info_US)? rom_info_US : rom_info_default;
     rom_info_EU = DEFINED(rom_info_EU)? rom_info_EU : rom_info_default;
 
+    /* Eye-catcher: 0: done by BIOS, 1: done by game, 2: none
+     */
+    rom_eye_catcher = DEFINED(rom_eye_catcher)? rom_eye_catcher : 0;
+
     /* Set cartridge-specific IRQ handlers.
      * Fallback to default ones if unspecified by user at link time
      */
