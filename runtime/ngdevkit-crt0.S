@@ -20,6 +20,11 @@
 	.global	rom_info_default
 	.global rom_handler_VBlank_default
 	.global rom_handler_Timer_default
+	.global rom_mvs_startup_init_default
+	.global rom_eye_catcher_default
+	.global rom_game_default
+	.global rom_title_default
+
 _start:
         /* 68k exception vector table, 256 bytes
          * Common exceptions point to handlers implemented in the BIOS
@@ -65,12 +70,13 @@ _start:
 	dc.l	rom_info_EU
 
 	/* ROM Entry Point */
-	jmp     GAME_BOOT.l
-	jmp     .LStart2.l
-	jmp     .LStart3.l
+	jmp     USER.l
+	jmp     PLAYER_START.l
+	jmp     DEMO_END.l
+	jmp     COIN_SOUND.l
 
 	/* ...to be described... */
-	.fill	76, 1, 0xff
+	.fill	70, 1, 0xff
 	dc.w	0x0000
 
 	/* Pointer to the Security Code (Unique sequence of 61 words) */
@@ -137,7 +143,6 @@ rom_handler_Timer_default:
         /* Ack IRQ and rearm watchdog timer */
 	move.w  #2, 0x3c000c
 	move.b  %d0, 0x300001
-        
 	/* If user handler exists for Hblank, call it */
 	movem.l	%d0-%d7/%a0-%a7, -(%sp)
 	move.l	#rom_callback_Timer, %d0
@@ -151,20 +156,20 @@ rom_handler_Timer_default:
 
 
 /*
- * Main entry point
+ * MVS-only: run once when the cartridge is run for
+ * the first time in the cabinet.
+ * (in emulators like MAME, you can trigger that code
+ *  by removing the nvram saved state)
  */
-GAME_BOOT:
-	/* Disable IRQs, as we don't want C code to be
-         * called prior to runtime initialization
-         */
-	move    #0x2700, %sr
-        /* Ack pending IRQ and rearm watchdog timer */
-	move.w	#7, 0x3c000c
-	move.b	%d0, 0x300001
+rom_mvs_startup_init_default:
+        /* Rearm watchdog timer before init */
+        move.b	%d0, 0x300001
+        rts
 
-	/* Switch to fix tiles from user bank */
-	move.b	#1, 0x3a001b
-
+/*
+ * Load the data and BSS segments in RAM
+ */
+init_c_runtime:
 	/* copy data segment from ROM to RAM */
 	move.l	#__data_end, %d0
 	sub.l	#__data_start, %d0
@@ -186,16 +191,79 @@ GAME_BOOT:
 	move.l	#__bss_end, %d0
 	sub.l	#__bss_start, %d0
 	tst	%d0
-	beq	.Lcallmain
+	beq	.Linitdone
 .Lcopybss:
 	move.b	#0, (%a0)+
 	move.b	%d0, 0x300001
 	dbra	%d0, .Lcopybss
 
-.Lcallmain:
-	/* Enable interrupts and call program's main */
-	move    #0x2000, %sr
-	jsr	main.l
+.Linitdone:
+        rts
+
+
+rom_eye_catcher_default:
+rom_game_default:
+rom_title_default:
+        /* Disable IRQs, as we don't want C code to be
+         * called prior to runtime initialization
+         */
+        move    #0x2700, %sr
+
+        /* Ack pending IRQ and rearm watchdog timer */
+        move.w  #7, 0x3c000c
+        move.b  %d0, 0x300001
+
+        /* Init the C part of the game cartridge */
+        jsr init_c_runtime
+
+        /* Switch to fix tiles from user bank */
+        move.b	#1, 0x3a001b
+
+        /* Enable interrupts and call game's main */
+        move	#0x2000, %sr
+        jsr	main.l
+
+        /* if main returns, give back control to USER */
+        rts
+
+/*
+ * User request: main entry points, called by BIOS
+ * When the symbols in the jump table below are not
+ * implemented in the game cartridge, the linkscript
+ * uses the default functions from this crt0 instead.
+ */
+.Luser_commands:
+        dc.l    rom_mvs_startup_init  /* 0: StartupInit */
+        dc.l	rom_eye_catcher       /* 1: EyeCatcher */
+        dc.l	rom_game              /* 2: Game */
+        dc.l	rom_title             /* 3: Title */
+USER:
+        /* Rearm watchdog */
+        move.b	%d0, 0x300001
+
+        /* Get user command requested by BIOS */
+        clr.l	%d0
+        move.b	0x10fdae, %d0
+        lsl.b	#2, %d0
+        lea	.Luser_commands, %a0
+        movea.l	(%a0,%d0),%a0
+
+        /* Execute the command and go back to BIOS */
+        jsr	(%a0)
+        jmp	0xc00444
+
+
+PLAYER_START:
+        rts
+
+
+DEMO_END:
+        rts
+
+
+COIN_SOUND:
+        rts
+
 
 .Lidle:	bra	.Lidle
 
@@ -205,9 +273,3 @@ GAME_BOOT:
 	 * do nothing until a reset occurs.
 	 */
 	jmp	.Lidle.l
-
-.LStart2:
-    rts
-
-.LStart3:
-    rts

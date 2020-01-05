@@ -69,10 +69,10 @@ GAME_CARTRIDGE_VECTORS:
  * BIOS public calls, exported in a jmp table
  */
         .org    0x438
-        jmp     SYSTEM_INT1             /* VBlank handler during boot     */
-        jmp     SYSTEM_INT2             /* Timer handler                  */
+        jmp     SYSTEM_INT1.l           /* VBlank handler during boot     */
+        jmp     SYSTEM_INT2.l           /* Timer handler                  */
+        jmp     SYSTEM_RETURN.l         /* Return from USER subroutine    */
 .if 0
-        jmp     SYSTEM_RETURN
         jmp     SYSTEM_IO               /* Status of coins, joysticks...  */
         jmp     CREDIT_CHECK            /* Check credit for players       */
         jmp     CREDIT_DOWN             /* Decrement credits              */
@@ -101,18 +101,33 @@ GAME_CARTRIDGE_VECTORS:
  */
 RESET:
         /* Supervisor, init IRQ and watchdog timer */
-       	move    #0x2700, %sr
-	move.w	#7, 0x3c000c
-	move.b	%d0, 0x300001
+        move    #0x2700, %sr
+        move.w  #7, 0x3c000c
+        move.b  %d0, 0x300001
 
-	/* Switch to cart's ROMs (gfx, sound, vector table...) */
-      	move.b	#1, 0x3a0013
-      	move.b	#1, 0x3a001b
+        /* Prepare to call USER's request 0 (SystemInit) */
+        clr     %d0
+        move.b  %d0, 0x10fdae
+        move.b  %d0, 0x10fdaf
+        jsr     0x122
 
-	/* Mark init as done, and jmp to cart's main function */
+.Lsoft_reset:
+        /* Switch to cart's ROMs (gfx, sound, vector table...) */
+        move.b  #1, 0x3a0013
+        move.b  #1, 0x3a001b
+
+        /* Mark init as done, and start the GAME's main function
+         * by calling USER's request 2 (Game)
+         */
         move    #0x2000, %sr
-	bset    #7, 0x10fd80
+        bset    #7, 0x10fd80
+        move.b  #2, 0x10fdae
+        move.b  #1, 0x10fdaf
         jmp.l   0x122
+
+        /* Reset the game if it returned to the BIOS */
+        jmp     .Lsoft_reset
+
 
 /**
  * Default VBlank handler
@@ -133,6 +148,14 @@ SYSTEM_INT2:
 	move.b  %d0, 0x300001
         rte
 
+
+/**
+ * Return from USER subroutine
+ * USER jmp to here, so the ret should go back
+ * to to the last jsr 0x122 done in function RESET
+ */
+SYSTEM_RETURN:
+        rts
 
 /**
  * Ignore
