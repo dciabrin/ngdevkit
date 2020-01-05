@@ -57,6 +57,12 @@ SECTIONS {
     rom_callback_VBlank = DEFINED( rom_callback_VBlank)? rom_callback_VBlank : 0;
     rom_callback_Timer = DEFINED( rom_callback_Timer)? rom_callback_Timer : 0;
 
+    /* USER commands: use cartridge overrides or the defaults from crt0 */
+    rom_mvs_startup_init = DEFINED(rom_mvs_startup_init)? rom_mvs_startup_init : rom_mvs_startup_init_default;
+    rom_eye_catcher = DEFINED(rom_eye_catcher)? rom_eye_catcher : rom_eye_catcher_default;
+    rom_game = DEFINED(rom_game)? rom_game : rom_game_default;
+    rom_title = DEFINED(rom_title)? rom_title : rom_title_default;
+
     *(.ctors)
     *(.dtors)
     *(.eh_frame)
