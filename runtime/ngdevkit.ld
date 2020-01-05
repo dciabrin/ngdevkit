@@ -45,7 +45,7 @@ SECTIONS {
 
     /* Eye-catcher: 0: done by BIOS, 1: done by game, 2: none
      */
-    rom_eye_catcher = DEFINED(rom_eye_catcher)? rom_eye_catcher : 0;
+    rom_eye_catcher_mode = DEFINED(rom_eye_catcher_mode)? rom_eye_catcher_mode : 0;
 
     /* Set cartridge-specific IRQ handlers.
      * Fallback to default ones if unspecified by user at link time
