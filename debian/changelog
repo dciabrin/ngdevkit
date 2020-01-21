@@ -1,3 +1,9 @@
+ngdevkit (0.2-1) unstable; urgency=medium
+
+  * Bump version for nightly build in Launchpad
+
+ -- Damien Ciabrini <damien.ciabrini@gmail.com>  Tue, 21 Jan 2020 16:02:27 -0500
+
 ngdevkit (0.1) unstable; urgency=medium
 
   * Initial release
