@@ -36,12 +36,12 @@ ngdevkit-specs:
 install: install-objs install-specs
 
 install-objs: $(OBJS) ngdevkit.ld
-	DIR=$(DESTDIR)$$(dirname $$($(NGGCC) --print-file-name=crt0.o)) && \
+	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-file-name=crt0.o) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
 	$(INSTALL) -d $$DIR && $(INSTALL) $^ $$DIR
 
 install-specs: ngdevkit-specs
-	DIR=$(DESTDIR)$$(dirname $$($(NGGCC) --print-libgcc-file-name)) && \
-	$(INSTALL) -d $$DIR && $(INSTALL) $< -t $$DIR
+	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-libgcc-file-name) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
+	$(INSTALL) -d $$DIR && $(INSTALL) $< $$DIR
 
 clean:
 	rm -f *.o *~ *.a ngdevkit-specs
