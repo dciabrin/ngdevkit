@@ -81,6 +81,17 @@ AC_PATH_PROG([ngsdranlib], [z80-neogeo-ihx-sdranlib], [no])
 AS_IF([test x"ngsdranlib" = x"no"], [AC_MSG_ERROR([z80-neogeo-ihx-sdranlib not found in path.])])
 AC_PATH_PROG([ngsdobjcopy], [z80-neogeo-ihx-sdobjcopy], [no])
 AS_IF([test x"ngsdobjcopy" = x"no"], [AC_MSG_ERROR([z80-neogeo-ihx-sdobjcopy not found in path.])])
+
+dnl customize pkg-config in case we don't install in gcc's prefix
+gcc_libpath=$(dirname $($nggcc --print-libgcc-file-name))
+gcc_rel_libpath=$(echo ${gcc_libpath} | sed -n 's%^.*/\(gcc/.*\)%\1%p')
+gcc_prefix=$(echo ${gcc_libpath} | sed -n 's%^\(.*\)/m68k-neogeo-elf/lib.*%\1%p')
+if test x"${gcc_prefix}" != x"${prefix}"; then
+NGDK_GCC_SEARCH_PATH="-B\${libdir} -B\${libdir}/${gcc_rel_libpath}"
+else
+NGDK_GCC_SEARCH_PATH=""
+fi
+
 else
 dnl Otherwise we'll build it
 nggcc=$prefix/bin/m68k-neogeo-elf-gcc
@@ -158,6 +169,7 @@ AC_SUBST([GLEW_DLL])
 AC_SUBST([EMUDBG_BUILD_FLAGS])
 AC_SUBST([GNGEO_BUILD_FLAGS])
 AC_SUBST([GNGEO_INSTALL_PATH])
+AC_SUBST([NGDK_GCC_SEARCH_PATH])
 
 
 dnl AC_CONFIG_HEADERS([config.h])
