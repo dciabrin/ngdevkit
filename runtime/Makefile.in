@@ -35,13 +35,18 @@ ngdevkit-specs:
 
 install: install-objs install-specs
 
-install-objs: $(OBJS) ngdevkit.ld
-	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-file-name=crt0.o) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
-	$(INSTALL) -d $$DIR && $(INSTALL) $^ $$DIR
+install-dirs:
+	OBJDIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-file-name=crt0.o) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
+	SPECSDIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-libgcc-file-name) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
+	$(INSTALL) -d $$OBJDIR && $(INSTALL) -d $$SPECSDIR
 
-install-specs: ngdevkit-specs
+install-objs: install-dirs $(OBJS) ngdevkit.ld
+	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-file-name=crt0.o) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
+	$(INSTALL) $(filter-out install-dirs,$^) $$DIR
+
+install-specs: install-dirs ngdevkit-specs
 	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-libgcc-file-name) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
-	$(INSTALL) -d $$DIR && $(INSTALL) $< $$DIR
+	$(INSTALL) $(filter-out install-dirs,$^) $$DIR
 
 clean:
 	rm -f *.o *~ *.a ngdevkit-specs
