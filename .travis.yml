@@ -1,6 +1,13 @@
 language: c
 dist: bionic
 
+# Do not run on tag creation (e.g. skip tag created for nightly builds)
+if: tag IS blank
+
+env:
+  global:
+    secure: "EfKMikGn7H08EnNxg7fzIkq04DQZ6FebnSxY8ZAGWqE5fV9bd8TkfBSXSvpjqaRA+wYiow4XmrDWFp/SqHUUnqbD5yrMGC1fkuecUNcEgl55Gc0nu99ZwLSZ6+JFMbLwNM6yTjQT3NlcB5x3vh5gSp1NZz1V6vP2MSYTwYizBlDt+K5TnMukZUdv1K88YeN/dz9ZTnVDO3hcU9BqAMZOpvBnCHsix1Tg5Jbre8A1SrwXKqH50P3xDcryandhBSUikRbO78pLG8lqFr7xspPH5KsBN5tke6xtMP4YRb12nxlBQRd+mduyNURQWOyvhPQUgbSc3dBXC7iPu5If7UDmQE82zrK2sYrcKJIofDfQoYzGJTD/XWIOHP6EqNiHf/rOcZpkaUF9zEpHvsooaz9OJ3HY3+Ri0GRUgGI93I0oyHMIl11iRggTvnCAllLtw0WQPT+ISCd9xrF/tpakatnBeoMQkiaG5Pp1HOsHQydpT3JEfE1c8RED9R5mXh6pRbW0gp2uqzyFj+yS2CKYaJ5eGfu8HB3TsLhSUdaXOPTrcRBf0m4u3RmJaj+2GU0N3C35pO55cxAsLz+ezNIUOSIKsRM0tNBYpnEy8fiwgQ1PAv6ICXkgSh8GhLOjDECXMb/Ysl/Nc64ZbP+D0zo3i8mruAvJkpOjxTq4U90iUzGXBvk="
+
 jobs:
   include:
     - stage: Tests
@@ -38,6 +45,14 @@ jobs:
           secure: "qWe3EuGb7GP0gtlJ6Dyi/U5aI2yfiNg8TzpDA0BonKuE61QcQ4NMDJD58oQNMXL5SY0F+i3LcO/+J20IsxPrBE85Er8P9HUzDT2uaOEAd1EgaL3am+1DyHH4tbF1jfRlbkpYWYR1Ta4r1T/Y9SBZyewRLYJ4jT4MzAjJrFfl/ikvh80d6/xrAESvtM/E1KEUhl/8p7sn3FHvUA0aVhxX1NhPQUzloLGhH986xAnmMqohLwFJqwbK0NNbefsk/qtEG6WMgR07mWIoMR1mIo/IQexZCMqzYwZaNRslvoCfHZaptBsKtC7gUsl2AB8m/O3CDzUuL0Tm2m3gwynyIDm0t9JggcLgDB8ClikaGffjxfKuMLAh7yPCRyDVmE7XJDrFKwc4Wmpoyfvkwg8ojujaX20BusuZxHx60N1sAy37V0+jMHE8UMzEWrm+oYG9qpyP+hfhIsepIWsRHrQLq+MS9kK5lnQGVv5hprCq/YODbTwVvAjhEPRe3Hout4RqlLAeLEjUS7WP5ISXZapSKJMg55Qfo6V+SGqTOLDJWyU8o4xmkqMNpOL1JRoScrvj9vSGQP/NnHmapaNGdzehU73MOBqJz7Gx0fmqLtXhsssL8siwt7cCAr5FOMPbjv2cy6JK6fwoMzRPT04xWHUaZWyiIQCL0OWSQCQ6cOs9AqLUvMU="
         oauth_token_secret:
           secure: "f4PkHZ31F53yQwBiFG4BHtsj50jbtVbCWbezj9Ap8dxUHKM9DgbIbcO8gw/JT/2GM4CPQKky9iFeRHtd5SoMslPCv92lnyLnNT8TGlYszx5MmRARZT+3luNohIywGugcti5BPGAbETblyo0rcnOjbJPCefXSHVdgMsNJRkEtVfZEOBZXn7O6eV7M3lmRjlDzesClX418cOX3Mf1frZZ4W4NScYqDo4eQApZNPWbXq5UIMVzNRbKqx4U3RdQKr2BTH9+n1O5kHhLTuMhWVIZKosYmiW3Ak8Wt3YZrFNHQ+lqPYxvsLkAblugBPT6n5r7Odi/HjgI/4Tr9RdmSSB1/OauBhH7xVFRJ6nTEMFlixZSgf5V0dzD4nPatOIMN6NxQ2xkxYmQFpTj/L9o8MIhObd8cezcU12Yk8C6tLn+6aN90EGM357l3qjL5rQdlWgPPA/DiuVKMmPVOR0509pGH1nKmgZhefC8wFKQzZGKZeA+VSc+/+LNRgEBcAzZGzng9oK73rfspTVHGJsafwkL83e6q/XmZ2S7+1QHbaq3J3mlFCkcgzoyHcoNCiZvVpfrzdNGRiyGXGvUpKpGIRxMCBCNDAGXXXB8kKL1Q00MyQqHj8Qu2hqS5pLEk96Am9ZLA5nH/4JfLSFpO+vh3D01Rw7wHlUEje8vVNvHUcMp/1N0="
+    - name: Homebrew - bottle
+      if: type = push AND branch = master
+      script:
+        - git config --global user.name 'CI build bot'
+        - git config --global user.email '<>'
+        - git config --global url."https://api@github.com/".insteadOf "https://github.com/"
+        - git clone https://github.com/dciabrin/homebrew-ngdevkit .travis/homebrew-ngdevkit
+        - .travis/homebrew-ngdevkit/.travis/bump-project-nightly-build.sh ngdevkit
 
 script:
   # build
