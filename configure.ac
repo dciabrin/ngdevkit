@@ -155,8 +155,8 @@ if test x"$ENABLE_MINGW" = x"yes"; then
     AC_MSG_RESULT([$GNGEO_INSTALL_PATH])
   fi
 
-  EMUDBG_BUILD_FLAGS="--host=x86_64-w64-mingw32"
-  GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-mingw --host=x86_64-w64-mingw32 $GLEW_FLAGS"
+  EMUDBG_BUILD_FLAGS="--host=x86_64-w64-mingw32 --build=\`\$\$CURPWD/emudbg/config.guess\`"
+  GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-mingw --host=x86_64-w64-mingw32 --build=\`\$\$CURPWD/gngeo/config.guess\` $GLEW_FLAGS"
 else
   GNGEO_BUILD_FLAGS="--prefix=$prefix"
 fi
