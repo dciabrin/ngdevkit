@@ -37,15 +37,15 @@ If you're running an Ubuntu or Debian distribution, you can install
 pre-built nightly binary packages, so you get the most up-to-date
 devkit without recompiling the entire toolchain at every update.
 
-You need to install enable the ngdevkit PPA and install a couple
+You need to enable the ngdevkit PPA and install a couple
 of dependencies:
 
     add-apt-repository -y ppa:dciabrin/ngdevkit
-    # if you're running Ubuntu Bionic, add the following ppa for PyGame
+    # if you're running Ubuntu 18.04 (Bionic), add the following ppa for PyGame
     # add-apt-repository -y ppa:thopiekar/pygame
     apt-get update
-    apt-get install -y ngdevkit ngdevkit-gngeo
-    apt-get install -y pkg-config autoconf automake zip imagemagick
+    apt-get install ngdevkit ngdevkit-gngeo
+    apt-get install pkg-config autoconf zip imagemagick
 
 Once ngdevkit packages are installed, you can clone the
 [ngdevkit-examples][examples] repository and build all the examples
@@ -89,9 +89,9 @@ ImageMagick for all the graphics trickery. Various additional
 dependencies are required to build the toolchain modules such as GCC
 and SDCC.
 
-For example, on Debian buster, you can install the dependencies with:
+For example, on Debian Buster, you can install the dependencies with:
 
-    apt-get install autoconf autoconf-archive gcc curl zip unzip imagemagick
+    apt-get install autoconf autoconf-archive automake gcc curl zip unzip imagemagick
     apt-get install libsdl2-dev
     apt-get install python3-pygame
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
