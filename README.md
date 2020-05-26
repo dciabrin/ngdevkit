@@ -47,6 +47,15 @@ of dependencies:
     apt-get install ngdevkit ngdevkit-gngeo
     apt-get install pkg-config autoconf zip imagemagick
 
+If you're running on macOS, you can install pre-built [brew][brew]
+packages, available in the ngdevkit tap:
+
+    # If you haven't done it yet, make sure XCode is installed first
+    sudo xcode-select --install
+    brew tap dciabrin/ngdevkit
+    brew install ngdevkit ngdevkit-gngeo
+    brew install pkg-config autoconf zip imagemagick
+
 Once ngdevkit packages are installed, you can clone the
 [ngdevkit-examples][examples] repository and build all the examples
 with the following commands:
@@ -260,3 +269,4 @@ License along with this program. If not, see
 [mame]: http://mamedev.org/
 [sip]: https://support.apple.com/en-us/HT204899
 [wsl]: https://docs.microsoft.com/en-us/windows/wsl/install-win10
+[brew]: https://brew.sh
