@@ -47,6 +47,11 @@ of dependencies:
     apt-get install ngdevkit ngdevkit-gngeo
     apt-get install pkg-config autoconf zip imagemagick
 
+If you're running on Windows 10, you can also use those pre-built
+deb binaries with [WSL][wsl]. It is complemented by a pre-built
+native version of GnGeo. Details on how to install and use them
+are available in [a dedicated README](README-mingw.md).
+
 If you're running on macOS, you can install pre-built [brew][brew]
 packages, available in the ngdevkit tap:
 
