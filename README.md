@@ -59,7 +59,11 @@ packages, available in the ngdevkit tap:
     sudo xcode-select --install
     brew tap dciabrin/ngdevkit
     brew install ngdevkit ngdevkit-gngeo
-    brew install pkg-config autoconf zip imagemagick
+    # make sure you use brew's python3 in your shell
+    export PATH=/usr/local/opt/python3/bin:$PATH
+    pip3 install pygame==2.0.0.dev6
+    # the remaining packages are required for the examples
+    brew install pkg-config autoconf automake zip imagemagick
 
 Once ngdevkit packages are installed, you can clone the
 [ngdevkit-examples][examples] repository and build all the examples
@@ -125,10 +129,12 @@ as explained later in this manual. Install the dependencies with:
 
     brew install gmake
     brew install autoconf-archive
-    brew install imagemagick
-    brew install sdl
-    # "easy_install pip" if you don't have pip yet, then
-    pip install pygame
+    brew install zip imagemagick
+    brew install sdl2 sdl2_image
+    brew install python3
+    # make sure you use brew's python3 to install pygame
+    export PATH=/usr/local/opt/python3/bin:$PATH
+    pip3 install pygame==2.0.0.dev6
     brew deps gcc | xargs brew install
     brew deps sdcc | xargs brew install
 
