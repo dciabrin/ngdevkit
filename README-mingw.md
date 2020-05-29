@@ -49,19 +49,26 @@ version of ngdevkit-gngeo. You can download the latest available
 ngdevkit-gngeo installer at
 https://github.com/dciabrin/gngeo/releases.
 
-Look for the latest available nightly pre-release. One of its asset
+Look for the latest available nightly release. One of its assets
 will be called `setup-ngdevkit-gngeo-nightly.exe`. This is a NSIS
-installer that will install a windows-native gngeo, and all its
+installer that will install a Windows-native gngeo, and all its
 dependencies: SDL2, OpenGL and GLEW.
 
-Once those binaries are installed, you need to manually add
-ngdevkit-gngeo in your `PATH` to run the examples. For example, if you
-installed ngdevkit-gngeo in e.g. `C:\Users\ngdevkit\Desktop`, you need
-to reference that path with the equivalent WSL mount point as follows:
+Note: the installer is not signed so your browser will warn you when
+saving it (Windows will warn you as well when running it). However,
+the nightly release always ships the SHA256 hash of the installer, so
+you can always verify that you are downloading a legitimate installer
+binary.
 
-    export PATH="/mnt/c/Users/ngdevkit/Desktop/gngeo":$PATH
+Once ngdevkit-gngeo and its dependencies are installed, you need to
+manually add ngdevkit-gngeo in your `PATH` to run the examples. For
+example, if you installed it in the default directory e.g.
+`C:\Users\ngdevkit\AppData\Local\GnGeo ngdevkit`, you need to
+reference that path with the equivalent WSL mount point as follows:
 
-You can know clone the examples and compile them with:
+    export PATH="/mnt/c/Users/ngdevkit/AppData/Local/GnGeo ngdevkit":$PATH
+
+You can now clone the examples and compile them with:
 
     git clone --recursive https://github.com/dciabrin/ngdevkit-examples examples
     autoreconf -iv
