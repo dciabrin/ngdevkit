@@ -33,6 +33,28 @@ jobs:
             - libsdl2-dev
       env:
       - PREFIX="/usr"
+    - name: "macOS"
+      os: osx
+      osx_image: xcode11.4
+      addons:
+        homebrew:
+          taps: dciabrin/ngdevkit
+          packages:
+            - ngdevkit-toolchain
+            - python3
+            - zip
+            - pkg-config
+            # ngdevkit-examples deps
+            - ngdevkit-gngeo
+            - imagemagick
+            - glew
+            - sdl2
+            - sdl2_image
+      env:
+      - PREFIX="/usr/local"
+      - PY3PATH="/usr/local/opt/python3/bin"
+      before_script:
+        - $PY3PATH/pip3 install pygame
 
     - stage: Daily packages
       if: type = push AND branch = master
@@ -65,6 +87,7 @@ jobs:
 
 script:
   # build
+  - if [ -n "$PY3PATH" ]; then export PATH=$PY3PATH:$PATH; fi
   - autoreconf -iv
   - ./configure --prefix=$PREFIX --enable-external-toolchain --enable-external-emudbg --enable-external-gngeo
   - make && sudo make install
