@@ -1,5 +1,9 @@
 # ngdevkit, open source development for Neo-Geo
 
+![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey)
+![Travis (.org)](https://img.shields.io/travis/dciabrin/ngdevkit)
+![GitHub](https://img.shields.io/github/license/dciabrin/ngdevkit)
+
 ngdevkit is a C/C++ software development kit for the Neo-Geo
 AES or MVS hardware. It includes:
 
