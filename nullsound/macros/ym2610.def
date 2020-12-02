@@ -1,0 +1,78 @@
+;;; -*- asm -*-
+;;; nullsound - modular sound driver
+;;; Copyright (c) 2020 Damien Ciabrini
+;;; This file is part of ngdevkit
+;;;
+;;; ngdevkit is free software: you can redistribute it and/or modify
+;;; it under the terms of the GNU Lesser General Public License as
+;;; published by the Free Software Foundation, either version 3 of the
+;;; License, or (at your option) any later version.
+;;;
+;;; ngdevkit is distributed in the hope that it will be useful,
+;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;; GNU Lesser General Public License for more details.
+;;;
+;;; You should have received a copy of the GNU Lesser General Public License
+;;; along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
+
+;;; The following macros are based on doc found on neogeodev wiki
+;;; https://wiki.neogeodev.org/index.php?title=YM2610_registers
+
+
+;;; Z80 ports mapped to the YM2610
+        ;; read ports
+        .equ    PORT_FROM_68K,               0x00
+        .equ    PORT_YM2610_STATUS,          0x04
+        .equ    PORT_PLAYBACK_FINISHED,      0x06
+        ;; write ports
+        .equ    PORT_4_ADDR,                 0x04
+        .equ    PORT_5_VALUE,                0x05
+        .equ    PORT_6_ADDR,                 0x06
+        .equ    PORT_7_VALUE,                0x07
+        .equ    PORT_TO_68K,                 0x0c
+
+;;; ADPCM playback status
+;;; These macros are meant to be used with port 4 and port 5
+        .equ    REG_ADPCM_PLAYBACK_MASK,     0x1c
+
+;;; ADPCM-A
+;;; These macros are meant to be used with port 6 and port 7
+        .equ    REG_ADPCM_A_START_STOP,      0x00
+        .equ    REG_ADPCM_A_MASTER_VOLUME,   0x01
+        .equ    REG_ADPCM_A_RESERVED,        0x02
+
+        .equ    REG_ADPCM_A1_VOL,            0x08
+        .equ    REG_ADPCM_A2_VOL,            0x09
+        .equ    REG_ADPCM_A3_VOL,            0x0a
+        .equ    REG_ADPCM_A4_VOL,            0x0b
+        .equ    REG_ADPCM_A5_VOL,            0x0c
+        .equ    REG_ADPCM_A6_VOL,            0x0d
+
+        .equ    REG_ADPCM_A1_ADDR_START_LSB, 0x10
+        .equ    REG_ADPCM_A2_ADDR_START_LSB, 0x11
+        .equ    REG_ADPCM_A3_ADDR_START_LSB, 0x12
+        .equ    REG_ADPCM_A4_ADDR_START_LSB, 0x13
+        .equ    REG_ADPCM_A5_ADDR_START_LSB, 0x14
+        .equ    REG_ADPCM_A6_ADDR_START_LSB, 0x15
+
+        .equ    REG_ADPCM_A1_ADDR_START_MSB, 0x18
+        .equ    REG_ADPCM_A2_ADDR_START_MSB, 0x19
+        .equ    REG_ADPCM_A3_ADDR_START_MSB, 0x1a
+        .equ    REG_ADPCM_A4_ADDR_START_MSB, 0x1b
+        .equ    REG_ADPCM_A5_ADDR_START_MSB, 0x1c
+        .equ    REG_ADPCM_A6_ADDR_START_MSB, 0x1d
+
+        .equ    REG_ADPCM_A1_ADDR_STOP_LSB,  0x20
+        .equ    REG_ADPCM_A2_ADDR_STOP_LSB,  0x21
+        .equ    REG_ADPCM_A3_ADDR_STOP_LSB,  0x22
+        .equ    REG_ADPCM_A4_ADDR_STOP_LSB,  0x23
+        .equ    REG_ADPCM_A5_ADDR_STOP_LSB,  0x24
+        .equ    REG_ADPCM_A6_ADDR_STOP_LSB,  0x25
+
+        .equ    REG_ADPCM_A1_ADDR_STOP_MSB,  0x28
+        .equ    REG_ADPCM_A2_ADDR_STOP_MSB,  0x29
+        .equ    REG_ADPCM_A3_ADDR_STOP_MSB,  0x2a
+        .equ    REG_ADPCM_A4_ADDR_STOP_MSB,  0x2b
+        .equ    REG_ADPCM_A5_ADDR_STOP_MSB,  0x2c
+        .equ    REG_ADPCM_A6_ADDR_STOP_MSB,  0x2d

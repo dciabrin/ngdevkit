@@ -18,7 +18,7 @@ all:
 
 -include ../Makefile.config
 
-TOOLS=paltool.py tiletool.py
+TOOLS=paltool.py tiletool.py adpcmtool.py
 
 install: $(TOOLS)
 	$(INSTALL) -d $(DESTDIR)$(prefix)/bin && \

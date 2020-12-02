@@ -3,6 +3,8 @@
 *.elf
 *.ihx
 *.rel
+*.lst
+*.rst
 
 # Libraries
 *.a
