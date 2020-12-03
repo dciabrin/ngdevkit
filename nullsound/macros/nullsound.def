@@ -1,0 +1,121 @@
+;;;
+;;; nullsound - modular sound driver
+;;; Copyright (c) 2020 Damien Ciabrini
+;;; This file is part of ngdevkit
+;;;
+;;; ngdevkit is free software: you can redistribute it and/or modify
+;;; it under the terms of the GNU Lesser General Public License as
+;;; published by the Free Software Foundation, either version 3 of the
+;;; License, or (at your option) any later version.
+;;;
+;;; ngdevkit is distributed in the hope that it will be useful,
+;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;; GNU Lesser General Public License for more details.
+;;;
+;;; You should have received a copy of the GNU Lesser General Public License
+;;; along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
+
+
+;;; This sound driver programs the YM2610 to output sound based on the
+;;; sound commands that it receives from the 68k. Each sound command
+;;; is responsible for a unique action: play a music, play a specific
+;;; sample, play a sound fx from the SSG...
+;;;
+;;; The sound driver is configured at compile time to process up to
+;;; 'n' sound commands in parallel, each processing being assigned
+;;; to one of the 'n' configured modules.
+;;; A sound command is triggered by the 68k via an NMI, and runs
+;;; a action configured at compile time, e.g. "use module X to play
+;;; music A", or "use module Y to play sample B".
+;;;
+;;; The driver loops over each module to ask them to update their
+;;; state if necessary (i.e. configure the YM2610 to play the rest
+;;; of the current music).
+
+
+        ;; a module's state is 8 bytes in RAM
+        .equ    MODULE_SIZE, 8
+
+        ;; module's action return code
+        .equ    ACTION_RUNNING, 1
+        .equ    ACTION_FINISHED, 0
+
+        ;; change these default defines in 'user_commands.def'
+        ;; ROM identifier
+        .equ    DEFAULT_ID, 1
+        ;; buffer for pending sound requests from the z80
+        .equ    MAX_PENDING_REQUESTS, 8
+
+        ;; user-configurable macro to identify your ROM
+        .macro  nullsound_id
+        .if     DEFAULT_ID
+        .ascii  %nullsound v0.1.0 - https://github.com/dciabrin/ngdevkit%
+        .else
+        nullsound_user_id
+        .endif
+        .endm
+
+        ;; private helper to generate z80 opcode to stay idle in RAM
+        .macro  prepare_wait_in_ram_opcode
+        ;; build a jmp-to-self instruction at the top of RAM
+        ld      bc, #0xfe18     ; jr <self>
+        ld      hl, #0xfffe
+        ld      sp, hl
+        push    bc
+        ;; popping the stack will lock the Z80 in RAM
+        push    hl
+        .endm
+
+
+        ;; instantiate a user sound command request
+        ;; this is used for each command that the user's sound
+        ;; driver defines in its ROM
+        .macro  snd_command_request cmd,module,action,check_finished
+snd_command_'cmd'_request::
+        ;; fetch the MSB of the module's action config
+        .if     check_finished
+        ld      a, (#modules + (module * MODULE_SIZE) + 1)
+        bit     7, a
+        jr      nz, _snd_command_'cmd'_in_use
+        .endif
+        ;; set up module run action
+        push    hl
+        push    de
+        push    bc
+        ld      hl, #_snd_command_'cmd'_module_config
+        ld      de, #(modules + (module * MODULE_SIZE))
+        ld      bc, #MODULE_SIZE
+        ldir
+        pop     bc
+        pop     de
+        pop     hl
+_snd_command_'cmd'_in_use:
+        ;; jp      _end_nmi
+        ret
+_snd_command_'cmd'_module_config:
+        .dw     #(module_states + (module * ACTION_STATE_SIZE))
+        call    snd_command_'cmd'_action_init
+        jp      action
+snd_command_'cmd'_action_init:
+        push    hl
+        push    de
+        push    bc
+        ;; set up action's state
+        ld      hl, #snd_command_'cmd'_action_config
+        ld      de, #(module_states + (module * ACTION_STATE_SIZE))
+        ;; ld      bc, #ACTION_ADPCM_A_CONFIG_SIZE
+        ld      bc, #'action'_config_size
+        ldir
+        ;; the init command shall not be executed again, so
+        ;; we replace the 'call <*_action_init>' opcode in our
+        ;; module config with 'nop's opcodes
+        ld      bc, #0
+        ld      (#modules + (module * MODULE_SIZE) + 2), bc
+        ld      a, b
+        ld      (#modules + (module * MODULE_SIZE) + 4), a
+        pop     bc
+        pop     de
+        pop     hl
+        ret
+        .endm

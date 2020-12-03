@@ -18,22 +18,31 @@ all: nullsound.ihx
 
 -include ../Makefile.config
 
-OBJS=nullsound
-HEX=nullsound.ihx
+MACRO_FILES=nullsound ym2610
+DRIVER_FILES=nullsound nullsound_commands sfx_adpcma ym2610
+NULLDRIVER_OBJS=driver/nullsound
+NULLDRIVER=nullsound.ihx
 
 VERSION=@version@
 
-$(HEX):	$(OBJS:%=%.rel)
+$(NULLDRIVER): $(NULLDRIVER_OBJS:%=%.rel)
 	$(NGSDLD) -i $@ $<
 
-%.rel: %.S
-	$(NGSDAS) -o $@ $<
+%.rel: %.s
+	$(NGSDAS) -Imacros -Idriver -g -l -p -u -o $@ $<
 
-install: nullsound.ihx
+install: install-nullsound install-nullsound-src
+
+install-nullsound: nullsound.ihx
 	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
 	$(INSTALL) $< $(DESTDIR)$(prefix)/share/ngdevkit
 
+install-nullsound-src: $(DRIVER_FILES:%=driver/%.s) $(MACRO_FILES:%=macros/%.def)
+	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit/nullsound && \
+	$(INSTALL) $^ $(DESTDIR)$(prefix)/share/ngdevkit/nullsound
+
+
 clean:
-	rm -f *.rel *~ $(HEX)
+	rm -f *.ihx driver/*.rel driver/*.lst *~
 
 .PHONY: clean
