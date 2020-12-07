@@ -32,12 +32,12 @@ all: build-tools
 
 install: install-tools install-pkgconfig
 
-clean: clean-tools clean-pkgconfig
+clean: clean-tools
 
 clean:
 	rm -rf local/*
 
-distclean: clean
+distclean: clean clean-pkgconfig
 	rm -rf build local config.log config.status
 	find . \( -name '*~' -or -name Makefile -or -name Makefile.config \) \
 	-exec rm {} \;
