@@ -1,0 +1,42 @@
+/*
+ * Syscall implementation as expected by newlib
+ * Copyright (c) 2015-2020 Damien Ciabrini
+ * This file is part of ngdevkit
+ *
+ * ngdevkit is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * ngdevkit is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <errno.h>
+
+
+/* _end is defined by the link script, it is the base of allocatable space */
+extern char _end[];
+
+void* sbrk (int nbytes) {
+  static char *heap;
+  char *sp;
+
+  if (!heap)
+    heap = (char *)&_end;
+
+  __asm__ __volatile__ ("move.l %%sp, %0" : "=r" (sp) );
+  if ((sp - heap - nbytes) >= 0) {
+    char *old = heap;
+    heap += nbytes;
+    return (old);
+  } else {
+    errno = ENOMEM;
+    return ((char *)-1);
+  }
+}

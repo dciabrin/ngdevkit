@@ -29,6 +29,8 @@ jobs:
             - ngdevkit-gngeo
             - python3-pygame
             - imagemagick
+            - sox
+            - libsox-fmt-mp3
             - libglew-dev
             - libsdl2-dev
       env:
@@ -47,6 +49,7 @@ jobs:
             # ngdevkit-examples deps
             - ngdevkit-gngeo
             - imagemagick
+            - sox
             - glew
             - sdl2
             - sdl2_image
