@@ -1,0 +1,3 @@
+void raise (void) {
+  return;
+}
