@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Damien Ciabrini
+# Copyright (c) 2015-2020 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-OBJS=libsyscalls.a ngdevkit-crt0.o
+OBJS=libsyscalls.a libngdevkit.a ngdevkit-crt0.o
 SYSCALL_OBJS=\
   close \
   _exit \
@@ -33,6 +33,10 @@ SYSCALL_OBJS=\
   times \
   unlink \
   write
+NGDEVKIT_OBJS=\
+  ng_text_tall_args \
+  ng_text_args \
+  ng_cls_args
 
 
 all: $(OBJS) ngdevkit-specs
@@ -42,15 +46,18 @@ all: $(OBJS) ngdevkit-specs
 libsyscalls.a: $(SYSCALL_OBJS:%=syscall/%.o)
 	$(NGAR) cru $@ $^ && $(NGRANLIB) $@
 
+libngdevkit.a: $(NGDEVKIT_OBJS:%=ngdevkit/%.o)
+	$(NGAR) cru $@ $^ && $(NGRANLIB) $@
+
 ngdevkit-specs:
-	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls/' | \
+	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls \1/' | \
 	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit.ld%s \1/' > $@
 
 %.o: %.c
-	$(NGGCC) -std=c99 -fomit-frame-pointer -c $< -o $@
+	$(NGGCC) -std=c99 -fomit-frame-pointer -I../include -c $< -o $@
 
 %.o: %.S
-	$(NGAS) -c $< -o $@
+	$(NGAS) -I../include -c $< -o $@
 
 install: install-objs install-specs
 
@@ -68,6 +75,6 @@ install-specs: install-dirs ngdevkit-specs
 	$(INSTALL) $(filter-out install-dirs,$^) $$DIR
 
 clean:
-	rm -f *.o syscall/*.o *~ *.a ngdevkit-specs
+	rm -f *.o ngdevkit/*.o syscall/*.o *~ *.a ngdevkit-specs
 
 .PHONY: install clean
