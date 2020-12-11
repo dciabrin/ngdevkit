@@ -20,7 +20,7 @@ all:
 
 install:
 	$(INSTALL) -d $(DESTDIR)$(prefix)/m68k-neogeo-elf/include/ngdevkit && \
-	$(INSTALL) *.h $(DESTDIR)$(prefix)/m68k-neogeo-elf/include/ngdevkit
+	$(INSTALL) ngdevkit/*.h $(DESTDIR)$(prefix)/m68k-neogeo-elf/include/ngdevkit
 
 clean:
 	rm -f *~
