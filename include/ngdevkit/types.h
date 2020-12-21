@@ -1,5 +1,5 @@
 /*
- * Header for C development on Neo Geo
+ * Shortcut types for C development on Neo Geo
  * Copyright (c) 2015-2020 Damien Ciabrini
  * This file is part of ngdevkit
  *
@@ -17,21 +17,14 @@
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __NGDEVKIT_NEOGEO_H__
-#define __NGDEVKIT_NEOGEO_H__
+#ifndef __NGDEVKIT_TYPES_H__
+#define __NGDEVKIT_TYPES_H__
 
+typedef unsigned char  u8;
+typedef signed char    s8;
+typedef unsigned short u16;
+typedef signed short   s16;
+typedef unsigned int   u32;
+typedef signed int     s32;
 
-/* Shortcut types for C development */
-#include <ngdevkit/types.h>
-
-/* Memory-mapped Neo Geo registers */
-#include <ngdevkit/registers.h>
-
-/* BIOS state variables in memory */
-#include <ngdevkit/bios-ram.h>
-
-/* BIOS system calls */
-#include <ngdevkit/bios-calls.h>
-
-
-#endif /* __NGDEVKIT_NEOGEO_H__ */
+#endif /* __NGDEVKIT_TYPES_H__ */

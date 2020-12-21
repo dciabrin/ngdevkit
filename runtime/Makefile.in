@@ -34,6 +34,7 @@ SYSCALL_OBJS=\
   unlink \
   write
 NGDEVKIT_OBJS=\
+  bios-ram \
   ng_text_tall_args \
   ng_text_args \
   ng_cls_args

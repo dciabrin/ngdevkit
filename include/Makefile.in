@@ -21,8 +21,10 @@ all:
 install:
 	$(INSTALL) -d $(DESTDIR)$(prefix)/m68k-neogeo-elf/include/ngdevkit && \
 	$(INSTALL) ngdevkit/*.h $(DESTDIR)$(prefix)/m68k-neogeo-elf/include/ngdevkit
+	$(INSTALL) -d $(DESTDIR)$(prefix)/m68k-neogeo-elf/include/ngdevkit/asm && \
+	$(INSTALL) ngdevkit/asm/*.h $(DESTDIR)$(prefix)/m68k-neogeo-elf/include/ngdevkit/asm
 
 clean:
-	rm -f *~
+	rm -f *~ asm/*~
 
 .PHONY: install clean

@@ -26,8 +26,9 @@ STARTUP(ngdevkit-crt0.o)
 GROUP(-lsyscalls)
 
 MEMORY {
-  ROM (rx) : ORIGIN = 0x000000, LENGTH = 512K
-  RAM (rw) : ORIGIN = 0x100000, LENGTH = 0xf300
+  ROM (rx)     : ORIGIN = 0x000000, LENGTH = 512K
+  RAM (rw)     : ORIGIN = 0x100000, LENGTH = 0xf300
+  BIOSRAM (rw) : ORIGIN = 0x10fcee, LENGTH = 0x312
 }
 
 SECTIONS {
@@ -97,6 +98,10 @@ SECTIONS {
     . = ALIGN(4);  
   } >RAM =0xffffffff
   __data_end = __data_start + SIZEOF(.data);
+
+  .bss.bios ORIGIN(BIOSRAM) : SUBALIGN(0) {
+    *bios-ram.o(.bss)
+  } >BIOSRAM =0xffffffff
 
   __bss_start = __data_end ;
   .bss : AT(__data_end) {
