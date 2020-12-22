@@ -67,8 +67,8 @@
  * == BIOS descriptor ==
  */
         .org    0x400
-        dc.b    0x0                     /* Pretend we are an AES HW */
-        dc.b    0x0                     /* From EU */
+        dc.b    BIOS_ROM_HARDWARE       /* AES or MVS */
+        dc.b    BIOS_ROM_COUNTRY        /* From EU */
 
 /* The game cartridge's exception vectors point to a jump table
  * in the BIOS, handling boot and common exceptions
@@ -116,6 +116,15 @@ RESET:
         move    #0x2700, %sr
         move.w  #7, REG_IRQACK
         move.b  %d0, REG_WATCHDOGW
+
+        /* Set initial system information in RAM */
+#if BIOS_ROM_HARDWARE != 0
+        move.b  #0x80, BIOS_MVS_FLAG
+        move.b  #0, P1_CREDITS_BCD
+#else
+        move.b  #0x0, BIOS_MVS_FLAG
+#endif
+        move.b  #BIOS_ROM_COUNTRY, BIOS_COUNTRY_CODE
 
         /* Prepare to call USER's request 0 (SystemInit) */
         clr     %d0
@@ -201,6 +210,7 @@ SYSTEM_IO:
         and.b   %d1, %d0
         move.b  %d0, BIOS_P1CHANGE
 
+#if BIOS_ROM_HARDWARE != 0
         /* coin deposit status (only check P1 and P2)*/
         move.b  COIN_DEPOSIT_CURRENT, %d1
         move.b  %d1, COIN_DEPOSIT_PREVIOUS
@@ -251,6 +261,7 @@ SYSTEM_IO:
         move.b  #60, BIOS_COMPULSION_FRAME_TIMER
 .Ldec_timer:
         sub.b   #1, BIOS_COMPULSION_FRAME_TIMER
+#endif
 
 .Lstart_status:
         /* start status */

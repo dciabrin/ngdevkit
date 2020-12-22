@@ -16,7 +16,7 @@
 
 MROM=rom/sm1.sm1
 SROM=rom/sfix.sfix
-PROM=rom/sp-s2.sp1
+PROMS=rom/sp-s2.sp1 rom/aes-bios.bin
 ZROM=rom/000-lo.lo
 
 BIOS=rom/neogeo.zip
@@ -25,19 +25,16 @@ all: $(BIOS)
 
 -include ../Makefile.config
 
-OBJS=biosstart
-ELF=prom.elf
-
 NULLSOUND=../nullsound
 SOUND_DRIVER=$(NULLSOUND)/nullsound.ihx
 
 VERSION=@PACKAGE_VERSION@
 
-$(BIOS): $(PROM) $(ZROM) $(SROM) $(MROM)
+$(BIOS): $(PROMS) $(ZROM) $(SROM) $(MROM)
 	cd rom && /bin/echo -e "\
 nullbios $(VERSION), an open source BIOS for Neo Geo\n\
 https://github.com/dciabrin/ngdevkit\n\
-." | @zip@ -qz neogeo.zip *.lo *.s*
+." | /usr/bin/zip -qz neogeo.zip *.lo *.s* *.bin
 
 $(MROM): $(SOUND_DRIVER) | rom
 	$(NGSDOBJCOPY) -I ihex -O binary $< $@ --pad-to 131072
@@ -45,7 +42,10 @@ $(MROM): $(SOUND_DRIVER) | rom
 $(SROM): | rom
 	dd if=/dev/zero bs=1024 count=128 of=$@
 
-$(PROM): $(ELF) | rom
+rom/sp-s2.sp1: sp-s2.elf | rom
+	$(NGOBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< $@
+
+rom/aes-bios.bin: aes-bios.elf | rom
 	$(NGOBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< $@
 
 $(ZROM): | rom
@@ -54,11 +54,17 @@ $(ZROM): | rom
 rom:
 	mkdir $@
 
-$(ELF):	$(OBJS:%=%.o)
-	$(NGGCC) -nostartfiles -T bios.ld $^ -o $(ELF)
+sp-s2.elf: sp-s2.o
+	$(NGGCC) -nostartfiles -T bios.ld $^ -o $@
 
-%.o: %.S
-	$(NGGCC) -I../include -c $< -o $@
+sp-s2.o: biosstart.S
+	$(NGGCC) -DBIOS_ROM_HARDWARE=1 -DBIOS_ROM_COUNTRY=2 -I../include -c $< -o $@
+
+aes-bios.elf: aes-bios.o
+	$(NGGCC) -nostartfiles -T bios.ld $^ -o $@
+
+aes-bios.o: biosstart.S
+	$(NGGCC) -DBIOS_ROM_HARDWARE=0 -DBIOS_ROM_COUNTRY=2 -I../include -c $< -o $@
 
 $(SOUND_DRIVER):
 	$(MAKE) -C $(NULLSOUND)
@@ -69,6 +75,6 @@ install: $(BIOS)
 
 
 clean:
-	rm -f *.o *~ $(ELF) rom/*.*
+	rm -f *.o *~ *.elf rom/*.*
 
 .PHONY: install clean bios
