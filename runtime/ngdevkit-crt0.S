@@ -135,6 +135,7 @@ rom_handler_VBlank_default:
 	move.l	%d0, %a0
 	jsr	(%a0)
 .Ldone_Vblank:
+	jsr	SYSTEM_IO.l
 	movem.l	(%sp)+, %d0-%d7/%a0-%a7
 	rte
 
@@ -204,10 +205,31 @@ init_c_runtime:
 .Linitdone:
         rts
 
+rom_title_default:
+        /* Disable IRQs, as we don't want C code to be
+         * called prior to runtime initialization
+         */
+        move    #0x2700, %sr
+
+        /* Ack pending IRQ and rearm watchdog timer */
+        move.w  #7, REG_IRQACK
+        move.b  %d0, REG_WATCHDOGW
+
+        /* Init the C part of the game cartridge */
+        jsr init_c_runtime
+
+        /* Switch to fix tiles from user bank */
+        move.b	#1, REG_CRTFIX
+
+        /* Enable interrupts and call game's main */
+        move	#0x2000, %sr
+        jsr	main_mvs_title.l
+
+        /* if main returns, give back control to USER */
+        rts
 
 rom_eye_catcher_default:
 rom_game_default:
-rom_title_default:
         /* Disable IRQs, as we don't want C code to be
          * called prior to runtime initialization
          */
@@ -243,22 +265,37 @@ rom_title_default:
         dc.l	rom_title             /* 3: Title */
 USER:
         /* Rearm watchdog */
-        move.b	%d0, 0x300001
+        move.b	%d0, REG_WATCHDOGW
 
         /* Get user command requested by BIOS */
         clr.l	%d0
-        move.b	0x10fdae, %d0
+        move.b	BIOS_USER_REQUEST, %d0
         lsl.b	#2, %d0
         lea	.Luser_commands, %a0
         movea.l	(%a0,%d0),%a0
 
         /* Execute the command and go back to BIOS */
         jsr	(%a0)
-        jmp	0xc00444
+        jmp	SYSTEM_RETURN
 
 
 PLAYER_START:
-        rts
+	move.b  %d0, REG_WATCHDOGW
+	movem.l	%d0-%d7/%a0-%a7, -(%sp)
+	move.l	#player_start, %d0
+	tst.l	%d0
+	beq	.Lno_game_player_start
+	move.l	%d0, %a0
+	jsr	(%a0)
+	jmp     .Ldone_start
+/* TODO REMOVE THAT? */
+.Lno_game_player_start:
+        /* tell BIOS game didn't start */
+        move.b  #0, %d0
+        move.b  %d0, BIOS_START_FLAG
+.Ldone_start:
+	movem.l	(%sp)+, %d0-%d7/%a0-%a7
+	rts
 
 
 DEMO_END:
@@ -266,7 +303,16 @@ DEMO_END:
 
 
 COIN_SOUND:
-        rts
+	move.b  %d0, REG_WATCHDOGW
+	movem.l	%d0-%d7/%a0-%a7, -(%sp)
+	move.l	#coin_sound, %d0
+	tst.l	%d0
+	beq	.Lcoin_sound_done
+	move.l	%d0, %a0
+	jsr	(%a0)
+.Lcoin_sound_done:
+	movem.l	(%sp)+, %d0-%d7/%a0-%a7
+	rts
 
 
 .Lidle:	bra	.Lidle

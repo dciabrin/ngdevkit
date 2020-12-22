@@ -64,6 +64,11 @@ SECTIONS {
     rom_game = DEFINED(rom_game)? rom_game : rom_game_default;
     rom_title = DEFINED(rom_title)? rom_title : rom_title_default;
 
+    /* C callback functions for USER commands */
+    main_mvs_title = DEFINED(main_mvs_title)? main_mvs_title : main;
+    coin_sound = DEFINED(coin_sound)? coin_sound : 0;
+    player_start = DEFINED(player_start)? player_start : 0;
+
     *(.ctors)
     *(.dtors)
     *(.eh_frame)

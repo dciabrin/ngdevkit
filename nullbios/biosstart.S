@@ -25,6 +25,11 @@
 #define DEMO_END     0x12e
 #define COIN_SOUND   0x134
 
+#define COIN_DEPOSIT_PREVIOUS 0xd00020
+#define COIN_DEPOSIT_CURRENT  0xd00021
+#define P1_CREDITS_BCD        0xd00034
+#define P2_CREDITS_BCD        0xd00035
+
 /*
  * 68k exception vector table, 256 "vectors", 0x400 bytes
  * After the system boot, this vector table is swapped with the
@@ -80,17 +85,16 @@ GAME_CARTRIDGE_VECTORS:
         jmp     SYSTEM_INT1.l           /* VBlank handler during boot     */
         jmp     SYSTEM_INT2.l           /* Timer handler                  */
         jmp     SYSTEM_RETURN.l         /* Return from USER subroutine    */
-.if 0
-        jmp     SYSTEM_IO               /* Status of coins, joysticks...  */
-        jmp     CREDIT_CHECK            /* Check credit for players       */
-        jmp     CREDIT_DOWN             /* Decrement credits              */
+        jmp     SYSTEM_IO.l             /* Status of coins, joysticks...  */
+        jmp     CREDIT_CHECK.l          /* Check credit for players       */
+        jmp     CREDIT_DOWN.l           /* Decrement credits              */
         jmp     NO_OP                   /* READ_CALENDAR on MVS           */
         jmp     NO_OP                   /* SETUP_CALENDAR on MVS          */
-        jmp     CARD
-        jmp     CARD_ERROR
-        jmp     HOW_TO_PLAY
-        jmp     CHECKSUM
-
+        jmp     NO_OP                   /* CARD                           */
+        jmp     NO_OP                   /* CARD_ERROR                     */
+        jmp     NO_OP                   /* HOW_TO_PLAY                    */
+        jmp     NO_OP                   /* CHECKSUM                       */
+.if 0
         .org    0x4c2
         jmp     FIX_CLEAR
         jmp     LSP_1st
@@ -119,22 +123,36 @@ RESET:
         move.b  %d0, BIOS_USER_MODE
         jsr     USER.l
 
-.Lsoft_reset:
+        /* Mark init as done, and prepare to jump to game's
+         * main function (USER request 2)
+         */
+        move.b  #2, BIOS_USER_REQUEST
+
+soft_reset:
+        /* Supervisor, init IRQ and watchdog timer */
+        move    #0x2700, %sr
+        move.w  #7, REG_IRQACK
+        move.b  %d0, REG_WATCHDOGW
+
+        /* On reset, configure the game for demo mode */
+        move.b  #1, BIOS_USER_MODE
+
         /* Switch to cart's ROMs (gfx, sound, vector table...) */
         move.b  #1, REG_SWPROM
         move.b  #1, REG_CRTFIX
 
-        /* Mark init as done, and start the GAME's main function
-         * by calling USER's request 2 (Game)
-         */
         move    #0x2000, %sr
         bset    #7, BIOS_SYSTEM_MODE
-        move.b  #2, BIOS_USER_REQUEST
-        move.b  #1, BIOS_USER_MODE
+        /* Call USER with args from BIOS_USER_REQUEST and BIOS_USER_MODE */
         jsr     USER.l
 
-        /* Reset the game if it returned to the BIOS */
-        jmp     .Lsoft_reset
+        /* If there are no credits left, reset to demo mode */
+        cmp.b   #0, P1_CREDITS_BCD
+        bne     .Lcredit_left
+        move.b  #2, BIOS_USER_REQUEST
+.Lcredit_left:
+        /* Reset to demo mode */
+        jmp     soft_reset
 
 
 /**
@@ -169,4 +187,118 @@ SYSTEM_RETURN:
  * Ignore
  */
 NO_OP:
+        rts
+
+
+SYSTEM_IO:
+        /* player 1 */
+        move.b  BIOS_P1CURRENT, %d1
+        move.b  %d1, BIOS_P1PREVIOUS
+        move.b  REG_P1CNT, %d0
+        not.b   %d0
+        move.b  %d0, BIOS_P1CURRENT
+        eor.b   %d0, %d1
+        and.b   %d1, %d0
+        move.b  %d0, BIOS_P1CHANGE
+
+        /* coin deposit status (only check P1 and P2)*/
+        move.b  COIN_DEPOSIT_CURRENT, %d1
+        move.b  %d1, COIN_DEPOSIT_PREVIOUS
+        move.b  REG_STATUS_A, %d0
+        not.b   %d0
+        andi.b  #0x3, %d0
+        move.b  %d0, COIN_DEPOSIT_CURRENT
+        eor.b   %d0, %d1
+        and.b   %d1, %d0
+        move.b  %d0, 0x10fdd2
+        /* %d0 has bits set to 1 for rising change */
+        cmpi.b  #0, %d0
+        beq     .Lnocoin_inserted
+        /* when credit is inserted the following actions take place:
+         *   . bump credit count
+         *   . reset the compulsion start timer
+         *   . call the game's "coin_sound" callback function
+         * [only when the game is not running yet]
+         *   . prepare a restart to game's title (user request 3)
+         *   . reset the stack and soft reset to game's title
+         */
+        move.b  P1_CREDITS_BCD, %d1
+        move.b  #1, %d0
+        abcd    %d0, %d1
+        move.b  %d1, P1_CREDITS_BCD
+        move.b  #0x30, BIOS_COMPULSION_TIMER
+        move.b  #60, BIOS_COMPULSION_FRAME_TIMER
+        jsr     COIN_SOUND.l
+        cmpi.b  #2, BIOS_USER_MODE
+        beq     .Lstart_status
+        move.b  #3, BIOS_USER_REQUEST
+        lea.l   0x10f300, %sp
+        pea.l   soft_reset
+        rts
+.Lnocoin_inserted:
+
+        cmpi.b  #0, P1_CREDITS_BCD
+        beq     .Lnostart
+        /* decrement compulsory start timer */
+        cmpi.b  #0, BIOS_COMPULSION_TIMER
+        beq     .Lstart_pressed
+        cmpi.b  #0, BIOS_COMPULSION_FRAME_TIMER
+        bne     .Ldec_timer
+        move.b  BIOS_COMPULSION_TIMER, %d1
+        move.b  #1, %d0
+        sbcd    %d0, %d1
+        move.b  %d1, BIOS_COMPULSION_TIMER
+        move.b  #60, BIOS_COMPULSION_FRAME_TIMER
+.Ldec_timer:
+        sub.b   #1, BIOS_COMPULSION_FRAME_TIMER
+
+.Lstart_status:
+        /* start status */
+        move.b  BIOS_STATCURNT, %d1
+        move.b  %d1, BIOS_STATCURNT_RAW
+        move.b  REG_STATUS_B, %d0
+        not.b   %d0
+        andi.b  #0xf, %d0
+        move.b  %d0, BIOS_STATCURNT
+        eor.b   %d0, %d1
+        and.b   %d1, %d0
+        move.b  %d0, BIOS_STATCHANGE
+        cmpi.b  #0, %d0
+        beq     .Lnostart
+.Lstart_pressed:
+        /* when start is pressed and credits are available:
+         *   . game's "plater_start" callback is executed
+         *   . the callback engages "game mode" by
+         *     setting bios_user_mode set to 2.
+         * [only when game mode is engaged]
+         *   . credits are decremented
+         */
+        move.b  %d0, BIOS_START_FLAG
+        jsr     PLAYER_START.l
+        cmp.b   #2, BIOS_USER_MODE
+        bne     .Lnostart
+        jsr     CREDIT_DOWN.l
+.Lnostart:
+        rts
+
+
+CREDIT_CHECK:
+        /* TODO */
+        rts
+
+
+CREDIT_DOWN:
+        move.b  #1, %d0
+        btst.b  #0, BIOS_START_FLAG
+        beq     .Lp1_not_running
+        move.b  P1_CREDITS_BCD, %d1
+        sbcd    %d0, %d1
+        move.b  %d1, P1_CREDITS_BCD
+.Lp1_not_running:
+        btst.b  #1, BIOS_START_FLAG
+        beq     .Lp2_not_running
+        move.b  P1_CREDITS_BCD, %d1
+        sbcd    %d0, %d1
+        move.b  %d1, P1_CREDITS_BCD
+.Lp2_not_running:
         rts
