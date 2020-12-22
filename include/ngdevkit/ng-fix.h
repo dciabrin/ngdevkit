@@ -44,12 +44,24 @@ extern void ng_text_args(u8 x, u8 y, u8 palette, u16 start_tile, const char *tex
 /// Display a tall string on the fix map
 extern void ng_text_tall_args(u8 x, u8 y, u8 palette, u16 start_tile, const char *text);
 
+/// Display a centered string on the fix map
+extern void ng_center_text_args(u8 y, u8 palette, u16 start_tile, const char *text);
+
+/// Display a centeredtall string on the fix map
+extern void ng_center_text_tall_args(u8 y, u8 palette, u16 start_tile, const char *text);
+
 
 #define ng_text(x,y,pal,text) \
     ng_text_args((x), (y), (pal), SROM_TXT_TILE_OFFSET, (text))
 
 #define ng_text_tall(x,y,pal,text) \
     ng_text_tall_args((x), (y), (pal), SROM_TXT_TALL_TILE_OFFSET, (text))
+
+#define ng_center_text(y,pal,text) \
+    ng_center_text_args((y), (pal), SROM_TXT_TILE_OFFSET, (text))
+
+#define ng_center_text_tall(y,pal,text)                               \
+    ng_center_text_tall_args((y), (pal), SROM_TXT_TALL_TILE_OFFSET, (text))
 
 #define ng_cls() ng_cls_args(0, SROM_EMPTY_TILE)
 
