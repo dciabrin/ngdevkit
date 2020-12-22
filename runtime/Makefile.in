@@ -39,8 +39,8 @@ NGDEVKIT_OBJS=\
   ng_text_args \
   ng_center_text_tall_args \
   ng_center_text_args \
-  ng_cls_args
-
+  ng_cls_args \
+  ng_wait_vblank
 
 all: $(OBJS) ngdevkit-specs
 
