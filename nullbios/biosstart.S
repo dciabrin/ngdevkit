@@ -1,6 +1,6 @@
 /*
  * nullbios - start of BIOS address space
- * Copyright (c) 2015 Damien Ciabrini
+ * Copyright (c) 2015-2020 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -16,6 +16,14 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#include <ngdevkit/asm/registers.h>
+#include <ngdevkit/asm/bios-ram.h>
+
+#define USER         0x122
+#define PLAYER_START 0x128
+#define DEMO_END     0x12e
+#define COIN_SOUND   0x134
 
 /*
  * 68k exception vector table, 256 "vectors", 0x400 bytes
@@ -102,28 +110,28 @@ GAME_CARTRIDGE_VECTORS:
 RESET:
         /* Supervisor, init IRQ and watchdog timer */
         move    #0x2700, %sr
-        move.w  #7, 0x3c000c
-        move.b  %d0, 0x300001
+        move.w  #7, REG_IRQACK
+        move.b  %d0, REG_WATCHDOGW
 
         /* Prepare to call USER's request 0 (SystemInit) */
         clr     %d0
-        move.b  %d0, 0x10fdae
-        move.b  %d0, 0x10fdaf
-        jsr     0x122
+        move.b  %d0, BIOS_USER_REQUEST
+        move.b  %d0, BIOS_USER_MODE
+        jsr     USER.l
 
 .Lsoft_reset:
         /* Switch to cart's ROMs (gfx, sound, vector table...) */
-        move.b  #1, 0x3a0013
-        move.b  #1, 0x3a001b
+        move.b  #1, REG_SWPROM
+        move.b  #1, REG_CRTFIX
 
         /* Mark init as done, and start the GAME's main function
          * by calling USER's request 2 (Game)
          */
         move    #0x2000, %sr
-        bset    #7, 0x10fd80
-        move.b  #2, 0x10fdae
-        move.b  #1, 0x10fdaf
-        jmp.l   0x122
+        bset    #7, BIOS_SYSTEM_MODE
+        move.b  #2, BIOS_USER_REQUEST
+        move.b  #1, BIOS_USER_MODE
+        jsr     USER.l
 
         /* Reset the game if it returned to the BIOS */
         jmp     .Lsoft_reset
@@ -134,8 +142,8 @@ RESET:
  */
 SYSTEM_INT1:
         /* Acknowlege IRQ, re-arm watchdog and return */
-	move.w  #4, 0x3c000c
-	move.b  %d0, 0x300001
+	move.w  #4, REG_IRQACK
+	move.b  %d0, REG_WATCHDOGW
         rte
 
 
@@ -144,15 +152,15 @@ SYSTEM_INT1:
  */
 SYSTEM_INT2:
         /* Acknowlege IRQ, re-arm watchdog and return */
-	move.w  #2, 0x3c000c
-	move.b  %d0, 0x300001
+	move.w  #2, REG_IRQACK
+	move.b  %d0, REG_WATCHDOGW
         rte
 
 
 /**
  * Return from USER subroutine
  * USER jmp to here, so the ret should go back
- * to to the last jsr 0x122 done in function RESET
+ * to to the last jsr USER done in function RESET
  */
 SYSTEM_RETURN:
         rts

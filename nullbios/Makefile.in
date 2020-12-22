@@ -58,7 +58,7 @@ $(ELF):	$(OBJS:%=%.o)
 	$(NGGCC) -nostartfiles -T bios.ld $^ -o $(ELF)
 
 %.o: %.S
-	$(NGAS) -c $< -o $@
+	$(NGGCC) -I../include -c $< -o $@
 
 $(SOUND_DRIVER):
 	$(MAKE) -C $(NULLSOUND)

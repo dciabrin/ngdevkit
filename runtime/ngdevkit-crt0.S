@@ -1,6 +1,6 @@
 /*
  * Bootstrap code for Neo-Geo
- * Copyright (c) 2015 Damien Ciabrini
+ * Copyright (c) 2015-2020 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -17,6 +17,10 @@
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <ngdevkit/asm/registers.h>
+#include <ngdevkit/asm/bios-ram.h>
+#include <ngdevkit/asm/bios-calls.h>
+
 	.global	rom_info_default
 	.global rom_handler_VBlank_default
 	.global rom_handler_Timer_default
@@ -30,21 +34,21 @@ _start:
          * Common exceptions point to handlers implemented in the BIOS
          */
    	dc.l	0x10f300		/* Reset: Initial SSP		  */
-	dc.l	0xc00402        	/* Reset: Initial PC		  */
-	dc.l	0xc00408               	/* Bus error			  */
-	dc.l	0xc0040e                /* Address error		  */
-	dc.l	0xc00414	        /* Illegal instruction		  */
-	dc.l	0xc0041a                /* Division by zero               */
-	dc.l	0xc0041a                /* CHK instruction		  */
-	dc.l	0xc0041a	        /* TRAPV instruction		  */
-	dc.l	0xc0041a		/* Privilege violation		  */
-	dc.l	0xc00420		/* Trace			  */
-	dc.l	0xc00426		/* Line 1010 - FPU opcode emu     */
-	dc.l	0xc00426		/* Line 1111 - FPU opcode emu     */
-	.fill	3,  4, 0xc00426 	/* -- unassigned, reserved -- 	  */
-	dc.l	0xc0042c		/* Uninitialized interrupt vector */
+	dc.l	BIOS_INIT_PC        	/* Reset: Initial PC		  */
+	dc.l	BIOS_EXC_BUS_ERROR    	/* Bus error			  */
+	dc.l	BIOS_EXC_ADDR_ERROR     /* Address error		  */
+	dc.l	BIOS_EXC_ILLEGAL_OP     /* Illegal instruction		  */
+	dc.l	BIOS_EXC_INVALID_OP     /* Division by zero               */
+	dc.l	BIOS_EXC_INVALID_OP     /* CHK instruction		  */
+	dc.l	BIOS_EXC_INVALID_OP     /* TRAPV instruction		  */
+	dc.l	BIOS_EXC_INVALID_OP	/* Privilege violation		  */
+	dc.l	BIOS_EXC_TRACE		/* Trace			  */
+	dc.l	BIOS_EXC_FPU_EMU	/* Line 1010 - FPU opcode emu     */
+	dc.l	BIOS_EXC_FPU_EMU	/* Line 1111 - FPU opcode emu     */
+	.fill	3,  4, 0xffffffff 	/* -- unassigned, reserved -- 	  */
+	dc.l	BIOS_UNINITIALIZED_INT  /* Uninitialized interrupt vector */
 	.fill	8,  4, 0xffffffff	/* -- unassigned, reserved --	  */
-	dc.l	0xc00432		/* Spurious interrupt		  */
+	dc.l	BIOS_SPURIOUS_INT	/* Spurious interrupt		  */
 	dc.l	rom_handler_VBlank     	/* Lvl 1 autovector (VBlank IRQ)  */
 	dc.l	rom_handler_Timer     	/* Lvl 2 autovector (Timer IRQ)   */
  	dc.l	0x00000000		/* Lvl 3 autovector (Cold reset)  */
@@ -108,9 +112,9 @@ rom_info_default:
  */
 rom_handler_VBlank_default:
 	/* If BIOS is booting, forward to the BIOS VBlank handler */
-	btst    #7, 0x10fd80
+	btst    #7, BIOS_SYSTEM_MODE
 	bne     .Ldisplayed.l
-	move.l  #0xc00438, %a0
+	move.l  #SYSTEM_INT1, %a0
 	jmp     (%a0)
 
         /* This part is only called once BIOS init has ended and the C
@@ -120,8 +124,8 @@ rom_handler_VBlank_default:
 .Ldisplayed:
         /* Ack IRQ and rearm watchdog timer */
 
-	move.w  #4, 0x3c000c
-	move.b  %d0, 0x300001
+	move.w  #4, REG_IRQACK
+	move.b  %d0, REG_WATCHDOGW
 
 	/* If user handler exists for Vblank, call it */
 	movem.l	%d0-%d7/%a0-%a7, -(%sp)
@@ -141,8 +145,8 @@ rom_handler_VBlank_default:
  */
 rom_handler_Timer_default:
         /* Ack IRQ and rearm watchdog timer */
-	move.w  #2, 0x3c000c
-	move.b  %d0, 0x300001
+	move.w  #2, REG_IRQACK
+	move.b  %d0, REG_WATCHDOGW
 	/* If user handler exists for Hblank, call it */
 	movem.l	%d0-%d7/%a0-%a7, -(%sp)
 	move.l	#rom_callback_Timer, %d0
@@ -163,7 +167,7 @@ rom_handler_Timer_default:
  */
 rom_mvs_startup_init_default:
         /* Rearm watchdog timer before init */
-        move.b	%d0, 0x300001
+        move.b	%d0, REG_WATCHDOGW
         rts
 
 /*
@@ -179,7 +183,7 @@ init_c_runtime:
 	beq	.Lclearbss
 .Lcopydata:
 	move.b	(%a0)+, (%a1)+
-	move.b	%d0, 0x300001
+	move.b	%d0, REG_WATCHDOGW
 	dbra	%d0, .Lcopydata
 
 .Lclearbss:
@@ -194,7 +198,7 @@ init_c_runtime:
 	beq	.Linitdone
 .Lcopybss:
 	move.b	#0, (%a0)+
-	move.b	%d0, 0x300001
+	move.b	%d0, REG_WATCHDOGW
 	dbra	%d0, .Lcopybss
 
 .Linitdone:
@@ -210,14 +214,14 @@ rom_title_default:
         move    #0x2700, %sr
 
         /* Ack pending IRQ and rearm watchdog timer */
-        move.w  #7, 0x3c000c
-        move.b  %d0, 0x300001
+        move.w  #7, REG_IRQACK
+        move.b  %d0, REG_WATCHDOGW
 
         /* Init the C part of the game cartridge */
         jsr init_c_runtime
 
         /* Switch to fix tiles from user bank */
-        move.b	#1, 0x3a001b
+        move.b	#1, REG_CRTFIX
 
         /* Enable interrupts and call game's main */
         move	#0x2000, %sr

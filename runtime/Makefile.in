@@ -58,7 +58,7 @@ ngdevkit-specs:
 	$(NGGCC) -std=c99 -fomit-frame-pointer -I../include -c $< -o $@
 
 %.o: %.S
-	$(NGAS) -I../include -c $< -o $@
+	$(NGGCC) -I../include -c $< -o $@
 
 install: install-objs install-specs
 
