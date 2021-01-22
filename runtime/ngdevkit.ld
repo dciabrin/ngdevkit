@@ -33,19 +33,13 @@ MEMORY {
 
 SECTIONS {
   .text : {
-    *(.text)
-    *(.text.*)
+    /* The link script depends on various user configured flags,
+     * and provides defaults for unspecified flags. */
 
-    /* Set cartridge-specific information (NGH, name, DIP switches...)
-     * Fallback to default values if unspecified by user at link time
-     */
+    /* ROM NGH ID */
     rom_NGH_ID = DEFINED(rom_NGH_ID)? rom_NGH_ID : 1337;
-    rom_info_JP = DEFINED(rom_info_JP)? rom_info_JP : rom_info_default;
-    rom_info_US = DEFINED(rom_info_US)? rom_info_US : rom_info_default;
-    rom_info_EU = DEFINED(rom_info_EU)? rom_info_EU : rom_info_default;
 
-    /* Eye-catcher: 0: done by BIOS, 1: done by game, 2: none
-     */
+    /* Eye-catcher: 0: done by BIOS, 1: done by game, 2: none */
     rom_eye_catcher_mode = DEFINED(rom_eye_catcher_mode)? rom_eye_catcher_mode : 0;
 
     /* Set cartridge-specific IRQ handlers.
@@ -69,6 +63,19 @@ SECTIONS {
     coin_sound = DEFINED(coin_sound)? coin_sound : 0;
     player_start = DEFINED(player_start)? player_start : 0;
 
+    /* The actual link of the text segment starts here */
+
+    /* Make sure crt0 is linked first */
+    *ngdevkit-crt0.o(.text)
+
+    /* ROM software DIP switches */
+    *(.text.softdip)
+
+    /* remaining code */
+    *(.text)
+    *(.text.*)
+
+    /* C++ specific sections */
     *(.ctors)
     *(.dtors)
     *(.eh_frame)

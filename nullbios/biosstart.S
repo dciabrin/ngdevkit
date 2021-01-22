@@ -20,6 +20,10 @@
 #include <ngdevkit/asm/registers.h>
 #include <ngdevkit/asm/bios-ram.h>
 
+#define ROM_NGH      0x108
+#define DIP_JP_PTR   0x116
+#define DIP_US_PTR   0x11a
+#define DIP_EU_PTR   0x11e
 #define USER         0x122
 #define PLAYER_START 0x128
 #define DEMO_END     0x12e
@@ -29,6 +33,9 @@
 #define COIN_DEPOSIT_CURRENT  0xd00021
 #define P1_CREDITS_BCD        0xd00034
 #define P2_CREDITS_BCD        0xd00035
+#define SLOT1_NGH             0xd00124
+#define SLOT1_SOFT_DIP        0xd00220
+
 
 /*
  * 68k exception vector table, 256 "vectors", 0x400 bytes
@@ -121,6 +128,7 @@ RESET:
 #if BIOS_ROM_HARDWARE != 0
         move.b  #0x80, BIOS_MVS_FLAG
         move.b  #0, P1_CREDITS_BCD
+        jsr     load_soft_dip
 #else
         move.b  #0x0, BIOS_MVS_FLAG
 #endif
@@ -312,4 +320,49 @@ CREDIT_DOWN:
         sbcd    %d0, %d1
         move.b  %d1, P1_CREDITS_BCD
 .Lp2_not_running:
+        rts
+
+
+load_soft_dip:
+        /* If this is the first time we see that ROM,
+         * record its default DIP setting in the backup RAM */
+        move.w  ROM_NGH, %d0
+        cmp.w   SLOT1_NGH, %d0
+        beq     .Lload_dip_from_bram
+        move.w  %d0, SLOT1_NGH
+
+#if BIOS_ROM_COUNTRY == 0
+        move.l  DIP_JP_PTR, %d0
+#elif BIOS_ROM_COUNTRY == 1
+        move.l  DIP_SU_PTR, %d0
+#else
+        move.l  DIP_EU_PTR, %d0
+#endif
+        /* The DIP structure points to the ROM name,
+         * skip it and move to DIP settings */
+        add.l   #0x10, %d0
+        movea.l %d0, %a0
+        lea     SLOT1_SOFT_DIP, %a1
+        moveq   #5, %d0
+.Lcopy_first_dip_from_rom:
+        move.b  (%a0)+, (%a1)+
+        dbra    %d0, .Lcopy_first_dip_from_rom
+
+        /* enum DIP must be processed to only keep the
+         * default value configured for each DIP */
+        moveq   #9, %d0
+.Lcopy_enum_dip_from_rom:
+        move.b  (%a0)+, %d1
+        lsr     #4, %d1
+        move.b  %d1, (%a1)+
+        dbra    %d0, .Lcopy_enum_dip_from_rom
+
+.Lload_dip_from_bram:
+        lea     SLOT1_SOFT_DIP, %a0
+        lea     BIOS_GAME_DIP, %a1
+        moveq   #15, %d0
+.Lcopy_dip_from_bram:
+        move.b  (%a0)+, (%a1)+
+        dbra    %d0, .Lcopy_dip_from_bram
+
         rts

@@ -34,6 +34,9 @@ SYSCALL_OBJS=\
   unlink \
   write
 NGDEVKIT_OBJS=\
+  soft-dip-jp \
+  soft-dip-us \
+  soft-dip-eu \
   bios-ram \
   ng_text_tall_args \
   ng_text_args \

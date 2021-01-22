@@ -21,7 +21,6 @@
 #include <ngdevkit/asm/bios-ram.h>
 #include <ngdevkit/asm/bios-calls.h>
 
-	.global	rom_info_default
 	.global rom_handler_VBlank_default
 	.global rom_handler_Timer_default
 	.global rom_mvs_startup_init_default
@@ -69,9 +68,9 @@ _start:
         dc.b    0x00			/* 1st tile of the logo */
 
 	/* Pointer to static Cartridge information (name, DIP, ...) */
-	dc.l	rom_info_JP
-	dc.l	rom_info_US
-	dc.l	rom_info_EU
+	dc.l	dip_jp_rom
+	dc.l	dip_us_rom
+	dc.l	dip_eu_rom
 
 	/* ROM Entry Point */
 	jmp     USER.l
@@ -95,15 +94,6 @@ SCODE:
 	dc.w	0x0002, 0xe048, 0xb02d, 0x0acf, 0x6606, 0xb22d, 0x0ad0, 0x6708
 	dc.w	0x5888, 0x51cf, 0xffd8, 0x3607, 0x4e75
 
-rom_info_default:
-	/* Default ROM name */
-	.ascii	"ngdevkit ROM    "
-	/* ROM DIP switches */
-	dc.w	0xffff
-	dc.w	0xffff
-	dc.w	0xff64
-	.fill	10,1,0
-	.ascii  "Dummy switch"
 
 
 /*
