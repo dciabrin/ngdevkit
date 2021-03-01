@@ -42,7 +42,7 @@ as mentionned in the main README.md:
     apt-get update
     apt-get install -y ngdevkit
     # the following dependencies are for ngdevkit's examples
-    apt-get install -y pkg-config autoconf zip imagemagick
+    apt-get install -y pkg-config autoconf zip imagemagick sox libsox-fmt-mp3
 
 Unlike regular ngdevkit on Linux, you need to install a windows-native
 version of ngdevkit-gngeo. You can download the latest available
@@ -100,7 +100,7 @@ tools:
     # Ubuntu 18.04 (Bionic) needs the ppa below for PyGame in python3
     # add-apt-repository ppa:thopiekar/pygame
     sudo apt-get update
-    sudo apt-get install gcc curl zip unzip imagemagick
+    sudo apt-get install gcc curl zip unzip imagemagick sox libsox-fmt-mp3
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     sudo apt-get build-dep $GCC_VERSION_PKG
     sudo apt-get build-dep --arch-only sdcc

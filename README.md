@@ -49,7 +49,7 @@ of dependencies:
     # add-apt-repository -y ppa:thopiekar/pygame
     apt-get update
     apt-get install ngdevkit ngdevkit-gngeo
-    apt-get install pkg-config autoconf zip imagemagick
+    apt-get install pkg-config autoconf zip imagemagick sox libsox-fmt-mp3
 
 If you're running on Windows 10, you can also use those pre-built
 deb binaries with [WSL][wsl]. It is complemented by a pre-built
@@ -65,9 +65,9 @@ packages, available in the ngdevkit tap:
     brew install ngdevkit ngdevkit-gngeo
     # make sure you use brew's python3 in your shell
     export PATH=/usr/local/opt/python3/bin:$PATH
-    pip3 install pygame==2.0.0.dev6
+    pip3 install pygame
     # the remaining packages are required for the examples
-    brew install pkg-config autoconf automake zip imagemagick
+    brew install pkg-config autoconf automake zip imagemagick sox
 
 Once ngdevkit packages are installed, you can clone the
 [ngdevkit-examples][examples] repository and build all the examples
@@ -113,7 +113,7 @@ and SDCC.
 
 For example, on Debian Buster, you can install the dependencies with:
 
-    apt-get install autoconf autoconf-archive automake gcc curl zip unzip imagemagick
+    apt-get install autoconf autoconf-archive automake gcc curl zip unzip
     apt-get install libsdl2-dev
     apt-get install python3-pygame
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
@@ -123,6 +123,8 @@ For example, on Debian Buster, you can install the dependencies with:
     # install build-dependency packages
     apt-get build-dep $GCC_VERSION_PKG
     apt-get build-dep --arch-only sdcc
+    # dependencies for the example ROMs
+    apt-get install imagemagick sox libsox-fmt-mp3
     # optional: install GLEW for OpenGL+GLSL shaders in GnGeo
     apt-get install libglew-dev
 
@@ -133,14 +135,15 @@ as explained later in this manual. Install the dependencies with:
 
     brew install gmake
     brew install autoconf-archive
-    brew install zip imagemagick
-    brew install sdl2 sdl2_image
+    brew install glew sdl2 sdl2_image
     brew install python3
     # make sure you use brew's python3 to install pygame
     export PATH=/usr/local/opt/python3/bin:$PATH
-    pip3 install pygame==2.0.0.dev6
+    pip3 install pygame
     brew deps gcc | xargs brew install
     brew deps sdcc | xargs brew install
+    # dependencies for the example ROMs
+    brew install zip imagemagick sox
 
 Compiling the devkit for Windows 10 is supported via [WSL][wsl],
 detailed setup and build instructions are available in the
