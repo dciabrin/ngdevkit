@@ -1,0 +1,100 @@
+name: Build and publish nightly
+on:
+  push:
+    branches:
+      - 'master'
+    paths-ignore:
+      - 'README*.md'
+jobs:
+  linux:
+    name: "Linux build"
+    runs-on: ubuntu-latest
+    env:
+      PREFIX: "/usr"
+      PY3PATH: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository -y ppa:dciabrin/ngdevkit
+          # bionic lacks python3-pygame, so install it from this ppa
+          sudo add-apt-repository -y ppa:thopiekar/pygame
+          sudo apt-get update -y
+          sudo apt-get install -y ngdevkit-toolchain python3 zip  pkg-config
+
+      - name: Build ngdevkit
+        run: ./.github/scripts/build.sh
+
+      - name: Install dependencies for ngdevkit-examples
+        run: >
+          sudo apt-get install -y ngdevkit-gngeo python3-pygame imagemagick
+          sox libsox-fmt-mp3 libglew-dev libsdl2-dev
+
+      - name: Test by compiling ngdevkit-examples
+        run: ./.github/scripts/test.sh
+
+  macos:
+    name: "macOS build"
+    runs-on: macos-latest
+    env:
+      PREFIX: "/usr/local"
+      PY3PATH: "/usr/local/opt/python3/bin"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Dependencies
+        run: |
+          brew tap dciabrin/ngdevkit
+          brew install automake ngdevkit-toolchain python3 zip pkg-config
+          $PY3PATH/pip3 install pygame
+
+      - name: Build
+        run: ./.github/scripts/build.sh
+
+      - name: Install dependencies for ngdevkit-examples
+        run: brew install ngdevkit-gngeo imagemagick sox glew sdl2 sdl2_image
+
+      - name: Test by compiling ngdevkit-examples
+        run: ./.github/scripts/test.sh
+
+  deploy_deb:
+    name: "deb: trigger Launchpad rebuild"
+    runs-on: ubuntu-latest
+    needs: [linux, macos]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: "Launchpad: trigger nightly deb rebuild"
+        run: .ci/trigger-launchpad-build.sh --slug="~dciabrin/ngdevkit/+git/ngdevkit" --name="Travis%20Deploy"
+        env:
+          LAUNCHPAD_TOKEN: ${{ secrets.LAUNCHPAD_TOKEN }}
+          LAUNCHPAD_TOKEN_SECRET: ${{ secrets.LAUNCHPAD_TOKEN_SECRET }}
+
+  deploy_brew:
+    name: "brew: trigger bottle rebuild"
+    runs-on: ubuntu-latest
+    needs: [linux, macos]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: "Brew: push new nightly revision and bottle"
+        run: |
+          git config --global user.name 'CI build bot'
+          git config --global user.email '<>'
+          git config --global url."https://api@github.com/".insteadOf "https://github.com/"
+          git clone https://github.com/dciabrin/homebrew-ngdevkit .ci/homebrew-ngdevkit
+          .ci/homebrew-ngdevkit/.ci/bump-project-nightly-build.sh ngdevkit
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: "Cleanup old nightly tags"
+        run: .ci/gc-nightly-tags.sh --user=dciabrin --repo=ngdevkit --tag-regex='^refs/tags/nightly-[0-9]*'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}

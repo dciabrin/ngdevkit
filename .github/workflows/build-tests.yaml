@@ -1,0 +1,61 @@
+name: Build and Test
+on:
+  push:
+    branches-ignore:
+      - 'master'
+    paths-ignore:
+      - 'README*.md'
+jobs:
+  linux:
+    name: "Linux build"
+    runs-on: ubuntu-latest
+    env:
+      PREFIX: "/usr"
+      PY3PATH: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository -y ppa:dciabrin/ngdevkit
+          # bionic lacks python3-pygame, so install it from this ppa
+          sudo add-apt-repository -y ppa:thopiekar/pygame
+          sudo apt-get update -y
+          sudo apt-get install -y ngdevkit-toolchain python3 zip  pkg-config
+
+      - name: Build ngdevkit
+        run: ./.github/scripts/build.sh
+
+      - name: Install dependencies for ngdevkit-examples
+        run: >
+          sudo apt-get install -y ngdevkit-gngeo python3-pygame imagemagick
+          sox libsox-fmt-mp3 libglew-dev libsdl2-dev
+
+      - name: Test by compiling ngdevkit-examples
+        run: ./.github/scripts/test.sh
+
+  macos:
+    name: "macOS build"
+    runs-on: macos-latest
+    env:
+      PREFIX: "/usr/local"
+      PY3PATH: "/usr/local/opt/python3/bin"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Dependencies
+        run: |
+          brew tap dciabrin/ngdevkit
+          brew install automake ngdevkit-toolchain python3 zip pkg-config
+          $PY3PATH/pip3 install pygame
+
+      - name: Build
+        run: ./.github/scripts/build.sh
+
+      - name: Install dependencies for ngdevkit-examples
+        run: brew install ngdevkit-gngeo imagemagick sox glew sdl2 sdl2_image
+
+      - name: Test by compiling ngdevkit-examples
+        run: ./.github/scripts/test.sh
