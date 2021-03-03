@@ -181,7 +181,7 @@ build/gngeo: gngeo
 	mkdir -p build/gngeo && \
 	cd build/gngeo && \
 	$$CURPWD/gngeo/configure --program-prefix=ngdevkit- $(GNGEO_BUILD_FLAGS) \
-	CPPFLAGS="-I$(prefix)/include" CFLAGS="-I$(prefix)/include -DGNGEORC=\\\"ngdevkit-gngeorc\\\"" LDFLAGS="-L$(prefix)/lib" PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig" \
+	CPPFLAGS="$$CPPFLAGS -Wno-implicit-function-declaration -I$(prefix)/include" CFLAGS="$$CFLAGS -Wno-implicit-function-declaration -I$(prefix)/include -DGNGEORC=\\\"ngdevkit-gngeorc\\\"" LDFLAGS="-L$(prefix)/lib" PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig" \
 	-v && $(MAKE) -j1 pkgdatadir=$(GNGEOPKGDATADIR)
 
 install-gngeo: $(GNGEO)
