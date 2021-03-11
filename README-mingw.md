@@ -71,6 +71,7 @@ reference that path with the equivalent WSL mount point as follows:
 You can now clone the examples and compile them with:
 
     git clone --recursive https://github.com/dciabrin/ngdevkit-examples examples
+    cd examples
     autoreconf -iv
     ./configure --enable-mingw
     make
