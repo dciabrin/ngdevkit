@@ -1,11 +1,19 @@
 AC_INIT([ngdevkit], [0.2])
 PKG_INSTALLDIR
 
-AC_PATH_PROGS([python], [python3 python], [no])
-if test x"$python" = x"no"; then
-  AC_MSG_ERROR([no python detected.])
+AC_ARG_WITH([python],
+            AS_HELP_STRING([--with-python=path], [Absolute path to the python 3 binary]))
+
+if test -n "$with_python"; then
+  python="$with_python"
+  AC_SUBST([python])
+else
+  AC_PATH_PROGS([python], [python3 python], [no])
+  if test x"$python" = x"no"; then
+    AC_MSG_ERROR([no python detected.])
+  fi
 fi
-AC_MSG_CHECKING([whether detected python is at least python3])
+AC_MSG_CHECKING([whether python is at least python3])
 [pyver=`$python -c 'import sys; print(sys.version_info[0])'`]
 if test $pyver -ge 3; then
   AC_MSG_RESULT([yes])
@@ -47,6 +55,10 @@ AC_ARG_ENABLE([mingw],
 	      AS_IF([test "x$enable_mingw" = xyes], [ENABLE_MINGW="yes"], [ENABLE_MINGW="no"]),
               [ENABLE_MINGW="no"])
 AC_SUBST([EXTERNAL_MINGW])
+AC_ARG_ENABLE([msys2],
+	      AS_HELP_STRING([--enable-msys2], [Build for MSYS2, with Win10-native gngeo]),
+	      AS_IF([test "x$enable_msys2" = xyes], [ENABLE_MSYS2="yes"], [ENABLE_MSYS2="no"]),
+              [ENABLE_MSYS2="no"])
 
 AC_ARG_WITH([sdl2],
             AS_HELP_STRING([--with-sdl2=path], [Absolute path to file SDL2.dll]))
@@ -113,6 +125,10 @@ fi
 AC_PATH_PROG([git], [git])
 AC_PATH_PROG([zip], [zip])
 
+EXTRA_BUILD_CMD_TOOLCHAIN=true
+EXTRA_BUILD_FLAGS_TOOLCHAIN=
+EXTRA_BUILD_CMD=true
+
 if test x"$ENABLE_MINGW" = x"yes"; then
   AC_PATH_PROG([mingwgcc], [`uname -m`-w64-mingw32-gcc], [no])
   AS_IF([test x"$mingwgcc" = x"no"], [AC_MSG_ERROR([MinGW gcc not found in path.])])
@@ -157,16 +173,75 @@ if test x"$ENABLE_MINGW" = x"yes"; then
 
   EMUDBG_BUILD_FLAGS="--host=x86_64-w64-mingw32 --build=\`\$\$CURPWD/emudbg/config.guess\`"
   GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-mingw --host=x86_64-w64-mingw32 --build=\`\$\$CURPWD/gngeo/config.guess\` $GLEW_FLAGS"
+
+elif test x"$ENABLE_MSYS2" = x"yes"; then
+  # dnl technically, this is still relying on MinGW
+  ENABLE_MINGW=yes
+  arch=`uname -m | sed 's/.*_//'`
+  export PATH=/mingw${arch}/bin:$PATH
+  AC_PATH_PROG([mingwgcc], [`uname -m`-w64-mingw32-gcc], [no])
+  AS_IF([test x"$mingwgcc" = x"no"], [AC_MSG_ERROR([MinGW gcc not found in path.])])
+
+  AC_MSG_CHECKING([for zlib1.dll in MinGW distribution])
+  ZLIB1_DLL=/mingw${arch}/bin/zlib1.dll
+  if test -f "$ZLIB1_DLL"; then
+    AC_MSG_RESULT([$ZLIB1_DLL])
+  else
+    AC_MSG_ERROR([Could not find zlib1.dll on disk])
+  fi
+
+  AC_MSG_CHECKING([for SDL2])
+  if test -z "$with_sdl2"; then
+    with_sdl2=/mingw${arch}/bin/SDL2.dll
+  fi
+  if test x"$with_sdl2" != x"no" && test -f "$with_sdl2"; then
+    AC_MSG_RESULT([$with_sdl2])
+    SDL2_DLL=$with_sdl2
+  else
+    AC_MSG_ERROR(['$with_sdl2' is not a valid file on disk])
+  fi
+
+  AC_MSG_CHECKING([for GLEW])
+  if test -z "$with_glew"; then
+    with_glew=/mingw${arch}/bin/glew32.dll
+  fi
+  if test x"$with_glew" != x"no" && test -f "$with_glew"; then
+    AC_MSG_RESULT([$with_glew])
+    GLEW_DLL=$with_glew
+  else
+    AC_MSG_RESULT([no])
+  fi
+
+  if test x"$EXTERNAL_GNGEO" != x"yes"; then
+    AC_MSG_CHECKING([for GnGeo installation directory])
+    if test -z "$GNGEO_INSTALL_PATH"; then
+      GNGEO_INSTALL_PATH="$prefix/ngdevkit-gngeo"
+    fi
+    AC_MSG_RESULT([$GNGEO_INSTALL_PATH])
+  fi
+
+  EMUDBG_BUILD_FLAGS="--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 CC=${mingwgcc}"
+  GNGEO_ACLOCAL_PATH="-I/mingw${arch}/share/aclocal"
+  GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-mingw --enable-msys2 CC=${mingwgcc} $GLEW_FLAGS"
+  EXTRA_BUILD_CMD='export PATH=/mingw'${arch}'/bin:$$PATH'
+  EXTRA_BUILD_CMD_TOOLCHAIN='export MSYSTEM_CHOST=x86_64-w64-mingw32 && export MSYSTEM=MINGW64 && export PATH=/mingw64/bin:$$$$CURPWD/$$(@)/bin:$$$$PATH'
+  EXTRA_BUILD_FLAGS_TOOLCHAIN='--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32'
 else
   GNGEO_BUILD_FLAGS="--prefix=$prefix"
 fi
 
+AC_SUBST([EXTRA_BUILD_CMD_TOOLCHAIN])
+AC_SUBST([EXTRA_BUILD_FLAGS_TOOLCHAIN])
+AC_SUBST([EXTRA_BUILD_CMD])
+
 AC_SUBST([ENABLE_MINGW])
+AC_SUBST([ENABLE_MSYS2])
 AC_SUBST([ZLIB1_DLL])
 AC_SUBST([SDL2_DLL])
 AC_SUBST([GLEW_FLAGS])
 AC_SUBST([GLEW_DLL])
 AC_SUBST([EMUDBG_BUILD_FLAGS])
+AC_SUBST([GNGEO_ACLOCAL_PATH])
 AC_SUBST([GNGEO_BUILD_FLAGS])
 AC_SUBST([GNGEO_INSTALL_PATH])
 AC_SUBST([NGDK_GCC_SEARCH_PATH])

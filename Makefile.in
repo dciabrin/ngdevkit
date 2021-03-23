@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2019 Damien Ciabrini
+# Copyright (c) 2015-2021 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -62,12 +62,12 @@ toolchain:
 	$(GIT) clone $(TOOLCHAIN_GIT) $@
 
 build-toolchain: | download-toolchain build
-	$(MAKE) -Ctoolchain all BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
+	$(MAKE) -Ctoolchain all BUILD=$(PWD)/build DESTDIR= prefix=$(prefix) EXTRA_BUILD_CMD='$(EXTRA_BUILD_CMD_TOOLCHAIN)' EXTRA_BUILD_FLAGS='$(EXTRA_BUILD_FLAGS_TOOLCHAIN)'
 
 install-toolchain: $(prefix)/bin
 
 $(prefix)/bin: build/ngbinutils build/nggcc build/nggdb build/ngnewlib build/ngsdcc
-	$(MAKE) -Ctoolchain install BUILD=$(PWD)/build DESTDIR= prefix=$(prefix)
+	$(MAKE) -Ctoolchain install BUILD=$(PWD)/build DESTDIR= prefix=$(prefix) EXTRA_BUILD_CMD='$(EXTRA_BUILD_CMD_TOOLCHAIN)' EXTRA_BUILD_FLAGS='$(EXTRA_BUILD_FLAGS_TOOLCHAIN)'
 
 distclean-toolchain:
 	rm -rf toolchain
@@ -77,11 +77,13 @@ distclean-toolchain:
 # ------ ngdevkit ------
 
 build-tools:
+	$(EXTRA_BUILD_CMD) && \
 	for i in nullsound nullbios runtime include tools; do \
 	  $(MAKE) -C $$i; \
 	done
 
 install-tools:
+	$(EXTRA_BUILD_CMD) && \
 	for i in nullsound nullbios runtime include tools; do \
 	  $(MAKE) -C $$i install; \
 	done
@@ -132,6 +134,7 @@ build-emudbg: build/emudbg
 build/emudbg: emudbg
 	@echo compiling emudbg...
 	CURPWD=$$(pwd) && \
+	$(EXTRA_BUILD_CMD) && \
 	mkdir -p build/emudbg && \
 	cd build/emudbg && \
 	$$CURPWD/emudbg/configure --prefix=$(prefix) \
@@ -169,7 +172,7 @@ endif
 
 gngeo:
 	$(GIT) clone --branch ngdevkit $(GNGEO_GIT) $@ && \
-	cd gngeo && autoreconf -iv
+	cd gngeo && autoreconf -iv $(GNGEO_ACLOCAL_PATH)
 
 build-gngeo: build/gngeo
 
@@ -178,6 +181,7 @@ build-emulator-config: $(GNGEO_CFG)
 build/gngeo: gngeo
 	@echo compiling gngeo...
 	CURPWD=$$(pwd) && \
+	$(EXTRA_BUILD_CMD) && \
 	mkdir -p build/gngeo && \
 	cd build/gngeo && \
 	$$CURPWD/gngeo/configure --program-prefix=ngdevkit- $(GNGEO_BUILD_FLAGS) \
@@ -211,6 +215,9 @@ SHELL_BIN_PATH := $(prefix)/bin
 ifeq ($(EXTERNAL_GNGEO), no)
 ifeq ($(ENABLE_MINGW), yes)
 SHELL_BIN_PATH := $(SHELL_BIN_PATH):$(GNGEO_INSTALL_PATH)
+endif
+ifeq ($(ENABLE_MSYS2), yes)
+SHELL_BIN_PATH := /mingw64/bin:$(SHELL_BIN_PATH)
 endif
 endif
 
