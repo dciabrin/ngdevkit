@@ -33,6 +33,38 @@ jobs:
       - name: Test by compiling ngdevkit-examples
         run: ./.github/scripts/test.sh
 
+  win:
+    name: "Windows native MSYS2 build"
+    runs-on: windows-latest
+    env:
+      PY3PATH: ""
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install:
+            git autoconf automake make zip
+            mingw-w64-x86_64-pkg-config mingw-w64-x86_64-python
+
+      - name: Install ngdevkit dependencies
+        run: |
+          echo -e "[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
+          pacman -Sy
+          pacman -S --noconfirm mingw-w64-x86_64-ngdevkit-toolchain
+
+      - name: Build
+        run: ./.github/scripts/build-msys2.sh
+
   macos:
     name: "macOS build"
     runs-on: macos-latest
@@ -61,7 +93,7 @@ jobs:
   deploy_deb:
     name: "deb: trigger Launchpad rebuild"
     runs-on: ubuntu-latest
-    needs: [linux, macos]
+    needs: [linux, macos, win]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -75,7 +107,7 @@ jobs:
   deploy_brew:
     name: "brew: trigger bottle rebuild"
     runs-on: ubuntu-latest
-    needs: [linux, macos]
+    needs: [linux, macos, win]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -91,6 +123,34 @@ jobs:
           .ci/homebrew-ngdevkit/.ci/bump-project-nightly-build.sh ngdevkit
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  deploy_msys2:
+    name: "msys2: trigger package rebuild"
+    runs-on: ubuntu-latest
+    needs: [linux, macos, win]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: "MSYS2: push new nightly revision and rebuild package repository"
+        run: |
+          git config --global user.name 'CI build bot'
+          git config --global user.email '<>'
+          git config --global url."https://api@github.com/".insteadOf "https://github.com/"
+          git clone https://github.com/dciabrin/msys2-ngdevkit .ci/msys2-ngdevkit
+          .ci/msys2-ngdevkit/.ci/bump-project-nightly-build.sh ngdevkit
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  cleanup_tags:
+    name: "Cleanup tags and artefacts"
+    runs-on: ubuntu-latest
+    needs: [deploy_deb, deploy_brew, deploy_msys2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
 
       - name: "Cleanup old nightly tags"
         run: .ci/gc-nightly-tags.sh --user=dciabrin --repo=ngdevkit --tag-regex='^refs/tags/nightly-[0-9]*'
