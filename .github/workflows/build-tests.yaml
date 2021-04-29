@@ -33,6 +33,38 @@ jobs:
       - name: Test by compiling ngdevkit-examples
         run: ./.github/scripts/test.sh
 
+  win:
+    name: "Windows native MSYS2 build"
+    runs-on: windows-latest
+    env:
+      PY3PATH: ""
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install:
+            git autoconf automake make zip
+            mingw-w64-x86_64-pkg-config mingw-w64-x86_64-python
+
+      - name: Install ngdevkit dependencies
+        run: |
+          echo -e "[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
+          pacman -Sy
+          pacman -S --noconfirm mingw-w64-x86_64-ngdevkit-toolchain
+
+      - name: Build
+        run: ./.github/scripts/build-msys2.sh
+
   macos:
     name: "macOS build"
     runs-on: macos-latest
