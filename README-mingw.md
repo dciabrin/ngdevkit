@@ -1,4 +1,11 @@
-# Using ngdevkit on the Windows platform
+# Deprecated: Using ngdevkit on the Windows platform
+
+_This file documents the old way of building and using ngdevkit
+for Windows 10, via WSL. Windows 10 support is not achieved
+via MSYS2. Have a look at [the main README](README.md) for
+more details, or [the dedicated MSYS2 README](README-msys2.md)
+to see how to build ngdevkit from source on Windows 10._
+
 
 If you run Windows 10, you can consume or compile ngdevkit via [WSL][wsl],
 the Windows Subsystem for Linux:
