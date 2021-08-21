@@ -125,14 +125,15 @@ RESET:
         move.b  %d0, REG_WATCHDOGW
 
         /* Set initial system information in RAM */
-#if BIOS_ROM_HARDWARE != 0
-        move.b  #0x80, BIOS_MVS_FLAG
+
         /* Init credits information, and assume credits
          * are always stored in P1_CREDITS_BCD
-        */
+         */
         move.b  #0, BIOS_STATCURNT
         move.b  #0, BIOS_STATCURNT_RAW
         move.b  #0, P1_CREDITS_BCD
+#if BIOS_ROM_HARDWARE != 0
+        move.b  #0x80, BIOS_MVS_FLAG
         jsr     load_soft_dip
 #else
         move.b  #0x0, BIOS_MVS_FLAG
@@ -289,13 +290,14 @@ SYSTEM_IO:
 .Lstart_status:
         /* start status */
         move.b  REG_STATUS_B, %d0
+        andi.b  #0xf, %d0
         not.b   %d0
         /* bits 1 and 3 from reg_status_b (start buttons)
          * to bit 1 and 2 in %d0 (for bios_start_flag)
          */
         move.b  %d0, %d1
         andi.b  #0x4, %d1
-        lsr     #1, %d1
+        lsr.b   #1, %d1
         andi.b  #0x1, %d0
         or.b    %d1, %d0
         move.b  BIOS_STATCURNT, %d1
@@ -316,11 +318,12 @@ SYSTEM_IO:
          * [only when game mode is engaged]
          *   . credits are decremented for each bit still set
          *     in bios_start_flag when the callback exits
-         * [before the game is started]
+         * [before the game is started - MVS only]
          *   . hitting 2UP start means that two players want
          *     to start, and it only runs the callback if
          *     enough credits are available
          */
+#if BIOS_ROM_HARDWARE != 0
         cmp.b   #2, BIOS_USER_MODE
         beq     .Lend_of_coin_prechecks
         btst    #1, %d0
@@ -331,12 +334,15 @@ SYSTEM_IO:
 .L2up_no_pressed:
         cmp.b   #1, P1_CREDITS_BCD
         blt     .Lnostart
+#endif
 .Lend_of_coin_prechecks:
         move.b  %d0, BIOS_START_FLAG
         jsr     PLAYER_START.l
         cmp.b   #2, BIOS_USER_MODE
         bne     .Lnostart
+#if BIOS_ROM_HARDWARE != 0
         jsr     CREDIT_DOWN.l
+#endif
 .Lnostart:
         rts
 
