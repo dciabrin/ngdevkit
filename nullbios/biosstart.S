@@ -214,7 +214,7 @@ NO_OP:
 
 
 SYSTEM_IO:
-        /* check player 1 coin button */
+        /* player 1 input */
         move.b  BIOS_P1CURRENT, %d1
         move.b  %d1, BIOS_P1PREVIOUS
         move.b  REG_P1CNT, %d0
@@ -224,15 +224,15 @@ SYSTEM_IO:
         and.b   %d1, %d0
         move.b  %d0, BIOS_P1CHANGE
 
-        /* check player 2 coin button */
-        move.b  BIOS_P1CURRENT, %d1
-        move.b  %d1, BIOS_P1PREVIOUS
-        move.b  REG_P1CNT, %d0
+        /* player 2 input */
+        move.b  BIOS_P2CURRENT, %d1
+        move.b  %d1, BIOS_P2PREVIOUS
+        move.b  REG_P2CNT, %d0
         not.b   %d0
-        move.b  %d0, BIOS_P1CURRENT
+        move.b  %d0, BIOS_P2CURRENT
         eor.b   %d0, %d1
         and.b   %d1, %d0
-        move.b  %d0, BIOS_P1CHANGE
+        move.b  %d0, BIOS_P2CHANGE
 
 #if BIOS_ROM_HARDWARE != 0
         /* coin deposit status (only check P1 and P2)*/
