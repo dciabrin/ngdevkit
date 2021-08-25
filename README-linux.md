@@ -9,7 +9,7 @@ and PyGame 2. The emulator requires SDL 2 and optionally OpenGL
 libraries.
 
 The examples require ImageMagick for all the graphics
-trickery and sox for audio convertion purpose.
+trickery and sox for audio conversion purpose.
 
 For example, on Debian Focal (20.04), you can install the dependencies with:
 
