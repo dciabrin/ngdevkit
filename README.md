@@ -88,7 +88,7 @@ Then, in order to install pre-built ngdevkit packages, add the
 ngdevkit repository into your MSYS2 installation, and install the
 required packages:
 
-    echo -e '\n[ngdevkit]\nSigLevel = PackageOptional\nServer = https://dciabrin.net/msys2-ngdevkit/$arch' >> /etc/pacman.conf
+    echo -e "\n[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
     pacman -Sy
     pacman -S mingw-w64-x86_64-ngdevkit mingw-w64-x86_64-ngdevkit-gngeo
     # the remaining packages are only required for the examples
