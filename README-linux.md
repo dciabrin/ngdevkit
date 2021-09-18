@@ -11,14 +11,16 @@ libraries.
 The examples require ImageMagick for all the graphics
 trickery and sox for audio conversion purpose.
 
-For example, on Debian Focal (20.04), you can install the dependencies with:
+For example, on Ubuntu Focal (20.04), you can install the dependencies with:
 
     apt-get install autoconf autoconf-archive automake gcc curl zip unzip
     apt-get install libsdl2-dev
     apt-get install python3-pygame
+    apt-get install readline-dev
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     # make sure you have src packages enabled for dependency information
-    echo "deb-src http://deb.debian.org/debian focal main" > /etc/apt/sources.list.d/ngdevkit.list
+    echo "deb-src http://archive.ubuntu.com/ubuntu/ focal main restricted" > /etc/apt/sources.list.d/ngdevkit.list
+    echo "deb-src http://archive.ubuntu.com/ubuntu/ focal universe" >> /etc/apt/sources.list.d/ngdevkit.list
     apt-get update
     # install build-dependency packages
     apt-get build-dep $GCC_VERSION_PKG
@@ -28,6 +30,11 @@ For example, on Debian Focal (20.04), you can install the dependencies with:
     # dependencies for the example ROMs
     apt-get install imagemagick sox libsox-fmt-mp3
 
+Debian users (for example Buster) would install the dependencies above
+by updating the src packages URL as follows:
+
+    echo "deb-src http://deb.debian.org/debian buster main" > /etc/apt/sources.list.d/ngdevkit.list
+    # the remaining dependencies are the same
 
 ## Building the toolchain
 
