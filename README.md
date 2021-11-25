@@ -53,6 +53,14 @@ of dependencies for the examples ROMs:
     # the remaining packages are only requred for the examples
     apt-get install pkg-config autoconf zip imagemagick sox libsox-fmt-mp3
 
+If you are running a Fedora distribution, pre-built packages are
+available in COPR, and can be installed with the following commands:
+
+    dnf copr enable dciabrin/ngdevkit
+    dnf install ngdevkit ngdevkit-gngeo
+    # the remaining packages are only requred for the examples
+    dnf install install pkg-config autoconf zip ImageMagick sox
+
 #### macOS
 
 If you are running on macOS, you can install [brew][brew]
