@@ -21,6 +21,8 @@
 #include <ngdevkit/asm/bios-ram.h>
 
 #define ROM_NGH      0x108
+#define ROM_BRAM_PTR 0x10e
+#define ROM_BRAM_LEN 0x112
 #define DIP_JP_PTR   0x116
 #define DIP_US_PTR   0x11a
 #define DIP_EU_PTR   0x11e
@@ -35,6 +37,7 @@
 #define P2_CREDITS_BCD        0xd00035
 #define SLOT1_NGH             0xd00124
 #define SLOT1_SOFT_DIP        0xd00220
+#define SLOT1_BRAM_DATA       0xd00320
 
 
 /*
@@ -135,6 +138,7 @@ RESET:
 #if BIOS_ROM_HARDWARE != 0
         move.b  #0x80, BIOS_MVS_FLAG
         jsr     load_soft_dip
+        jsr     load_game_data_from_bram
 #else
         move.b  #0x0, BIOS_MVS_FLAG
 #endif
@@ -168,6 +172,11 @@ soft_reset:
         bset    #7, BIOS_SYSTEM_MODE
         /* Call USER with args from BIOS_USER_REQUEST and BIOS_USER_MODE */
         jsr     USER.l
+
+#if BIOS_ROM_HARDWARE != 0
+        /* Save game's data to backup RAM at every reset */
+        jsr     save_game_data_to_bram
+#endif
 
         /* If there are no credits left, reset to demo mode */
         cmp.b   #0, P1_CREDITS_BCD
@@ -411,4 +420,30 @@ load_soft_dip:
         move.b  (%a0)+, (%a1)+
         dbra    %d0, .Lcopy_dip_from_bram
 
+        rts
+
+
+load_game_data_from_bram:
+        lea     SLOT1_BRAM_DATA, %a0
+        movea.l ROM_BRAM_PTR, %a1
+        move.w  ROM_BRAM_LEN, %d0
+        cmpi.w  #0, %d0
+        beq     .Lend_copy_from_bram
+.Lcopy_from_bram:
+        move.b  (%a0)+, (%a1)+
+        dbra    %d0, .Lcopy_from_bram
+.Lend_copy_from_bram:
+        rts
+
+
+save_game_data_to_bram:
+        lea     SLOT1_BRAM_DATA, %a1
+        movea.l ROM_BRAM_PTR, %a0
+        move.w  ROM_BRAM_LEN, %d0
+        cmpi.w  #0, %d0
+        beq     .Lend_copy_to_bram
+.Lcopy_to_bram:
+        move.b  (%a0)+, (%a1)+
+        dbra    %d0, .Lcopy_to_bram
+.Lend_copy_to_bram:
         rts

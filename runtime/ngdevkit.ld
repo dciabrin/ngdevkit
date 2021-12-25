@@ -32,6 +32,10 @@ MEMORY {
 }
 
 SECTIONS {
+  .bss.bram ORIGIN(RAM) : SUBALIGN(0) {
+    *(.bss.bram)
+  } >RAM =0xffffffff
+
   .text : {
     /* The link script depends on various user configured flags,
      * and provides defaults for unspecified flags. */
@@ -64,6 +68,8 @@ SECTIONS {
     player_start = DEFINED(player_start)? player_start : 0;
 
     /* The actual link of the text segment starts here */
+    rom_mem_backup = DEFINED(rom_mem_backup)? rom_mem_backup : ORIGIN(RAM);
+    rom_mem_backup_size = DEFINED(rom_mem_backup_size)? rom_mem_backup_size : SIZEOF(.bss.bram);
 
     /* Make sure crt0 is linked first */
     *ngdevkit-crt0.o(.text)
@@ -104,6 +110,7 @@ SECTIONS {
   __rodata_end = __rodata_start + SIZEOF(.rodata);
 
   __data_start = __rodata_end ;
+  __data_start_in_ram = DEFINED(__data_start_in_ram)? __data_start_in_ram : ( rom_mem_backup + rom_mem_backup_size );
   .data : AT(__data_start) {
     *(.data)
     *(.data.*)

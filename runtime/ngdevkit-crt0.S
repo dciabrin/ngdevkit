@@ -62,8 +62,8 @@ _start:
 	.ascii	"NEO-GEO\0"		/* Magic bytes */
 	dc.w	rom_NGH_ID		/* NGH number (cartridge UID) */
 	dc.l	0x00100000              /* Program size in bytes */
-	dc.l	0x00100000		/* Debug DIP pointer */
-	dc.w   	0x0000                  /* Size of DIP data */
+	dc.l	rom_mem_backup          /* MVS: start of RAM to backup */
+	dc.w	rom_mem_backup_size     /* MVS: backup size */
 	dc.b	rom_eye_catcher_mode    /* BIOS shows logo at startup */
         dc.b    0x00			/* 1st tile of the logo */
 
@@ -169,7 +169,7 @@ init_c_runtime:
 	move.l	#__data_end, %d0
 	sub.l	#__data_start, %d0
 	movea.l	#__data_start, %a0
-	movea.l	#0x100000, %a1
+	movea.l	#__data_start_in_ram, %a1
 	tst	%d0
 	beq	.Lclearbss
 .Lcopydata:
@@ -181,7 +181,7 @@ init_c_runtime:
 	/* Zero out bss segment */
 	move.l	#__data_end, %d0
 	sub.l	#__data_start, %d0
-	add.l	#0x100000, %d0
+	add.l	#__data_start_in_ram, %d0
 	movea.l	%d0, %a0
 	move.l	#__bss_end, %d0
 	sub.l	#__bss_start, %d0
