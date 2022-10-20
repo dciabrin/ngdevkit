@@ -1,7 +1,7 @@
 # Deprecated: Using ngdevkit on the Windows platform
 
-_This file documents the old way of building and using ngdevkit
-for Windows 10, via WSL. Windows 10 support is not achieved
+This file documents the old way of building and using ngdevkit
+for Windows 10, via WSL. Windows 10 support is now achieved
 via MSYS2. Have a look at [the main README](README.md) for
 more details, or [the dedicated MSYS2 README](README-msys2.md)
 to see how to build ngdevkit from source on Windows 10._
@@ -15,8 +15,8 @@ the Windows Subsystem for Linux:
      command via WSL's [interoperability wrapper][interop].
 
    * The GnGeo emulator is a native Windows GUI application. You
-     can call it from both Linux and Windows and don't need a
-     X server to run it. You also gget all the advantage of native
+     can call it from both Linux and Windows and don't need an
+     X server to run it on. You also get all the advantage of native
      application, like for example hardware-accelerated OpenGL
      pixel shaders.
 
