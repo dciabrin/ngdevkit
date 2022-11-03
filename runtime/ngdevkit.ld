@@ -1,6 +1,6 @@
 /*
  * linkscript for Neo Geo
- * Copyright (c) 2015 Damien Ciabrini
+ * Copyright (c) 2015-2022 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -26,17 +26,17 @@ STARTUP(ngdevkit-crt0.o)
 GROUP(-lsyscalls)
 
 MEMORY {
-  ROM (rx)     : ORIGIN = 0x000000, LENGTH = 512K
-  RAM (rw)     : ORIGIN = 0x100000, LENGTH = 0xf300
+  ROM1 (rx)    : ORIGIN = 0x000000, LENGTH = 1024K
+  ROM2 (rx)    : ORIGIN = 0x200000, LENGTH = 1024K
+  RAM  (rw)    : ORIGIN = 0x100000, LENGTH = 0xf300
   BIOSRAM (rw) : ORIGIN = 0x10fcee, LENGTH = 0x312
 }
 
 SECTIONS {
-  .bss.bram ORIGIN(RAM) : SUBALIGN(0) {
-    *(.bss.bram)
-  } >RAM =0xffffffff
-
-  .text : {
+  /* The first part of the ROM holds all the cartridge's description.
+   * This is used by the hardware to boot into the main program.
+   */
+  .text.boot : {
     /* The link script depends on various user configured flags,
      * and provides defaults for unspecified flags. */
 
@@ -67,7 +67,9 @@ SECTIONS {
     coin_sound = DEFINED(coin_sound)? coin_sound : 0;
     player_start = DEFINED(player_start)? player_start : 0;
 
-    /* The actual link of the text segment starts here */
+    /* .bss segment location depends on the configured backup RAM location */
+    /* (these expressions work thanks to lazy evaluation) */
+    __bss_start_in_ram = DEFINED(rom_mem_backup)? (rom_mem_backup + rom_mem_backup_size + 3) /4 * 4 : ORIGIN(RAM);
     rom_mem_backup = DEFINED(rom_mem_backup)? rom_mem_backup : ORIGIN(RAM);
     rom_mem_backup_size = DEFINED(rom_mem_backup_size)? rom_mem_backup_size : SIZEOF(.bss.bram);
 
@@ -76,66 +78,120 @@ SECTIONS {
 
     /* ROM software DIP switches */
     *(.text.softdip)
+    . = ALIGN(4);
+  } >ROM1 =0xffffffff
+  __text_boot_end = .;
 
-    /* remaining code */
-    *(.text)
-    *(.text.*)
+  /* Allocate the read only data first (e.g. strings, constant
+   * global variables). Those are meant to stay in ROM at runtime.
+   */
+  __rodata_start = __text_boot_end;
+  .rodata : AT(__rodata_start) {
+    *(.roda)
+    *(.rodata)
+    *(.rodata.*)
+    . = ALIGN(4);
+  } >ROM1 =0xffffffff
+  __rodata_end = .;
+
+
+  /* The following segments deal with symbols that reside
+   * in RAM at runtime.
+   */
+
+  /* For MVS, when the cartridge uses global variables that
+   * are meant to be saved in backup RAM, the C runtime
+   * expects them to be at the beginning of the RAM.
+   * They get saved and restored by the BIOS automatically.
+   *
+   * Note: If the user specifies its own backup RAM location,
+   * the address must be past all data managed by this link
+   * script or the C runtime will not work properly.
+   */
+  .bss.bram ORIGIN(RAM) : SUBALIGN(0) {
+    *(.bss.bram)
+    . = ALIGN(4);
+  } >RAM =0xffffffff
+
+  /* Next is the .bss segments. It holds all the global variables
+   * whose initial value is zero at runtime. The C runtime and
+   * the BIOS clear their respective memory ranges at startup.
+   */
+  __bss_start = __rodata_end ;
+  .bss __bss_start_in_ram : AT(__rodata_end) {
+    EXCLUDE_FILE (*libngdevkit.a:*) *(.bss .bss.*)
+    . = ALIGN(4);
+  } >RAM =0xffffffff
+  __bss_end = __bss_start + SIZEOF(.bss);
+
+  .bss.bios ORIGIN(BIOSRAM) : SUBALIGN(0) {
+    *libngdevkit.a:bios-ram.o(.bss)
+  } >BIOSRAM =0xffffffff
+
+  /* Next is the .data segment. It holds the initial value
+   * of all global variables in C. This range in ROM is
+   * copied automatically in RAM at startup by the C runtime.
+   *
+   * Note: the .bss segment is not stored in the final binary
+   * ROM because it only holds zeros. So the .data segment
+   * starts right after the .rodata segment.
+   */
+  __data_start = __rodata_end ;
+  __data_start_in_ram = (__bss_start_in_ram + SIZEOF(.bss) + 3) / 4 * 4;
+  .data : AT(__data_start) {
+    *(.data)
+    *(.data.*)
+    . = ALIGN(4);
+  } >RAM =0xffffffff
+  __data_end = __data_start + SIZEOF(.data);
+
+  /* From there, the linker's output location lies at the
+   * end of the used RAM. If you're crazy enough to use
+   * dynamic allocation like malloc(), this location will
+   * be the start of the heap in memory. It is used by
+   * sbrk() from libsyscalls.
+   */
+  _end = . ;
+
+
+  /* The last part of the ROM contains all the cartridge's code.
+   * It is allocated right after the global variables (.data).
+   */
+   __text_start = (__data_end + 3) / 4 * 4;
+  .text __text_start : AT(__text_start) {
+    /* The devkit's static libraries are linked first */
+    *libgcc.a:*(.text .text.*)
+    *libc.a:*(.text .text.*)
+    *libsyscalls.a:*(.text .text.*)
+    *libngdevkit.a:*(.text .text.*)
+
+    /* Legacy C global initializers/finalizers */
+    KEEP(*(.init))
+    KEEP(*(.fini))
 
     /* C++ specific sections */
+    *crtbegin.o(.text .text.*)
+    *crtend.o(.text .text.*)
     *(.ctors)
     *(.dtors)
     *(.eh_frame)
     *(.jcr)
 
-    . = ALIGN(4);  
-  } >ROM =0xffffffff
+    /* Remaining code */
+    *(.text)
+    *(.text.*)
+  } >ROM1 =0xffffffff
 
-  .init :
-  {
-    KEEP(*(.init))
-  } >ROM =0xffffffff
-  .fini :
-  {
-    KEEP(*(.fini))
-  } >ROM =0xffffffff
-  __text_end = ADDR(.text) + SIZEOF(.text) + SIZEOF(.init) + SIZEOF(.fini) ;
-
-  __rodata_start = __text_end ;
-  .rodata : {
-    *(.roda)
-    *(.rodata)
-    *(.rodata.*)
-    . = ALIGN(4);  
-  } >ROM =0xffffffff
-  __rodata_end = __rodata_start + SIZEOF(.rodata);
-
-  __data_start = __rodata_end ;
-  __data_start_in_ram = DEFINED(__data_start_in_ram)? __data_start_in_ram : ( rom_mem_backup + rom_mem_backup_size );
-  .data : AT(__data_start) {
-    *(.data)
-    *(.data.*)
-    . = ALIGN(4);  
-  } >RAM =0xffffffff
-  __data_end = __data_start + SIZEOF(.data);
-
-  .bss.bios ORIGIN(BIOSRAM) : SUBALIGN(0) {
-    *bios-ram.o(.bss)
-  } >BIOSRAM =0xffffffff
-
-  __bss_start = __data_end ;
-  .bss : AT(__data_end) {
-    *(.bss)
-    *(.bss.*)
-    . = ALIGN(4);
-  } >RAM =0xffffffff
-  __bss_end = __bss_start + SIZEOF(.bss);
-
-  /* Start of heap. Used by libsyscalls in sbrk() */
-  _end = . ;
-
-   /* Generate a full size, 128K ROM */
-  .padding __bss_end : {
-    . = ALIGN(0x7ffff);
-    BYTE(0xff);
-  } >ROM =0xffffffff
+  /* If we are explicitly linking a large cartridge, it will
+   * span two non-contiguous 1MiB P-ROMs. As soon as an object
+   * file cannot fit in ROM1, the linker allocates its entire
+   * content into ROM2. It does so for all the remaining
+   * object files as well.
+   */
+  .text2 : {
+    /* Remaining code that overflowed from .text */
+    *(.text)
+    *(.text.*)
+  } >ROM2 =0xffffffff
+  __text_end = .;
 }
