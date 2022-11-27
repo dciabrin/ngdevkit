@@ -87,9 +87,14 @@ SECTIONS {
    */
   __rodata_start = __text_boot_end;
   .rodata : AT(__rodata_start) {
-    *(.roda)
-    *(.rodata)
-    *(.rodata.*)
+    /* The devkit's static libraries are linked first */
+    *libgcc.a:*(.roda .rodata .rodata.*)
+    *libc.a:*(.roda .rodata .rodata.*)
+    *libsyscalls.a:*(.roda .rodata .rodata.*)
+    *libngdevkit.a:*(.roda .rodata .rodata.*)
+
+    /* Then all data that are not explicitely meant to be bank-switched */
+    EXCLUDE_FILE (*__bank*) *(.roda .rodata .rodata.*)
     . = ALIGN(4);
   } >ROM1 =0xffffffff
   __rodata_end = .;
@@ -117,16 +122,27 @@ SECTIONS {
    * whose initial value is zero at runtime. The C runtime and
    * the BIOS clear their respective memory ranges at startup.
    */
+  .bss.bios ORIGIN(BIOSRAM) : SUBALIGN(0) {
+    /* These symbols must be linked prior to the other
+     * .bss symbols in the .bss* segments below (or they
+     * must be EXCLUDE_FILE'd from the segments below)
+     */
+    *libngdevkit.a:bios-ram.o(.bss)
+  } >BIOSRAM =0xffffffff
+
   __bss_start = __rodata_end ;
   .bss __bss_start_in_ram : AT(__rodata_end) {
-    EXCLUDE_FILE (*libngdevkit.a:*) *(.bss .bss.*)
+    /* The devkit's static libraries are linked first */
+    *libgcc.a:*(.bss .bss.*)
+    *libc.a:*(.bss .bss.*)
+    *libsyscalls.a:*(.bss .bss.*)
+    *libngdevkit.a:*(.bss .bss.*)
+
+    /* Then all data that are not explicitely meant to be bank-switched */
+    EXCLUDE_FILE (*__bank*) *(.bss .bss.*)
     . = ALIGN(4);
   } >RAM =0xffffffff
   __bss_end = __bss_start + SIZEOF(.bss);
-
-  .bss.bios ORIGIN(BIOSRAM) : SUBALIGN(0) {
-    *libngdevkit.a:bios-ram.o(.bss)
-  } >BIOSRAM =0xffffffff
 
   /* Next is the .data segment. It holds the initial value
    * of all global variables in C. This range in ROM is
@@ -139,23 +155,46 @@ SECTIONS {
   __data_start = __rodata_end ;
   __data_start_in_ram = (__bss_start_in_ram + SIZEOF(.bss) + 3) / 4 * 4;
   .data : AT(__data_start) {
-    *(.data)
-    *(.data.*)
+    /* The devkit's static libraries are linked first */
+    *libgcc.a:*(.data .data.*)
+    *libc.a:*(.data .data.*)
+    *libsyscalls.a:*(.data .data.*)
+    *libngdevkit.a:*(.data .data.*)
+
+    /* Then all data that are not explicitely meant to be bank-switched */
+    EXCLUDE_FILE (*__bank*) *(.data .data.*)
     . = ALIGN(4);
   } >RAM =0xffffffff
   __data_end = __data_start + SIZEOF(.data);
+
+  /* For ROMs that use bank-switching, the global variables
+   * of the banks are linked at the end of the allocated RAM.
+   * These variables are not initialized by the C runtime.
+   */
+  .data2 : AT(__data_start) {
+    /* bank-switched .bss and .data are essentially the same.
+     * unitialized, user-managed data only. */
+    *(.bss .bss.*)
+    *(.data .data.*)
+    . = ALIGN(4);
+  } >RAM =0xffffffff
 
   /* From there, the linker's output location lies at the
    * end of the used RAM. If you're crazy enough to use
    * dynamic allocation like malloc(), this location will
    * be the start of the heap in memory. It is used by
    * sbrk() from libsyscalls.
+   * NOTE: If bank-switching is used, `_end` has to be
+   * manually allocated to an address that is past all
+   * the RAM used by all banks.
    */
-  _end = . ;
+  PROVIDE(_end = . );
 
 
   /* The last part of the ROM contains all the cartridge's code.
    * It is allocated right after the global variables (.data).
+   * Note: we first link everything that is not explicitely tagged
+   * to end up in the bank-switched P-ROM.
    */
    __text_start = (__data_end + 3) / 4 * 4;
   .text __text_start : AT(__text_start) {
@@ -170,26 +209,31 @@ SECTIONS {
     KEEP(*(.fini))
 
     /* C++ specific sections */
-    *crtbegin.o(.text .text.*)
-    *crtend.o(.text .text.*)
-    *(.ctors)
-    *(.dtors)
-    *(.eh_frame)
-    *(.jcr)
+    EXCLUDE_FILE (*__bank*) *crtbegin.o(.text .text.*)
+    EXCLUDE_FILE (*__bank*) *crtend.o(.text .text.*)
+    EXCLUDE_FILE (*__bank*) *(.ctors .dtors .eh_frame .jcr)
 
     /* Remaining code */
-    *(.text)
-    *(.text.*)
+    EXCLUDE_FILE (*__bank*) *(.text .text.*)
+
+    /* NOTE: If we are explicitly linking a large cartridge, it
+     * will span two non-contiguous 1MiB P-ROMs. As soon as an
+     * object file cannot fit in ROM1, the linker allocates its
+     * entire content into ROM2. It does so for all the remaining
+     * object files as well.
+     */
   } >ROM1 =0xffffffff
 
-  /* If we are explicitly linking a large cartridge, it will
-   * span two non-contiguous 1MiB P-ROMs. As soon as an object
-   * file cannot fit in ROM1, the linker allocates its entire
-   * content into ROM2. It does so for all the remaining
-   * object files as well.
+  /* When linking a ROM that uses bank-switching, the segment
+   * below holds all the read-only data and the code that will
+   * be bank-switched at runtime
    */
   .text2 : {
-    /* Remaining code that overflowed from .text */
+    /* All the read-only data that are meant to be bank-switched */
+    *(.roda .rodata .rodata.*)
+
+    /* Remaining code that overflowed from segment .text, or
+     * code that is explicitely meant to be bank-switched */
     *(.text)
     *(.text.*)
   } >ROM2 =0xffffffff
