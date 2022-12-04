@@ -179,10 +179,7 @@ init_c_runtime:
 
 .Lclearbss:
 	/* Zero out bss segment */
-	move.l	#__data_end, %d0
-	sub.l	#__data_start, %d0
-	add.l	#__data_start_in_ram, %d0
-	movea.l	%d0, %a0
+	movea.l	#__bss_start_in_ram, %a0
 	move.l	#__bss_end, %d0
 	sub.l	#__bss_start, %d0
 	tst	%d0
