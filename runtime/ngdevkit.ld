@@ -67,11 +67,14 @@ SECTIONS {
     coin_sound = DEFINED(coin_sound)? coin_sound : 0;
     player_start = DEFINED(player_start)? player_start : 0;
 
-    /* .bss segment location depends on the configured backup RAM location */
-    /* (these expressions work thanks to lazy evaluation) */
-    __bss_start_in_ram = DEFINED(rom_mem_backup)? (rom_mem_backup + rom_mem_backup_size + 3) /4 * 4 : ORIGIN(RAM);
+    /* Backup RAM address starts at the beginning of RAM unless configured manually */
     rom_mem_backup = DEFINED(rom_mem_backup)? rom_mem_backup : ORIGIN(RAM);
     rom_mem_backup_size = DEFINED(rom_mem_backup_size)? rom_mem_backup_size : SIZEOF(.bss.bram);
+
+    /* By default, .bss segment is allocated right after the backup RAM.
+     * If the later is configured manually, .bss starts at the beginning of RAM.
+     */
+    __bss_start_in_ram = (rom_mem_backup == ORIGIN(RAM)) ? (rom_mem_backup + rom_mem_backup_size + 3) /4 * 4 : ORIGIN(RAM);
 
     /* Make sure crt0 is linked first */
     *ngdevkit-crt0.o(.text)
