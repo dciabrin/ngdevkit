@@ -165,31 +165,41 @@ rom_mvs_startup_init_default:
  * Load the data and BSS segments in RAM
  */
 init_c_runtime:
-	/* copy data segment from ROM to RAM */
-	move.l	#__data_end, %d0
-	sub.l	#__data_start, %d0
-	movea.l	#__data_start, %a0
-	movea.l	#__data_start_in_ram, %a1
-	tst	%d0
-	beq	.Lclearbss
-.Lcopydata:
-	move.b	(%a0)+, (%a1)+
-	move.b	%d0, REG_WATCHDOGW
-	dbra	%d0, .Lcopydata
+	/* zero out BSS segment */
+	moveq.l	#0, %d1
+	moveq.l	#0, %d2
+	moveq.l	#0, %d3
+	moveq.l	#0, %d4
+	moveq.l	#0, %d5
+	moveq.l	#0, %d6
+	moveq.l	#0, %d7
+	sub.l	%a0, %a0
 
-.Lclearbss:
-	/* Zero out bss segment */
-	movea.l	#__bss_start_in_ram, %a0
+	movea.l	#__bss_start_in_ram, %a2
 	move.l	#__bss_end, %d0
 	sub.l	#__bss_start, %d0
-	tst	%d0
-	beq	.Linitdone
+	lsr.w	#5, %d0
 .Lcopybss:
-	move.b	#0, (%a0)+
-	move.b	%d0, REG_WATCHDOGW
+	movem.l	%d1-%d7/%a0, (%a2)
+	lea.l	0x20(%a2), %a2
 	dbra	%d0, .Lcopybss
 
-.Linitdone:
+	move.b	%d0, REG_WATCHDOGW /* kick watchdog */
+
+	/* copy data segment from ROM to RAM */
+	movea.l	#__data_start, %a1
+	movea.l	#__data_start_in_ram, %a2
+	move.l	#__data_end, %d0
+	sub.l	#__data_start, %d0
+	lsr.w	#5, %d0
+.Lcopydata:
+	movem.l	(%a1)+, %d1-%d7/%a0
+	movem.l	%d1-%d7/%a0, (%a2)
+	lea.l	0x20(%a2), %a2
+	dbra	%d0, .Lcopydata
+
+	move.b	%d0, REG_WATCHDOGW /* kick watchdog */
+
         rts
 
 rom_title_default:
