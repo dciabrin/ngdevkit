@@ -71,11 +71,6 @@ SECTIONS {
     rom_mem_backup = DEFINED(rom_mem_backup)? rom_mem_backup : ORIGIN(RAM);
     rom_mem_backup_size = DEFINED(rom_mem_backup_size)? rom_mem_backup_size : SIZEOF(.bss.bram);
 
-    /* By default, .bss segment is allocated right after the backup RAM.
-     * If the later is configured manually, .bss starts at the beginning of RAM.
-     */
-    __bss_start_in_ram = (rom_mem_backup == ORIGIN(RAM)) ? (rom_mem_backup + rom_mem_backup_size + 3) /4 * 4 : ORIGIN(RAM);
-
     /* Make sure crt0 is linked first */
     *ngdevkit-crt0.o(.text)
 
@@ -133,7 +128,11 @@ SECTIONS {
     *libngdevkit.a:bios-ram.o(.bss)
   } >BIOSRAM =0xffffffff
 
+  /* By default, .bss segment is allocated right after the backup RAM.
+   * If the latter is configured manually, .bss starts at the beginning of RAM.
+   */
   __bss_start = __rodata_end ;
+  __bss_start_in_ram = (rom_mem_backup == ORIGIN(RAM)) ? (ORIGIN(RAM) + SIZEOF(.bss.bram) + 3) / 4 * 4 : ORIGIN(RAM);
   .bss __bss_start_in_ram : AT(__rodata_end) {
     /* The devkit's static libraries are linked first */
     *libgcc.a:*(.bss .bss.*)
