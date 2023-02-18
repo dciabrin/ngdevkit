@@ -1,6 +1,6 @@
 /*
  * linkscript for Neo Geo
- * Copyright (c) 2015-2022 Damien Ciabrini
+ * Copyright (c) 2015-2023 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -26,9 +26,17 @@ STARTUP(ngdevkit-crt0.o)
 GROUP(-lsyscalls)
 
 MEMORY {
+  /* Regular program address space for the m68k */
   ROM1 (rx)    : ORIGIN = 0x000000, LENGTH = 1024K
+  /* Additional program address space, bank-switched */
   ROM2 (rx)    : ORIGIN = 0x200000, LENGTH = 1024K
+  /* BRAM defaults to 0x100000, unless overriden in the cartridge */
+  BRAM (rw)    : ORIGIN = rom_backup_data_address, LENGTH = 0x1000
+  /* RAM address space for the m68k */
+  /* Note: 10f300 is the default supervisor's stack pointer, and
+   * stack grows downwards, so do not fill RAM up to 10f300 */
   RAM  (rw)    : ORIGIN = 0x100000, LENGTH = 0xf300
+  /* The end of the RAM is reserved for BIOS usage (786 bytes) */
   BIOSRAM (rw) : ORIGIN = 0x10fcee, LENGTH = 0x312
 }
 
@@ -66,15 +74,6 @@ SECTIONS {
     main_mvs_title = DEFINED(main_mvs_title)? main_mvs_title : main;
     coin_sound = DEFINED(coin_sound)? coin_sound : 0;
     player_start = DEFINED(player_start)? player_start : 0;
-
-    /* Backup RAM address starts at the beginning of RAM unless configured manually */
-    rom_mem_backup = DEFINED(rom_mem_backup)? rom_mem_backup : ORIGIN(RAM);
-    rom_mem_backup_size = DEFINED(rom_mem_backup_size)? rom_mem_backup_size : SIZEOF(.bss.bram);
-
-    /* By default, .bss segment is allocated right after the backup RAM.
-     * If the later is configured manually, .bss starts at the beginning of RAM.
-     */
-    __bss_start_in_ram = (rom_mem_backup == ORIGIN(RAM)) ? (rom_mem_backup + rom_mem_backup_size + 3) /4 * 4 : ORIGIN(RAM);
 
     /* Make sure crt0 is linked first */
     *ngdevkit-crt0.o(.text)
@@ -116,10 +115,15 @@ SECTIONS {
    * the address must be past all data managed by this link
    * script or the C runtime will not work properly.
    */
-  .bss.bram ORIGIN(RAM) : SUBALIGN(0) {
+  /* Note: use 0x100000 instead of ORIGIN(RAM) because this
+   * reference is not resolved properly by the MEMORY command
+   */
+  rom_backup_data_address = DEFINED(rom_backup_data_address)? rom_backup_data_address : 0x100000;
+  .bss.bram rom_backup_data_address : SUBALIGN(0) {
     *(.bss.bram)
     . = ALIGN(4);
-  } >RAM =0xffffffff
+  } >BRAM =0xffffffff
+  rom_backup_data_size = DEFINED(rom_backup_data_size)? rom_backup_data_size : SIZEOF(.bss.bram);
 
   /* Next is the .bss segments. It holds all the global variables
    * whose initial value is zero at runtime. The C runtime and
@@ -133,7 +137,12 @@ SECTIONS {
     *libngdevkit.a:bios-ram.o(.bss)
   } >BIOSRAM =0xffffffff
 
+  /* By default, the start of .bss in memory comes right after the
+   * backup RAM. If the latter is unused or its address is configured
+   * manually, .bss is linked at the beginning of RAM.
+   */
   __bss_start = __rodata_end ;
+  __bss_start_in_ram = (rom_backup_data_address == ORIGIN(RAM)) ? (rom_backup_data_address + rom_backup_data_size + 3) /4 * 4 : ORIGIN(RAM);
   .bss __bss_start_in_ram : AT(__rodata_end) {
     /* The devkit's static libraries are linked first */
     *libgcc.a:*(.bss .bss.*)
