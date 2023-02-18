@@ -144,7 +144,7 @@ jobs:
           git config --global user.email '<>'
           git config --global url."https://api@github.com/".insteadOf "https://github.com/"
           git clone https://github.com/dciabrin/homebrew-ngdevkit .ci/homebrew-ngdevkit
-          .ci/homebrew-ngdevkit/.ci/bump-project-nightly-build.sh ngdevkit
+          .ci/homebrew-ngdevkit/.ci/bump-project-nightly-build.sh --package ngdevkit --batch
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
