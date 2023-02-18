@@ -1,6 +1,6 @@
 /*
  * Backup RAM management on MVS
- * Copyright (c) 2021 Damien Ciabrini
+ * Copyright (c) 2021-2023 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -31,5 +31,31 @@
  */
 #define _backup_ram __attribute__((section(".bss.bram")))
 
+/** Macro to override the start of the backup address space in memory.
+ * If used, the address specified must be past the .data and .bss segments.
+ * This macro must be used at the top-level scope only.
+ *
+ * Example:
+ *   ROM_BACKUP_DATA_ADDRESS(0x102000);
+ *
+ * Note: backup only takes place on MVS hardware
+ */
+#define ROM_BACKUP_DATA_ADDRESS(addr) \
+    __asm__(".global rom_backup_data_address\n.equ rom_backup_data_address," #addr)
+
+/** Macro to override the size of the backup address space in memory.
+ * This macro can be used to reserve up to 4KiB of RAM that gets
+ * automatically saved each time the attract mode is run, and restored
+ * when the ROM is being started.
+ * This macro must be used at the top-level scope only.
+ *
+ * Example:
+ *   ROM_BACKUP_DATA_SIZE(0x1000);
+ *
+ * Note: backup only takes place on MVS hardware
+ */
+#define ROM_BACKUP_DATA_SIZE(size) \
+    __asm__(".global rom_backup_data_size\n.equ rom_backup_data_size," #size); \
+    _Static_assert(size<=4096, "backup data size cannot exceed 4096 bytes")
 
 #endif /* __NGDEVKIT_BACKUP_RAM_H__ */

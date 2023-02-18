@@ -62,8 +62,8 @@ _start:
 	.ascii	"NEO-GEO\0"		/* Magic bytes */
 	dc.w	rom_NGH_ID		/* NGH number (cartridge UID) */
 	dc.l	0x00100000              /* Program size in bytes */
-	dc.l	rom_mem_backup          /* MVS: start of RAM to backup */
-	dc.w	rom_mem_backup_size     /* MVS: backup size */
+	dc.l	rom_backup_data_address /* MVS: start of RAM to backup */
+	dc.w	rom_backup_data_size    /* MVS: backup size */
 	dc.b	rom_eye_catcher_mode    /* BIOS shows logo at startup */
         dc.b    0x00			/* 1st tile of the logo */
 
