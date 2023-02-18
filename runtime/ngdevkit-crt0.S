@@ -166,41 +166,54 @@ rom_mvs_startup_init_default:
  */
 init_c_runtime:
 	/* zero out BSS segment */
-	moveq.l	#0, %d1
 	moveq.l	#0, %d2
 	moveq.l	#0, %d3
 	moveq.l	#0, %d4
 	moveq.l	#0, %d5
 	moveq.l	#0, %d6
 	moveq.l	#0, %d7
-	sub.l	%a0, %a0
+	movea.l	%d7, %a0
+	movea.l	%d7, %a1
 
-	movea.l	#__bss_start_in_ram, %a2
+	movea.l	#__bss_start_in_ram, %a3
 	move.l	#__bss_end, %d0
 	sub.l	#__bss_start, %d0
 	lsr.w	#5, %d0
+
 .Lcopybss:
-	movem.l	%d1-%d7/%a0, (%a2)
-	lea.l	0x20(%a2), %a2
+	movem.l	%d2-%d7/%a0-%a1, (%a3)
+	lea.l	0x20(%a3), %a3
 	dbra	%d0, .Lcopybss
 
 	move.b	%d0, REG_WATCHDOGW /* kick watchdog */
 
 	/* copy data segment from ROM to RAM */
-	movea.l	#__data_start, %a1
-	movea.l	#__data_start_in_ram, %a2
+	movea.l	#__data_start, %a2
+	movea.l	#__data_start_in_ram, %a3
 	move.l	#__data_end, %d0
 	sub.l	#__data_start, %d0
+	move.w	%d0, %d1
 	lsr.w	#5, %d0
+	andi.w	#0x001F, %d1
+	bra	.Lcopydata_begin
+
 .Lcopydata:
-	movem.l	(%a1)+, %d1-%d7/%a0
-	movem.l	%d1-%d7/%a0, (%a2)
-	lea.l	0x20(%a2), %a2
+	movem.l	(%a2)+, %d2-%d7/%a0-%a1
+	movem.l	%d2-%d7/%a0-%a1, (%a3)
+	lea.l	0x20(%a3), %a3
+.Lcopydata_begin:
 	dbra	%d0, .Lcopydata
+
+	/* copy last 0-31 bytes one at a time for cleanliness */
+	bra	.Lcopylastdata_begin
+.Lcopylastdata:
+	move.b	(%a2)+, (%a3)+
+.Lcopylastdata_begin:
+	dbra	%d1, .Lcopylastdata
 
 	move.b	%d0, REG_WATCHDOGW /* kick watchdog */
 
-        rts
+	rts
 
 rom_title_default:
         /* Disable IRQs, as we don't want C code to be
