@@ -50,17 +50,18 @@ jobs:
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install:
             git autoconf automake make zip
-            mingw-w64-x86_64-pkg-config mingw-w64-x86_64-python
+            mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-pygame
 
       - name: Install ngdevkit dependencies
         run: |
           echo -e "[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
           pacman -Sy
-          pacman -S --noconfirm mingw-w64-x86_64-ngdevkit-toolchain
+          pacman -S --noconfirm mingw-w64-ucrt-x86_64-ngdevkit-toolchain
 
       - name: Build
         run: ./.github/scripts/build-msys2.sh
@@ -164,7 +165,7 @@ jobs:
           git config --global user.email '<>'
           git config --global url."https://api@github.com/".insteadOf "https://github.com/"
           git clone https://github.com/dciabrin/msys2-ngdevkit .ci/msys2-ngdevkit
-          .ci/msys2-ngdevkit/.ci/bump-project-nightly-build.sh ngdevkit
+          .ci/msys2-ngdevkit/.ci/bump-project-nightly-build.sh --package ngdevkit --batch
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 

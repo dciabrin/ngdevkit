@@ -5,10 +5,10 @@ if [ -n "$PY3PATH" ]; then
 fi
 autoreconf -iv
 ./configure \
-    --prefix=/mingw64 \
-    --build=x86_64-w64-mingw32 \
-    --host=x86_64-w64-mingw32 \
-    --target=x86_64-w64-mingw32 \
+    --prefix=${MSYSTEM_PREFIX} \
+    --build=${MSYSTEM_CHOST} \
+    --host=${MSYSTEM_CHOST} \
+    --target=${MSYSTEM_CHOST} \
     --enable-external-toolchain \
     --enable-external-emudbg \
     --enable-external-gngeo \
