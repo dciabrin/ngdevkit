@@ -155,14 +155,14 @@ distclean-emudbg:
 ifeq ($(EXTERNAL_GNGEO), no)
 all: build-gngeo
 install: install-gngeo
-ifeq ($(ENABLE_MINGW), yes)
+ifeq ($(ENABLE_MSYS2), yes)
 install: install-gngeo-dll
 install-gngeo-dll: install-gngeo
 endif
 distclean: distclean-gngeo
 endif
 
-ifeq ($(ENABLE_MINGW), yes)
+ifeq ($(ENABLE_MSYS2), yes)
 GNGEO=$(GNGEO_INSTALL_PATH)/ngdevkit-gngeo.exe
 GNGEOPKGDATADIR=$(GNGEO_INSTALL_PATH)/share
 else
@@ -193,7 +193,7 @@ install-gngeo: $(GNGEO)
 $(GNGEO): build/gngeo
 	$(MAKE) -C build/gngeo install pkgdatadir=$(GNGEOPKGDATADIR)
 
-ifeq ($(ENABLE_MINGW), yes)
+ifeq ($(ENABLE_MSYS2), yes)
 install-gngeo-dll: build/gngeo
 	cp $(SDL2_DLL) $(ZLIB1_DLL) $(GLEW_DLL) $(GNGEO_INSTALL_PATH)
 endif
@@ -212,12 +212,11 @@ distclean-gngeo:
 # ------ Target to set up shell environment ------
 
 SHELL_BIN_PATH := $(prefix)/bin
+ifeq ($(ENABLE_MSYS2), yes)
 ifeq ($(EXTERNAL_GNGEO), no)
-ifeq ($(ENABLE_MINGW), yes)
+ifneq ($(prefix),$(GNGEO_INSTALL_PATH))
 SHELL_BIN_PATH := $(SHELL_BIN_PATH):$(GNGEO_INSTALL_PATH)
 endif
-ifeq ($(ENABLE_MSYS2), yes)
-SHELL_BIN_PATH := /mingw64/bin:$(SHELL_BIN_PATH)
 endif
 endif
 

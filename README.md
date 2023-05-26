@@ -83,27 +83,23 @@ yet, so it might take some time to install the packages.
 #### Windows
 
 You can run ngdevkit natively on Windows, via the [MSYS2][msys2]
-environment and an [official Python 3 release for Windows][pywin] from
-https://www.python.org.
+environment. Pre-built ngdevkit packages are available for the ucrt64
+subsystem of MSYS2. To use them, start a MSYS2 shell for ucrt64, and
+configure the pacman repository as follows:
 
-In a MSYS2 shell, you first need to install PyGame in your Python 3
-environment (`i.e.` not the python available in MSYS2). For example,
-assuming Python 3 is installed for user `ngdevkit`:
-
-    C:/Users/ngdevkit/AppData/Local/Programs/Python/Python39/python -m pip install pygame
-
-Then, in order to install pre-built ngdevkit packages, add the
-ngdevkit repository into your MSYS2 installation, and install the
-required packages:
-
+    MSYSTEM=UCRT64 /usr/bin/bash -l
     echo -e "\n[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
-    pacman -Sy
-    pacman -S mingw-w64-x86_64-ngdevkit mingw-w64-x86_64-ngdevkit-gngeo
+    
+    # install pacboy with `pacman -S pactoys` if necessary
+    pacboy -Sy
+    pacboy -S ngdevkit:u ngdevkit-gngeo:u
     # the remaining packages are only required for the examples
-    pacman -S autoconf automake make zip mingw-w64-x86_64-imagemagick mingw-w64-x86_64-sox
+    pacboy -S autoconf automake make zip imagemagick:u sox:u
 
 An old version of ngdevkit supported Windows 10 via [WSL][wsl], but it
-is now deprecated in favour of the native MSYS2 environment.
+is now deprecated in favour of the native MSYS2 environment. Likewise,
+we no longer build nightly packages for MSYS2's mingw64 subsystem,
+ucrt64 is the only supported subsystem for ngdevkit.
 
 ### Build the included examples
 
@@ -114,7 +110,7 @@ clone the [ngdevkit-examples][examples] repository:
     git clone --recursive https://github.com/dciabrin/ngdevkit-examples examples
 
 And build all the examples with the following commands if you are running
-Linux:
+on Linux or Windows/MSYS2:
 
     cd examples
     autoreconf -iv
@@ -128,17 +124,6 @@ For macOS, make sure you use brew's python3 and gmake:
     autoreconf -iv
     ./configure
     gmake
-
-For Windows, you have to build the examples with extra flags and
-pass the location of the external Python 3 installation written
-as an MSYS2 path:
-
-    cd examples
-    # ensure Windows-native binaries are available in PATH
-    export PATH=/mingw64/bin:$PATH
-    autoreconf -I/mingw64/share/aclocal -iv
-    ./configure --enable-msys2 --with-python=/c/Users/ngdevkit/AppData/Local/Programs/Python/Python39/python
-    make
 
 
 ### Running the emulator

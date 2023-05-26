@@ -14,31 +14,6 @@ environment, for instance to build the [example ROMs][examples].
 
 ## Prepare your environment for compilation
 
-Building ngdevkit on Windows currently requires two big dependencies:
-the [MSYS2][msys2] environment to build the toolchain, and a [Python 3
-release for Windows][pywin] from https://www.python.org. The latter is
-needed because that is currently the only way to install a pre-built
-[PyGame][pygame] on Windows, which is a dependency of ngdevkit.
-
-
-### Install Python and PyGame
-
-Download the [Python 3 binary release][pywin] according to your
-Windows platform, run the installer, and remember where you installed
-your Python environment. For the sake of the example, this document
-assumes that the Python 3 interpreter is installed for user `ngdevkit`
-in:
-
-    C:/Users/ngdevkit/AppData/Local/Programs/Python/Python39/python
-
-Once the Python environment is installed, install a pre-built version
-of PyGame with pip:
-
-    C:/Users/ngdevkit/AppData/Local/Programs/Python/Python39/python -m pip install pygame
-
-Your python environment is now ready to be used to compile ngdevkit
-
-
 ### Install MSYS2
 
 To build ngdevkit, we rely on MSYS2 to provide the necessary C
@@ -50,70 +25,67 @@ that you installed it in the default location:
 
     C:\msys64
 
-MSYS2 has two different runtimes:
-  - The MSYS2 runtime, which is a minimal POSIX-like environment
-  - The MinGW-w64 runtime, which is the full Windows-native runtime
+MSYS2 has many different [environments][subsys], among which:
+  - The MSYS environment, which contains all the base UNIX-like
+    tools under /usr and is special in that it is always active.
+  - The UCRT64 environment, which builds on top of the MSYS environment
+    and provides only Windows-native binaries under /ucrt64/bin
 
-Ngdevkit is built for Windows, so it targets the MinGW-w64 runtime.
-However, in order to compile it successfully, you still need to run
-the compilation in the MSYS2 runtime, as this runtime will deal
-automatically with file path translation from POSIX to Windows.
-
-Start a MSYS2 shell by running "MSYS2 MSYS" from the Start menu.
+Ngdevkit is built for Windows with no MSYS2/Unix dependencies in
+mind, so it targets the UCRT64. In order to compile it successfully,
+you must be running a shell under the UCRT64 environment. You can
+start the shell by running "MSYS2 UCRT64" from the Start menu.
 Alternatively, you can also start the shell from `cmd.exe` or from
 PowerShell with:
 
+    set MSYSTEM=UCRT64
     C:\msys64\usr\bin\bash.exe -l
 
 Once you are in a MSYS2 shell, make sure your MSYS2 installation
-is up-to-date with:
+is up-to-date and pacboy is available:
 
     pacman -Syuu
+    pacman -S pactoys
+    pacboy -S msys2-w32api-runtime
+    exit
 
+Package `msys2-w32api-runtime` sometimes requires you to restart your
+shell after installation/upgrade, so it's easier to do it all the
+time and restart a new one from there.
 
 ## Compiling the devkit
 
-In a MSYS2 shell, first install all the ngdevkit dependencies:
+In a new shell running in the UCRT64 environment, first install all the
+ngdevkit dependencies:
 
-    pacman -S git msys2-runtime-devel mingw-w64-x86_64-toolchain
-    pacman -S msys2-w32api-headers msys2-w32api-runtime windows-default-manifest
-    pacman -S autoconf autoconf-archive automake pkgconf make tar zip unzip
-    pacman -S mingw-w64-x86_64-zlib mingw-w64-x86_64-SDL2 mingw-w64-x86_64-glew mingw-w64-x86_64-nsis
-    pacman -S gmp-devel isl-devel mpc-devel mpfr-devel texinfo
-    pacman -S flex bison expat gettext ncurses-devel zlib-devel mingw-w64-x86_64-boost
+    pacboy -S msys2-w32api-runtime windows-default-manifest
+    pacboy -S msys2-runtime-devel msys2-w32api-headers
+    pacboy -S autoconf autoconf-archive automake pkgconf make tar zip unzip
+    pacboy -S git flex bison expat gettext ncurses-devel zlib-devel
+    pacboy -S gmp-devel isl-devel mpc-devel mpfr-devel texinfo
+    pacboy -S python:u python-pygame:u toolchain:u zlib:u SDL2:u glew:u boost:u
     # dependencies for the example ROMs
-    pacman -S rsync mingw-w64-x86_64-sox mingw-w64-x86_64-imagemagick
+    pacboy -S rsync sox:u imagemagick:u
 
-
-You can now compile the entire devkit. You just have to pass
-the location of the Python 3 distribution you downloaded earlier to
-the configure script. Note that the path has to be passed in the
-MSYS2 path format:
+You can now compile the entire devkit. The latest ngdevkit's autoconf
+script should detect the location of all dependencies (python,
+pygame...) automatically, as long as you're running it in a UCRT64
+environment as required.
 
     autoreconf -iv
-    ./configure --prefix=$PWD/local --enable-msys2 --with-python=/c/Users/ngdevkit/AppData/Local/Programs/Python/Python39/python
+    ./configure --prefix=$PWD/local
     make
     make install
 
 
-The most tedious part is over! you then need to configure your
-environment to add the built binaries to your `PATH`. You can do so
-automatically with:
+The most tedious part is over! You can now configure your environment
+to add the built binaries to your `PATH` and start experimenting
+with the devkit and build the example ROMs:
 
     eval $(make shellinit)
-
-
-Congratulations! You are now ready to experiment with the devkit and
-build the example ROMs:
-
     cd examples
-    # make sure the environment variable are set
-    eval $(make shellinit)
-    # ensure Windows-native binaries are available in PATH
-    export PATH=/mingw64/bin:$PATH
-    autoreconf -I/mingw64/share/aclocal -iv
-    # build the example ROMs
-    ./configure --enable-msys2 --with-python=/c/Users/ngdevkit/AppData/Local/Programs/Python/Python39/python
+    # build the example ROMs (make sure you're still in a UCRT64 shell)
+    ./configure
     make
 
 Look at [the main README](README.md) file for more details on
@@ -124,3 +96,4 @@ how to run the examples and the debugger.
 [examples]: https://github.com/dciabrin/ngdevkit-examples
 [pywin]: https://www.python.org/downloads/windows
 [pygame]: https://www.pygame.org
+[subsys]: https://www.msys2.org/docs/environments

@@ -47,25 +47,21 @@ AC_ARG_ENABLE([examples],
               [EXAMPLES="yes"])
 AC_SUBST([EXAMPLES])
 
-dnl
-dnl MinGW-specific options
-dnl
-AC_ARG_ENABLE([mingw],
-	      AS_HELP_STRING([--enable-mingw], [Build Win10-native versions of emudbg and gngeo]),
-	      AS_IF([test "x$enable_mingw" = xyes], [ENABLE_MINGW="yes"], [ENABLE_MINGW="no"]),
-              [ENABLE_MINGW="no"])
-AC_SUBST([EXTERNAL_MINGW])
 AC_ARG_ENABLE([msys2],
 	      AS_HELP_STRING([--enable-msys2], [Build for MSYS2, with Win10-native gngeo]),
 	      AS_IF([test "x$enable_msys2" = xyes], [ENABLE_MSYS2="yes"], [ENABLE_MSYS2="no"]),
-              [ENABLE_MSYS2="no"])
+              [ENABLE_MSYS2=""])
 
-AC_ARG_WITH([sdl2],
-            AS_HELP_STRING([--with-sdl2=path], [Absolute path to file SDL2.dll]))
-
-AC_ARG_WITH([glew],
-            AS_HELP_STRING([--with-glew=path], [Absolute path to GLEW binary development distribution]))
-
+# dnl if not configured explicitly, auto-detect msys2 env
+if test x"$ENABLE_MSYS2" = x""; then
+   if test -n "$MSYSTEM" -a -n "$MSYSTEM_CARCH" -a -n "$MSYSTEM_CHOST" -a -n "$MSYSTEM_PREFIX"; then
+      AC_MSG_CHECKING([for the current MSYS2 environment/subsystem])
+      AC_MSG_RESULT([$MSYSTEM])
+      ENABLE_MSYS2=yes
+   else
+      ENABLE_MSYS2=no
+   fi
+fi
 
 dnl if ngdevkit-toolkit is already installed system-wide, use it
 if test x"$EXTERNAL_TOOLCHAIN" = x"yes"; then
@@ -129,85 +125,19 @@ EXTRA_BUILD_CMD_TOOLCHAIN=true
 EXTRA_BUILD_FLAGS_TOOLCHAIN=
 EXTRA_BUILD_CMD=true
 
-if test x"$ENABLE_MINGW" = x"yes"; then
-  AC_PATH_PROG([mingwgcc], [`uname -m`-w64-mingw32-gcc], [no])
-  AS_IF([test x"$mingwgcc" = x"no"], [AC_MSG_ERROR([MinGW gcc not found in path.])])
-
-  AC_MSG_CHECKING([for zlib1.dll in MinGW distribution])
-  ZLIB1_DLL=`$mingwgcc -print-file-name=zlib1.dll`
-  if test -f "$ZLIB1_DLL"; then
-    AC_MSG_RESULT([$ZLIB1_DLL])
-  else
-    AC_MSG_ERROR([Could not find zlib1.dll on disk])
-  fi
-
-  AC_MSG_CHECKING([for SDL2])
-  if test -n "$with_sdl2" && test x"$with_sdl2" != x"no" && test -f "$with_sdl2"; then
-    AC_MSG_RESULT([$with_sdl2])
-    SDL2_DLL=$with_sdl2
-  else
-    AC_MSG_ERROR(['$with_sdl2' is not a valid file on disk])
-  fi
-
-  AC_MSG_CHECKING([for GLEW binary development distribution])
-  if test -n "$with_glew" && test x"$with_glew" != x"no" && test -d "$with_glew"; then
-    if test x"`uname -m`" = x"x86_64"; then
-      glew_dir=${with_glew}/bin/Release/x64
-    else
-      glew_dir=${with_glew}/bin/Release/Win32
-    fi
-    GLEW_FLAGS=--with-glew=$with_glew
-    GLEW_DLL=$glew_dir/glew32.dll
-    AC_MSG_RESULT([$with_glew])
-  else
-    AC_MSG_RESULT([no])
-  fi
-
-  if test x"$EXTERNAL_GNGEO" != x"yes"; then
-    AC_MSG_CHECKING([for GnGeo installation directory])
-    if test -z "$GNGEO_INSTALL_PATH"; then
-      GNGEO_INSTALL_PATH="$prefix/ngdevkit-gngeo"
-    fi
-    AC_MSG_RESULT([$GNGEO_INSTALL_PATH])
-  fi
-
-  EMUDBG_BUILD_FLAGS="--host=x86_64-w64-mingw32 --build=\`\$\$CURPWD/emudbg/config.guess\`"
-  GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-mingw --host=x86_64-w64-mingw32 --build=\`\$\$CURPWD/gngeo/config.guess\` $GLEW_FLAGS"
-
-elif test x"$ENABLE_MSYS2" = x"yes"; then
-  # dnl technically, this is still relying on MinGW
-  ENABLE_MINGW=yes
-  arch=`uname -m | sed 's/.*_//'`
-  export PATH=/mingw${arch}/bin:$PATH
-  AC_PATH_PROG([mingwgcc], [`uname -m`-w64-mingw32-gcc], [no])
-  AS_IF([test x"$mingwgcc" = x"no"], [AC_MSG_ERROR([MinGW gcc not found in path.])])
-
-  AC_MSG_CHECKING([for zlib1.dll in MinGW distribution])
-  ZLIB1_DLL=/mingw${arch}/bin/zlib1.dll
-  if test -f "$ZLIB1_DLL"; then
-    AC_MSG_RESULT([$ZLIB1_DLL])
-  else
-    AC_MSG_ERROR([Could not find zlib1.dll on disk])
-  fi
-
-  AC_MSG_CHECKING([for SDL2])
-  if test -z "$with_sdl2"; then
-    with_sdl2=/mingw${arch}/bin/SDL2.dll
-  fi
-  if test x"$with_sdl2" != x"no" && test -f "$with_sdl2"; then
-    AC_MSG_RESULT([$with_sdl2])
-    SDL2_DLL=$with_sdl2
-  else
-    AC_MSG_ERROR(['$with_sdl2' is not a valid file on disk])
-  fi
+if test x"$ENABLE_MSYS2" = x"yes"; then
+  AC_PATH_PROG([msys2gcc], [$MSYSTEM_CHOST-gcc], [no])
+  AS_IF([test x"msys2gcc" = x"no"], [AC_MSG_ERROR([$MSYSTEM_CHOST-gcc not found in path.])])
+  PKG_CHECK_MODULES([zlib],[zlib])
+  ZLIB1_DLL=$MSYSTEM_PREFIX/bin/zlib1.dll
+  PKG_CHECK_MODULES([SDL2],[SDL2])
+  SDL2_DLL=$MSYSTEM_PREFIX/bin/SDL2.dll
 
   AC_MSG_CHECKING([for GLEW])
-  if test -z "$with_glew"; then
-    with_glew=/mingw${arch}/bin/glew32.dll
-  fi
-  if test x"$with_glew" != x"no" && test -f "$with_glew"; then
-    AC_MSG_RESULT([$with_glew])
-    GLEW_DLL=$with_glew
+  if test -f "$MSYSTEM_PREFIX/bin/glew32.dll"; then
+    GLEW_FLAGS=--with-glew
+    GLEW_DLL=$MSYSTEM_PREFIX/bin/glew32.dll
+    AC_MSG_RESULT([yes])
   else
     AC_MSG_RESULT([no])
   fi
@@ -215,16 +145,17 @@ elif test x"$ENABLE_MSYS2" = x"yes"; then
   if test x"$EXTERNAL_GNGEO" != x"yes"; then
     AC_MSG_CHECKING([for GnGeo installation directory])
     if test -z "$GNGEO_INSTALL_PATH"; then
-      GNGEO_INSTALL_PATH="$prefix/ngdevkit-gngeo"
+      GNGEO_INSTALL_PATH="$prefix"
     fi
     AC_MSG_RESULT([$GNGEO_INSTALL_PATH])
   fi
 
-  EMUDBG_BUILD_FLAGS="--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 CC=${mingwgcc}"
-  GNGEO_ACLOCAL_PATH="-I/mingw${arch}/share/aclocal"
-  GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-mingw --enable-msys2 CC=${mingwgcc} $GLEW_FLAGS"
-  EXTRA_BUILD_CMD='export PATH=/mingw'${arch}'/bin:$$PATH'
-  EXTRA_BUILD_CMD_TOOLCHAIN='export MSYSTEM_CHOST=x86_64-w64-mingw32 && export MSYSTEM=MINGW64 && export PATH=/mingw64/bin:$$$$CURPWD/$$(@)/bin:$$$$PATH'
+  EMUDBG_BUILD_FLAGS="--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32"
+  GNGEO_BUILD_FLAGS="--prefix=$GNGEO_INSTALL_PATH --enable-msys2 $GLEW_FLAGS"
+  dnl This is necessary for gngeo to not convert path
+  EXTRA_BUILD_CMD='export MSYS2_ARG_CONV_EXCL="-DDATA_DIRECTORY="'
+  dnl building the toolchain only works with MSYS sed
+  EXTRA_BUILD_CMD_TOOLCHAIN='mkdir -p $$(BUILD)/sed-msys2;cp /usr/bin/sed.exe $$(BUILD)/sed-msys2; export PATH=$$(BUILD)/sed-msys2:$$$$PATH'
   EXTRA_BUILD_FLAGS_TOOLCHAIN='--build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32'
 else
   GNGEO_BUILD_FLAGS="--prefix=$prefix"
@@ -234,14 +165,11 @@ AC_SUBST([EXTRA_BUILD_CMD_TOOLCHAIN])
 AC_SUBST([EXTRA_BUILD_FLAGS_TOOLCHAIN])
 AC_SUBST([EXTRA_BUILD_CMD])
 
-AC_SUBST([ENABLE_MINGW])
 AC_SUBST([ENABLE_MSYS2])
 AC_SUBST([ZLIB1_DLL])
 AC_SUBST([SDL2_DLL])
-AC_SUBST([GLEW_FLAGS])
 AC_SUBST([GLEW_DLL])
 AC_SUBST([EMUDBG_BUILD_FLAGS])
-AC_SUBST([GNGEO_ACLOCAL_PATH])
 AC_SUBST([GNGEO_BUILD_FLAGS])
 AC_SUBST([GNGEO_INSTALL_PATH])
 AC_SUBST([NGDK_GCC_SEARCH_PATH])
@@ -259,3 +187,10 @@ AC_CONFIG_FILES([
  tools/Makefile
 ])
 AC_OUTPUT
+
+if test x"$ENABLE_MSYS2" = x"yes"; then
+    # dnl recap warning in the summary
+    if echo $MSYSTEM | grep -q -w -v -e UCRT64; then
+        AC_MSG_WARN([Unsupported environment ($MSYSTEM). You should run `configure` in the UCRT64 environment])
+    fi
+fi
