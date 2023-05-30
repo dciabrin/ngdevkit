@@ -1,10 +1,16 @@
 # ngdevkit, open source development for Neo-Geo
 
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey)
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/dciabrin/ngdevkit/Build%20and%20publish%20nightly)
-![GitHub](https://img.shields.io/github/license/dciabrin/ngdevkit)
+[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-green.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![Fedora](https://img.shields.io/badge/Fedora-37%20|%2038%20|%20Rawhide-informational?logo=Fedora&logoColor=white)](https://copr.fedorainfracloud.org/coprs/dciabrin/ngdevkit/monitor)
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-Jammy%20|%20Kinetic-informational?logo=Ubuntu&logoColor=white)](https://code.launchpad.net/~dciabrin/ngdevkit/+git/ngdevkit)
+[![Homebrew](https://img.shields.io/badge/Homebrew-11%20|%2012-informational?logo=Homebrew&logoColor=white)](https://github.com/dciabrin/homebrew-ngdevkit)
+[![MSYS2](https://img.shields.io/badge/MSYS2-ucrt64-informational?logo=Windows&logoColor=white)](https://github.com/dciabrin/msys2-ngdevkit)
 
-ngdevkit is a C/C++ software development kit for the Neo-Geo
+
+## Overview
+
+ngdevkit is a C software development kit for the Neo-Geo
 AES or MVS hardware. It includes:
 
    * A toolchain for cross compiling to m68k, based on GCC
@@ -16,7 +22,7 @@ AES or MVS hardware. It includes:
    * Helpers for declaring ROM information (name, DIP, interrupt
      handlers...)
 
-   * A C and ASM cross-compiler for the z80 (SDCC 3.7), for developing
+   * A C and ASM cross-compiler for the z80 (SDCC 4.2), for developing
      your music and sound driver.
 
    * An open source replacement BIOS for testing your ROMs
