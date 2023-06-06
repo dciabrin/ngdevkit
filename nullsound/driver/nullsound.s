@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2018-2020 Damien Ciabrini
+;;; Copyright (c) 2018-2023 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -40,15 +40,35 @@
 ;;;
         .area START (ABS)
         di
-        ;; at boot, stay idle in RAM until the 68k triggers a sound
-        ;; command with a NMI to initialize and start the driver
-        prepare_wait_in_ram_opcode
-        ret
+        jp      init_z80_and_wait
 
-_rom_info:
-        nullsound_id
 
-;;; NMI handler (fixed address 0x0066 in the z80)
+;;; Restart handlers. An custom jump-table to the most called functions
+;;; in this Z80 ROM. Accessed with the `RST` opcode, which is slightly
+;;; faster and space-efficient than a regular `CALL` opcode.
+        .org    0x0008
+        ret                     ; unused
+        .org    0x0010
+        ret                     ; unused
+        .org    0x0018
+        ret                     ; unused
+        .org    0x0020
+        ret                     ; unused
+        .org    0x0028
+        ret                     ; unused
+        .org    0x0030
+        ret                     ; unused
+
+
+;;; INT handler for the two interrupts triggered by the YM2610
+;;; (fixed address 0x0038 when the Z80 uses Interrupt Mode 1)
+        .org    0x0038
+        di
+        ;; TODO
+        ei
+        reti
+
+;;; NMI handler (fixed address 0x0066 in the Z80)
         .org    0x0066
         ;; common driver commands
         ex      af, af'
@@ -64,14 +84,18 @@ _end_nmi::
         retn
 
 
+_rom_info:
+        nullsound_id
+
 
         ;; the rest of the code is relative, to allow linking objects
         ;; set the location counter arbitrary far to not overwrite START
         .area CODE
         . = . + 0x0100
 
-;;; the jump table to the a sound command requested via NMI
+;;; the jump table to a sound command requested via NMI
 ;;; each entry is "jp <address>" (3 bytes)
+;;; max 128 entries allowed in the sound driver
 cmd_jmptable:
         ;; common/reserved sound commands
         jp      snd_command_nop
@@ -82,7 +106,7 @@ cmd_jmptable:
         user_jmptable
 cmd_jmptable_padding:
         ;; fill remaining commands if any
-        .rept   256-((cmd_jmptable_padding - cmd_jmptable)/3)
+        .rept   128-((cmd_jmptable_padding - cmd_jmptable)/3)
         jp      snd_command_nop
         .endm
 
@@ -92,6 +116,31 @@ cmd_jmptable_padding:
         ;; Common YM2610 defines and functions
         .include "ym2610.def"
         .include "ym2610.s"
+
+
+;;; This performs a very minimal Z80 initialization to quickly
+;;; mute the ym2610 and to stay idle in RAM until the 68k sets up
+;;; the proper Z80 ROM and triggers the sound driver initialization
+
+init_z80_and_wait:
+        ;; Configure the Z80 for interrupt mode 1 (fixed handler @ 0x0038)
+        im      1
+        ;; On the platform, the Z80 only receives NMIs once the Z80 ports
+        ;; mapped to bankswitching have been written to.
+        xor     a
+        out     (PORT_ENABLE_NMI), a
+        ;; Mute sound
+        call snd_reset_ym2610
+        ;; At this point, prepare to stay idle in RAM. This allows multi-slot
+        ;; MVS cabinets to switch game and map the game's sound ROM in the
+        ;; Z80 address space.
+        prepare_wait_in_ram_opcodes
+        ;; Returns to RAM and busy-loop until a NMI is triggered and resumes
+        ;; the driver's initialization
+        ret
+
+
+
 
         ;; Reserved commands (to init/reset the driver)
         .include "nullsound_commands.s"

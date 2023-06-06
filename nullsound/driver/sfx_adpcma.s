@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2020 Damien Ciabrini
+;;; Copyright (c) 2020-2023 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -75,12 +75,12 @@ sfx_adpcm_a_configure:
         ld      a, CHANNEL(ix)
         or      #0x80
         ld      c, a
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
         ld      b, #REG_ADPCM_PLAYBACK_MASK
         ld      c, CHANNEL(ix)
-        call ym2610_set_register_ports_4_5
+        call    ym2610_write_port_a
         ld      c, #0
-        call ym2610_set_register_ports_4_5
+        call    ym2610_write_port_a
         ;; prepare the sample addresses
         ld      a, #REG_ADPCM_A1_ADDR_START_LSB
         ld      b, CHANNEL(ix)
@@ -94,37 +94,37 @@ _sfx_adpcm_a_addr:
 _sfx_adpcm_a_addr_end:
         ld      b, a
         ld      c, START_LSB(ix)
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
 
         ;; sample start MSB
         add     a, #8
         ld      b, a
         ld      c, START_MSB(ix)
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
 
         ;; sample stop LSB
         add     a, #8
         ld      b, a
         ld      c, STOP_LSB(ix)
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
 
         ;; sample stop MSB
         add     a, #8
         ld      b, a
         ld      c, STOP_MSB(ix)
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
 
         ;; channel volume
         ld      a, #(REG_ADPCM_A1_VOL-1)
         add     a, CHANNEL(ix)
         ld      b, a
         ld      c, VOLUME(ix)
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
 
         ;; play channel
         ld      b, #REG_ADPCM_A_START_STOP
         ld      c, CHANNEL(ix)
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
 
         ;; yield to the mainloop
         ld      bc, #VOLUME

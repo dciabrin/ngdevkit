@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2020 Damien Ciabrini
+;;; Copyright (c) 2020-2023 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -57,13 +57,14 @@
         .endm
 
         ;; private helper to generate z80 opcode to stay idle in RAM
-        .macro  prepare_wait_in_ram_opcode
-        ;; build a jmp-to-self instruction at the top of RAM
+        .macro  prepare_wait_in_ram_opcodes
+        ;; create a jmp-to-self instruction at the top of the RAM
+        ;; to ensure the 68k can bank-switch z80 code without impact
         ld      bc, #0xfe18     ; jr <self>
+        ld      (#0xfffe), bc
+        ;; ;; prepare the stack to pop into the jump-to-self in RAM
         ld      hl, #0xfffe
         ld      sp, hl
-        push    bc
-        ;; popping the stack will lock the Z80 in RAM
         push    hl
         .endm
 

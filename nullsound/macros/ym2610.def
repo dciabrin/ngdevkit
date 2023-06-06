@@ -1,6 +1,6 @@
 ;;; -*- asm -*-
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2020 Damien Ciabrini
+;;; Copyright (c) 2020-2023 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -26,11 +26,13 @@
         .equ    PORT_YM2610_STATUS,          0x04
         .equ    PORT_PLAYBACK_FINISHED,      0x06
         ;; write ports
-        .equ    PORT_4_ADDR,                 0x04
-        .equ    PORT_5_VALUE,                0x05
-        .equ    PORT_6_ADDR,                 0x06
-        .equ    PORT_7_VALUE,                0x07
+        .equ    PORT_YM2610_A_ADDR,          0x04
+        .equ    PORT_YM2610_A_VALUE,         0x05
+        .equ    PORT_YM2610_B_ADDR,          0x06
+        .equ    PORT_YM2610_B_VALUE,         0x07
+        .equ    PORT_ENABLE_NMI,             0x08
         .equ    PORT_TO_68K,                 0x0c
+        .equ    PORT_DISABLE_NMI,            0x18
 
 ;;; ADPCM playback status
 ;;; These macros are meant to be used with port 4 and port 5

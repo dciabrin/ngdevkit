@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2020 Damien Ciabrini
+;;; Copyright (c) 2020-2023 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -33,22 +33,17 @@ snd_command_nop:
 ;;; the new ROM.
 snd_command_01_prepare_for_rom_switch:
         di
-        ;; signal we're preparing the reset
+        ;; Acknowledge command to the 68k
         xor     a
         out     (PORT_TO_68K), a
         out     (PORT_FROM_68K), a
         ;; reset the ym2610
         call    snd_reset_ym2610
         ;; ;; build a jmp-to-self instruction in RAM
-        ;; ld      bc, #0xfe18     ; jr <self>
-        ;; ld      hl, #0xfffe
-        ;; ld      sp, hl
-        ;; push    bc
-        ;; push    hl
-        prepare_wait_in_ram_opcode
+        prepare_wait_in_ram_opcodes
         ;; signal the 68k that we're ready
         ld      a, #1
-        out     (0x0c), a
+        out     (PORT_TO_68K), a
         ;; return from NMI in top of RAM and loop there
         retn
 
@@ -73,11 +68,11 @@ snd_command_03_reset_driver:
 ;;; mute the ym2610 and reset its master volume
 snd_reset_ym2610:
         ld      b, #REG_ADPCM_A_START_STOP
-        ld      a, #0x80        ; stop all channels
-        call    ym2610_set_register_ports_6_7
+        ld      c, #0x80        ; stop all channels
+        call    ym2610_write_port_b
         ld      b, #REG_ADPCM_A_MASTER_VOLUME
         ld      c, #0x3f        ; loudest
-        call    ym2610_set_register_ports_6_7
+        call    ym2610_write_port_b
         ret
 
 
