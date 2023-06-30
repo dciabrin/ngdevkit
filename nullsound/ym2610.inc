@@ -1,4 +1,3 @@
-;;; -*- asm -*-
 ;;; nullsound - modular sound driver
 ;;; Copyright (c) 2020-2023 Damien Ciabrini
 ;;; This file is part of ngdevkit
@@ -20,36 +19,22 @@
 ;;; https://wiki.neogeodev.org/index.php?title=YM2610_registers
 
 
-;;; Z80 ports mapped to the YM2610
-        ;; read ports
-        .equ    PORT_FROM_68K,               0x00
-        .equ    PORT_YM2610_STATUS,          0x04
-        .equ    PORT_PLAYBACK_FINISHED,      0x06
-        ;; write ports
-        .equ    PORT_YM2610_A_ADDR,          0x04
-        .equ    PORT_YM2610_A_VALUE,         0x05
-        .equ    PORT_YM2610_B_ADDR,          0x06
-        .equ    PORT_YM2610_B_VALUE,         0x07
-        .equ    PORT_ENABLE_NMI,             0x08
-        .equ    PORT_TO_68K,                 0x0c
-        .equ    PORT_DISABLE_NMI,            0x18
-
 ;;; ADPCM playback status
-;;; These macros are meant to be used with port 4 and port 5
+;;; These macros are meant to be used with Z80 port 4 and port 5
         .equ    REG_ADPCM_PLAYBACK_MASK,     0x1c
 
 ;;; ADPCM-A
-;;; These macros are meant to be used with port 6 and port 7
+;;; These macros are meant to be used with Z80 port 6 and port 7
         .equ    REG_ADPCM_A_START_STOP,      0x00
         .equ    REG_ADPCM_A_MASTER_VOLUME,   0x01
         .equ    REG_ADPCM_A_RESERVED,        0x02
 
-        .equ    REG_ADPCM_A1_VOL,            0x08
-        .equ    REG_ADPCM_A2_VOL,            0x09
-        .equ    REG_ADPCM_A3_VOL,            0x0a
-        .equ    REG_ADPCM_A4_VOL,            0x0b
-        .equ    REG_ADPCM_A5_VOL,            0x0c
-        .equ    REG_ADPCM_A6_VOL,            0x0d
+        .equ    REG_ADPCM_A1_PAN_VOLUME,     0x08
+        .equ    REG_ADPCM_A2_PAN_VOLUME,     0x09
+        .equ    REG_ADPCM_A3_PAN_VOLUME,     0x0a
+        .equ    REG_ADPCM_A4_PAN_VOLUME,     0x0b
+        .equ    REG_ADPCM_A5_PAN_VOLUME,     0x0c
+        .equ    REG_ADPCM_A6_PAN_VOLUME,     0x0d
 
         .equ    REG_ADPCM_A1_ADDR_START_LSB, 0x10
         .equ    REG_ADPCM_A2_ADDR_START_LSB, 0x11
@@ -78,3 +63,18 @@
         .equ    REG_ADPCM_A4_ADDR_STOP_MSB,  0x2b
         .equ    REG_ADPCM_A5_ADDR_STOP_MSB,  0x2c
         .equ    REG_ADPCM_A6_ADDR_STOP_MSB,  0x2d
+
+;;; ADPCM-B
+;;; These macros are meant to be used with Z80 port 4 and port 5
+        .equ    REG_ADPCM_B_START_STOP,      0x10
+        .equ    REG_ADPCM_B_PAN,             0x11
+
+        .equ    REG_ADPCM_B_ADDR_START_LSB,  0x12
+        .equ    REG_ADPCM_B_ADDR_START_MSB,  0x13
+        .equ    REG_ADPCM_B_ADDR_STOP_LSB,   0x14
+        .equ    REG_ADPCM_B_ADDR_STOP_MSB,   0x15
+
+        .equ    REG_ADPCM_B_DELTA_N_LSB,     0x19
+        .equ    REG_ADPCM_B_DELTA_N_MSB,     0x1a
+
+        .equ    REG_ADPCM_B_VOLUME,          0x1b

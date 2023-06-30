@@ -1,6 +1,5 @@
 ;;;
-;;; nullsound - modular sound driver
-;;; Copyright (c) 2020 Damien Ciabrini
+;;; Copyright (c) 2023 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -17,12 +16,17 @@
 ;;; along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-        ;; ------------------------------------------------
-        ;; this default driver plays nothing, it's just a
-        ;; ROM that allows the console to boot successfully
-        ;; ------------------------------------------------
-        ;;
-        .equ    MODULES, 0
-        .equ    ACTION_STATE_SIZE, 0
-        .macro  user_jmptable
-        .endm
+        .include "helpers.inc"
+        .area   CODE
+
+
+;; this default driver plays nothing, it's just a
+;; ROM that allows the console to boot successfully
+;;
+
+cmd_jmptable::
+        jp      snd_command_unused
+        jp      snd_command_01_prepare_for_rom_switch
+        jp      snd_command_unused
+        jp      snd_command_03_reset_driver
+        init_unused_cmd_jmptable

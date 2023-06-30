@@ -25,8 +25,10 @@ all: $(BIOS)
 
 -include ../Makefile.config
 
-NULLSOUND=../nullsound
-SOUND_DRIVER=$(NULLSOUND)/nullsound.ihx
+NULLSOUNDSRCDIR=../nullsound
+NULLSOUND=../nullsound/nullsound.lib
+Z80_OBJS=user_commands
+Z80_HEX=nullsound_driver.ihx
 
 VERSION=@PACKAGE_VERSION@
 
@@ -36,8 +38,11 @@ nullbios $(VERSION), an open source BIOS for Neo Geo\n\
 https://github.com/dciabrin/ngdevkit\n\
 ." | /usr/bin/zip -qz neogeo.zip *.lo *.s* *.bin
 
-$(MROM): $(SOUND_DRIVER) | rom
+$(MROM): $(Z80_HEX) | rom
 	$(NGSDOBJCOPY) -I ihex -O binary $< $@ --pad-to 131072
+
+user_commands.rel: user_commands.s
+	$(NGSDAS) -g -l -p -u -I$(NULLSOUNDSRCDIR) -o $@ $<
 
 $(SROM): | rom
 	dd if=/dev/zero bs=1024 count=128 of=$@
@@ -66,15 +71,16 @@ aes-bios.elf: aes-bios.o
 aes-bios.o: biosstart.S
 	$(NGGCC) -DBIOS_ROM_HARDWARE=0 -DBIOS_ROM_COUNTRY=2 -I../include -c $< -o $@
 
-$(SOUND_DRIVER):
-	$(MAKE) -C $(NULLSOUND)
+$(Z80_HEX): $(Z80_OBJS:%=%.rel)
+	$(MAKE) -C $(NULLSOUNDSRCDIR)
+	$(NGSDLD) -b DATA=0xf800 -i $@ $(NULLSOUND) $^
 
-install: $(BIOS)
+install: $(BIOS) $(Z80_HEX)
 	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
-	$(INSTALL) $< $(DESTDIR)$(prefix)/share/ngdevkit
+	$(INSTALL) $^ $(DESTDIR)$(prefix)/share/ngdevkit
 
 
 clean:
-	rm -f *.o *~ *.elf rom/*.*
+	rm -f *.o *~ *.elf *.rel *.lst *.rst *.ihx rom/*.*
 
 .PHONY: install clean bios

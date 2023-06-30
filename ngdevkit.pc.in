@@ -6,6 +6,8 @@ bindir=@bindir@
 libdir=@prefix@/m68k-neogeo-elf/lib
 includedir=@prefix@/m68k-neogeo-elf/include
 sharedir=@datarootdir@/ngdevkit
+z80includedir=@prefix@/z80-neogeo-ihx/include
+z80libdir=@prefix@/z80-neogeo-ihx/lib
 
 Name: ngdevkit
 Description: Opensource development for the Neo-Geo

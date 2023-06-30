@@ -5,6 +5,7 @@
 *.rel
 *.lst
 *.rst
+*.lib
 
 # Libraries
 *.a

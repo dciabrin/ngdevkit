@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Damien Ciabrini
+# Copyright (c) 2018-2023 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,35 +14,34 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-all: nullsound.ihx
+all: nullsound.lib
 
 -include ../Makefile.config
 
-MACRO_FILES=nullsound ym2610
-DRIVER_FILES=nullsound nullsound_commands sfx_adpcma ym2610
-NULLDRIVER_OBJS=driver/nullsound
-NULLDRIVER=nullsound.ihx
+INCLUDE_FILES=helpers ports ym2610
+OBJS=entrypoint bios-commands adpcm ym2610
+LIB=nullsound.lib
 
 VERSION=@version@
 
-$(NULLDRIVER): $(NULLDRIVER_OBJS:%=%.rel)
-	$(NGSDLD) -i $@ $<
+$(LIB): $(OBJS:%=%.rel)
+	$(NGSDAR) -rc $@ $^
 
 %.rel: %.s
-	$(NGSDAS) -Imacros -Idriver -g -l -p -u -o $@ $<
+	$(NGSDAS) -g -l -p -u -o $@ $<
 
-install: install-nullsound install-nullsound-src
+install: install-nullsound install-include
 
-install-nullsound: nullsound.ihx
-	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
-	$(INSTALL) $< $(DESTDIR)$(prefix)/share/ngdevkit
+install-nullsound: $(LIB)
+	$(INSTALL) -d $(DESTDIR)$(prefix)/z80-neogeo-ihx/lib && \
+	$(INSTALL) $^ $(DESTDIR)$(prefix)/z80-neogeo-ihx/lib
 
-install-nullsound-src: $(DRIVER_FILES:%=driver/%.s) $(MACRO_FILES:%=macros/%.def)
-	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit/nullsound && \
-	$(INSTALL) $^ $(DESTDIR)$(prefix)/share/ngdevkit/nullsound
+install-include: $(INCLUDE_FILES:%=%.inc)
+	$(INSTALL) -d $(DESTDIR)$(prefix)/z80-neogeo-ihx/include/nullsound && \
+	$(INSTALL) $^ $(DESTDIR)$(prefix)/z80-neogeo-ihx/include/nullsound
 
 
 clean:
-	rm -f *.ihx driver/*.rel driver/*.lst *~
+	rm -f *.lib *.rel *.lst *.rst *~
 
 .PHONY: clean
