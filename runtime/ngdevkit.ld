@@ -183,13 +183,15 @@ SECTIONS {
    * of the banks are linked at the end of the allocated RAM.
    * These variables are not initialized by the C runtime.
    */
-  .data2 : AT(__data_start) {
+  __data2_start = __data_end ;
+  .data2 : AT(__data2_start) {
     /* bank-switched .bss and .data are essentially the same.
      * unitialized, user-managed data only. */
     *(.bss .bss.*)
     *(.data .data.*)
     . = ALIGN(4);
   } >RAM =0xffffffff
+  __data2_end = __data2_start + SIZEOF(.data2);
 
   /* From there, the linker's output location lies at the
    * end of the used RAM. If you're crazy enough to use
@@ -208,7 +210,7 @@ SECTIONS {
    * Note: we first link everything that is not explicitely tagged
    * to end up in the bank-switched P-ROM.
    */
-   __text_start = (__data_end + 3) / 4 * 4;
+   __text_start = (__data2_end + 3) / 4 * 4;
   .text __text_start : AT(__text_start) {
     /* The devkit's static libraries are linked first */
     *libgcc.a:*(.text .text.*)
