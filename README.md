@@ -74,10 +74,13 @@ packages, available in the ngdevkit tap:
 
     # If you haven't done it yet, make sure XCode is installed first
     sudo xcode-select --install
+    # If needed, init brew and its environment variables
+    eval $(/opt/homebrew/bin/brew shellenv)
+    # install ngdevkit
     brew tap dciabrin/ngdevkit
     brew install ngdevkit ngdevkit-gngeo
     # make sure you use brew's python3 in your shell
-    export PATH=/usr/local/opt/python3/bin:$PATH
+    export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
     pip3 install pygame
     # the remaining packages are only required for the examples
     brew install pkg-config autoconf automake zip imagemagick sox
@@ -126,7 +129,7 @@ on Linux or Windows/MSYS2:
 For macOS, make sure you use brew's python3 and gmake:
 
     cd examples
-    export PATH=/usr/local/opt/python3/bin:$PATH
+    export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
     autoreconf -iv
     ./configure
     gmake
@@ -142,7 +145,7 @@ test the compiled example and run GnGeo from the makefile:
     # or run "make gngeo-fullscreen" for a more immersive test
 
 If you are running a recent macOS, [System Integrity Protection][sip]
-may prevent you from running GnGeo from make, so you may need to run
+may prevent you from running GnGeo from gmake, so you may need to run
 it from your terminal:
 
     eval $(gmake -n gngeo)

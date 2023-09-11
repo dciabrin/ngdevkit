@@ -5,5 +5,6 @@ if [ -n "$PY3PATH" ]; then
 fi
 autoreconf -iv
 ./configure --prefix=${PREFIX} --enable-external-toolchain --enable-external-emudbg --enable-external-gngeo
-make
-sudo make install
+MAKE=$(which gmake make | head -1)
+$MAKE
+sudo $MAKE install

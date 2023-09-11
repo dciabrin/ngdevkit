@@ -10,7 +10,7 @@ packages (called bottles), so most of the time will be spent in
 compiling the devkit itself and not its dependencies.
 
 You will need XCode, and GNU Make 4.x. Please note that the version of
-GNU Make shipped with XCode is tool old for ngdevkit, so you need to
+GNU Make shipped with XCode is too old for ngdevkit, so you need to
 install it from brew and use `gmake` instead of `make` as explained
 later in this documentation.
 
@@ -31,7 +31,15 @@ libraries.
 The examples require ImageMagick for all the graphics
 trickery and sox for audio conversion purpose.
 
-The dependencies are installed as follows:
+Make sure that `brew` is in your PATH and its environment variables are
+set up properly. By default, brew is installed in `/usr/local/bin/brew`
+on Intel macs, and in `/opt/homebrew/bin/brew` on ARM macs. If `brew`
+is not found in your PATH, you must initialize your it with:
+
+    eval $(/opt/homebrew/bin/brew shellenv)
+    # Intel macs would use /usr/local/bin/brew shellenv
+
+Then, ngdevkit's dependencies are installed as follows:
 
     brew update
     brew install gmake
@@ -39,7 +47,8 @@ The dependencies are installed as follows:
     brew install glew sdl2 sdl2_image
     brew install python3
     # make sure you use brew's python3 to install pygame
-    export PATH=/usr/local/opt/python3/bin:$PATH
+    # if not, update your path like e.g.
+    # export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
     pip3 install pygame
     brew deps gcc | xargs brew install
     brew deps sdcc | xargs brew install
@@ -48,6 +57,15 @@ The dependencies are installed as follows:
 
 
 ## Building the toolchain
+
+In order to build ngdevkit, the installed brew dependencies must
+be available to the compiler, so you must add brew's PATH into
+your build flags manually:
+
+    export CFLAGS="-I${HOMEBREW_PREFIX}/include${CFLAGS+ ${CFLAGS}}"
+    export CXXFLAGS="-I${HOMEBREW_PREFIX}/include${CXXFLAGS+ ${CXXFLAGS}}"
+    export CPPFLAGS="-I${HOMEBREW_PREFIX}/include${CPPFLAGS+ ${CPPFLAGS}}"
+    export LDFLAGS="-L${HOMEBREW_PREFIX}/lib -Wl,-rpath,${HOMEBREW_PREFIX}/lib${LDFLAGS+ ${LDFLAGS}}"
 
 The devkit relies on autotools to check for dependencies and
 autodetect the proper build flags. It is advised that you build
