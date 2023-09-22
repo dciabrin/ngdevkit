@@ -16,7 +16,7 @@ For example, on Ubuntu Focal (20.04), you can install the dependencies with:
     apt-get install autoconf autoconf-archive automake gcc curl zip unzip
     apt-get install libsdl2-dev
     apt-get install python3-pygame
-    apt-get install readline-dev
+    apt-get install libreadline-dev
     GCC_VERSION_PKG=$(apt-cache depends gcc | awk '/Depends.*gcc/ {print $2}')
     # make sure you have src packages enabled for dependency information
     echo "deb-src http://archive.ubuntu.com/ubuntu/ focal main restricted" > /etc/apt/sources.list.d/ngdevkit.list
