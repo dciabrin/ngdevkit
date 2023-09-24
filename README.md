@@ -134,6 +134,11 @@ For macOS, make sure you use brew's python3 and gmake:
     ./configure
     gmake
 
+For any platform that supports docker
+
+```shell
+make -f Makefile.docker shell
+```
 
 ### Running the emulator
 

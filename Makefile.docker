@@ -1,0 +1,13 @@
+docker:
+	docker build . -t ndevkit
+
+shell:	docker
+	docker run -it --rm -v `pwd`:/tmp/workdir -w /tmp/workdir ndevkit bash
+
+USER=hldtux
+IMAGE=ndevkit
+TAGNAME=latest
+push:
+	docker tag ${IMAGE} ${USER}/${IMAGE}:${TAGNAME}
+	docker push ${USER}/${IMAGE}:${TAGNAME}
+
