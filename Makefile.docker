@@ -1,13 +1,14 @@
+IMAGE=hldtux/ndevkit
+TAG=latest
+# Forcing amd64 arch
+DOCKER_DEFAULT_PLATFORM=linux/amd64
+
 docker:
-	docker build . -t ndevkit
+	docker build . -t ${IMAGE}
 
 shell:	docker
-	docker run -it --rm -v `pwd`:/tmp/workdir -w /tmp/workdir ndevkit bash
+	docker run -it --rm -v `pwd`:/tmp/workdir -w /tmp/workdir ${IMAGE} bash
 
-USER=hldtux
-IMAGE=ndevkit
-TAGNAME=latest
 push:
-	docker tag ${IMAGE} ${USER}/${IMAGE}:${TAGNAME}
-	docker push ${USER}/${IMAGE}:${TAGNAME}
+	docker push ${IMAGE}:${TAG}
 
