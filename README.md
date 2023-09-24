@@ -110,6 +110,12 @@ is now deprecated in favour of the native MSYS2 environment. Likewise,
 we no longer build nightly packages for MSYS2's mingw64 subsystem,
 ucrt64 is the only supported subsystem for ngdevkit.
 
+#### Docker
+
+```shell
+make -f Makefile.docker shell
+```
+
 ### Build the included examples
 
 The devkit comes with a series of examples to demonstrate how to use
