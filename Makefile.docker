@@ -1,4 +1,7 @@
+# Remote image
 IMAGE=hldtux/ndevkit
+# Local image
+#IMAGE=ndevkit
 TAG=latest
 # Forcing amd64 arch
 DOCKER_DEFAULT_PLATFORM=linux/amd64
