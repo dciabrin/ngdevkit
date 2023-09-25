@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: ngdevkit
+    name: ngdevkit ${{ github.event.inputs.image }}
     runs-on: ubuntu-latest
     environment: DockerHub
 
@@ -31,4 +31,5 @@ jobs:
       - name: Build and Deploy
         run: |
             make IMAGE=${{ github.event.inputs.image }} -f Makefile.docker docker push
+            echo "https://hub.docker.com/r/${{ github.event.inputs.image }}"
             
