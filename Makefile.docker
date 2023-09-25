@@ -1,6 +1,8 @@
 # Remote image
 IMAGE=hldtux/ndevkit
 # Local image
+# make IMAGE=ndevkit -f Makefile.docker 
+# or
 #IMAGE=ndevkit
 TAG=latest
 # Forcing amd64 arch
