@@ -71,7 +71,7 @@ _ym2610_wait_address_write:
 
 ;;; From https://wiki.neogeodev.org/index.php?title=Z80/YM2610_interface
 ;;; YM2610 requires at least 10.375us before accepting another write
-;;; call + pushes + ret = 83 T-cycles (20.75ms?)
+;;; call + pushes + ret = 83 T-cycles (20.75us?)
 _ym2610_wait_data_write:
         push    bc
         push    de
@@ -83,18 +83,51 @@ _ym2610_wait_data_write:
 
 ;;; Reset YM2610
 ;;; ------------
-;;; Mute the ym2610 and stop ADPCM playback
+;;; Mute the ym2610 FM channels, stop ADPCM playback and
+;;; and reset internal timers
 ym2610_reset::
-        ;; ADPCM-A
-        ld      b, #REG_ADPCM_A_MASTER_VOLUME
-        ld      c, #0x3f        ; loudest
+        push    bc
+        push    de
+        ;; reset all timers
+        ld      b, #REG_TIMER_FLAGS
+        ld      c, #0x30
+        call    ym2610_write_port_a
+        ;; FM
+        ;; mute OPs of all FM channels
+        ld      d, #4
+        ld      a, #REG_FM1_OP1_TOTAL_LEVEL
+        ld      b, a
+        ld      c, #0x7f        ; min volume
+_reset_fm:
+        call    ym2610_write_port_a
         call    ym2610_write_port_b
+        inc     b
+        call    ym2610_write_port_a
+        call    ym2610_write_port_b
+        add     a, #4
+        ld      b, a
+        dec     d
+        jp      nz, _reset_fm
+        ;; stop note of all FM channels
+        ld      b, #REG_FM_KEY_ON_OFF_OPS
+        ld      c, #0           ; stop all OPs for channel FM1
+        call    ym2610_write_port_a
+        ld      c, #1           ; stop all OPs for channel FM2
+        call    ym2610_write_port_a
+        ld      c, #5           ; stop all OPs for channel FM3
+        call    ym2610_write_port_a
+        ld      c, #6           ; stop all OPs for channel FM4
+        call    ym2610_write_port_a
+        ;; ADPCM-A
         ld      b, #REG_ADPCM_A_START_STOP
         ld      c, #0xbf        ; stop all channels A
         call    ym2610_write_port_b
         ld      b, #REG_ADPCM_PLAYBACK_MASK
         ld      c, #0x3f        ; reset and mask stop flag: all channels A
         call    ym2610_write_port_a
+        ld      b, #REG_ADPCM_A_MASTER_VOLUME
+        ld      c, #0x3f        ; loudest
+        call    ym2610_write_port_b
         ;; ADPCM-B
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #0x01        ; channel B reset (stop)
@@ -110,4 +143,6 @@ ym2610_reset::
         ld      b, #REG_ADPCM_PLAYBACK_MASK
         ld      c, #0x00        ; unmask all channels
         call    ym2610_write_port_a
+        pop     de
+        pop     bc
         ret
