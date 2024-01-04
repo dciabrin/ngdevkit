@@ -102,6 +102,8 @@ snd_stream_play::
         ld      (state_stream_instruments), bc
         ld      a, #1
         ld      (state_stream_in_use), a
+        call    init_nss_fm_state_tracker
+        call    init_nss_adpcm_state_tracker
         ;; start stream playback, it will get preempted
         ;; as soon as a wait opcode shows up in the stream
         call    update_stream_state_tracker
@@ -140,14 +142,32 @@ nss_opcodes:
         .dw     finish
         .dw     run_timer_b
         .dw     wait_int_b
+        .dw     fm_instrument_ext
+        .dw     fm_note_on_ext
+        .dw     fm_note_off_ext
+        .dw     adpcm_a_instrument_ext
+        .dw     adpcm_a_on_ext
+        .dw     adpcm_a_off_ext
+        .dw     adpcm_b_instrument
+        .dw     adpcm_b_note_on
+        .dw     adpcm_b_note_off
+        .dw     fm_ctx_1
+        .dw     fm_ctx_2
+        .dw     fm_ctx_3
+        .dw     fm_ctx_4
         .dw     fm_instrument
         .dw     fm_note_on
         .dw     fm_note_off
+        .dw     adpcm_a_ctx_1
+        .dw     adpcm_a_ctx_2
+        .dw     adpcm_a_ctx_3
+        .dw     adpcm_a_ctx_4
+        .dw     adpcm_a_ctx_5
+        .dw     adpcm_a_ctx_6
         .dw     adpcm_a_instrument
         .dw     adpcm_a_on
         .dw     adpcm_a_off
-        .dw     adpcm_b_instrument
-        .dw     adpcm_b_note_on
+        
 
 
 ;;; Process a single NSS opcode
@@ -250,11 +270,16 @@ run_timer_b::
 ;;; Suspend stream playback, resume after a number of Timer B
 ;;; interrupts has passed.
 ;;; ------
-;;; [hl]: number of interrupts unti lplayback resumes
+;;; [hl]: number of interrupts until playback resumes
 wait_int_b::
         ;;  how many interrupts to wait for before moving on
         ld      a, (hl)
         inc     hl
         ld      (state_timer_int_b_wait), a
+
+        ;; reset playback contexts
+        call    fm_ctx_reset
+        call    adpcm_a_ctx_reset
+        
         ld      a, #0
         ret

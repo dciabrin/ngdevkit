@@ -28,31 +28,117 @@
         .equ    NSS_FM_NEXT_REGISTER_GAP,       16
         .equ    NSS_FM_END_OF_REGISTERS,        0xb7
 
+
+
+        .area  DATA
+
+;;; FM playback state tracker
+;;; ------
+
+;;; context: current fm channel for opcode actions
+state_fm_channel::
+        .db     0
+
+
+
         .area  CODE
+;;;  Reset FM playback state.
+;;;  Called before playing a stream
+;;; ------
+;;; [a modified - other registers saved]
+init_nss_fm_state_tracker::
+        ld      a, #0
+        ld      (state_fm_channel), a
+        ret
+
+;;;  Reset FM playback state.
+;;;  Called before waiting for the next tick
+;;; ------
+;;; [a modified - other registers saved]
+fm_ctx_reset::
+        ld      a, #0
+        ld      (state_fm_channel), a
+        ret
+
+
+;;; FM NSS opcodes
+;;; ------
+
+;;; FM_CTX_1
+;;; Set the current FM track to be FM1 for the next FM opcode processing
+;;; ------
+fm_ctx_1::
+        ;; set new current FM channel
+        ld      a, #0
+        ld      (state_fm_channel), a
+        ld      a, #1
+        ret
+
+
+;;; FM_CTX_2
+;;; Set the current FM track to be FM2 for the next FM opcode processing
+;;; ------
+fm_ctx_2::
+        ;; set new current FM channel
+        ld      a, #1
+        ld      (state_fm_channel), a
+        ld      a, #1
+        ret
+
+
+;;; FM_CTX_3
+;;; Set the current FM track to be FM3 for the next FM opcode processing
+;;; ------
+fm_ctx_3::
+        ;; set new current FM channel
+        ld      a, #2
+        ld      (state_fm_channel), a
+        ld      a, #1
+        ret
+
+
+;;; FM_CTX_4
+;;; Set the current FM track to be FM4 for the next FM opcode processing
+;;; ------
+fm_ctx_4::
+        ;; set new current FM channel
+        ld      a, #3
+        ld      (state_fm_channel), a
+        ld      a, #1
+        ret
+
+
+;;; FM_INSTRUMENT_EXT
+;;; Configure the operators of an FM channel based on an instrument's data
+;;; ------
+;;; [ hl ]: FM channel
+;;; [hl+1]: instrument number
+fm_instrument_ext::
+        ;; set new current FM channel
+        ld      a, (hl)
+        ld      (state_fm_channel), a
+        inc     hl
+        jp      fm_instrument
 
 
 ;;; FM_INSTRUMENT
 ;;; Configure the operators of an FM channel based on an instrument's data
 ;;; ------
-;;; [ hl ]: FM channel
-;;; [hl+1]: instrument number
+;;; [ hl ]: instrument number
 fm_instrument::
-        push    bc
-
-        ;; b: fm channel
-        ld      b, (hl)
-        inc     hl
         ;; a: instrument
         ld      a, (hl)
         inc     hl
 
+        push    bc
         push    hl
         push    de
-        ;; save fm channel
-        push    bc
+
+        ;; b: fm channel
+        ld      a, (state_fm_channel)
+        ld      b, a
 
         ;; hl: instrument address in ROM
-        ;; (fm_channel still saved in b)
         sla     a
         ld      c, a
         ld      a, b
@@ -71,7 +157,8 @@ fm_instrument::
         ld      d, #NSS_FM_INSTRUMENT_PROPS
 
         ;; b: fm channel
-        pop     bc
+        ld      a, (state_fm_channel)
+        ld      b, a
 
         ;;  configure writes to port a/b based on channel
         ld      a,b
@@ -153,17 +240,29 @@ fm_note_f_num:
         .db      0x04, 0x8d  ; 1165 - B
 
 
-;;; FM_NOTE_ON
+;;; FM_NOTE_ON_EXT
 ;;; Emit a specific note (frequency) on an FM channel
 ;;; ------
 ;;; [ hl ]: FM channel
 ;;; [hl+1]: note (0xAB: A=octave B=semitone)
+fm_note_on_ext::
+        ;; set new current FM channel
+        ld      a, (hl)
+        ld      (state_fm_channel), a
+        inc     hl
+        jp      fm_note_on
+
+
+;;; FM_NOTE_ON
+;;; Emit a specific note (frequency) on an FM channel
+;;; ------
+;;; [ hl ]: note (0xAB: A=octave B=semitone)
 fm_note_on::
         push    de
 
         ;; e: fm channel
-        ld      e, (hl)
-        inc     hl
+        ld      a, (state_fm_channel)
+        ld      e, a
         ;; d: note (0xAB: A=octave B=semitone)
         ld      d, (hl)
         inc     hl
@@ -257,21 +356,37 @@ _fm_no_2_start:
         pop     bc
         pop     de
 
+        ;; fm context will now target the next channel
+        ld      a, (state_fm_channel)
+        inc     a
+        ld      (state_fm_channel), a
+
         ld      a, #1
         ret
+
+
+;;; FM_NOTE_OFF_EXT
+;;; Release the note on an FM channel. The sound will decay according
+;;; to the current configuration of the FM channel's operators.
+;;; ------
+;;; [ hl ]: FM channel
+fm_note_off_ext::
+        ;; set new current FM channel
+        ld      a, (hl)
+        ld      (state_fm_channel), a
+        inc     hl
+        jp      fm_note_off
 
 
 ;;; FM_NOTE_OFF
 ;;; Release the note on an FM channel. The sound will decay according
 ;;; to the current configuration of the FM channel's operators.
 ;;; ------
-;;; [ hl ]: FM channel
 fm_note_off::
         push    bc
 
         ;; a: FM channel
-        ld      a, (hl)
-        inc     hl
+        ld      a, (state_fm_channel)
 
         ;; a: YM2610-encoded FM channel
         cp      #2
@@ -287,6 +402,11 @@ _fm_off_no_2:
         call    ym2610_write_port_a
 
         pop     bc
+
+        ;; FM context will now target the next channel
+        ld      a, (state_fm_channel)
+        inc     a
+        ld      (state_fm_channel), a
 
         ld      a, #1
         ret

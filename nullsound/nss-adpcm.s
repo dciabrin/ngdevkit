@@ -29,28 +29,138 @@
         .equ    NSS_ADPCM_B_INSTRUMENT_PROPS,   4
         .equ    NSS_ADPCM_B_NEXT_REGISTER,      8
 
+
+
+        .area  DATA
+
+;;; ADPCM playback state tracker
+;;; ------
+
+;;; context: current adpcm channel for opcode actions
+state_adpcm_a_channel::
+        .db     0
+
+
+
         .area  CODE
+
+;;;  Reset ADPCM playback state.
+;;;  Called before playing a stream
+;;; ------
+;;; [a modified - other registers saved]
+init_nss_adpcm_state_tracker::
+        ld      a, #0
+        ld      (state_adpcm_a_channel), a
+        ret
+
+;;;  Reset ADPCM-A playback state.
+;;;  Called before waiting for the next tick
+;;; ------
+;;; [a modified - other registers saved]
+adpcm_a_ctx_reset::
+        ld      a, #0
+        ld      (state_adpcm_a_channel), a
+        ret
+
+
+;;; ADPCM NSS opcodes
+;;; ------
+
+;;; ADPCM_A_CTX_1
+;;; Set the current ADPCM-A context to channel 1 ADPCM-A opcode processing
+;;; ------
+adpcm_a_ctx_1::
+        ;; set new current FM channel
+        ld      a, #0
+        ld      (state_adpcm_a_channel), a
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_CTX_2
+;;; Set the current ADPCM-A context to channel 2 ADPCM-A opcode processing
+;;; ------
+adpcm_a_ctx_2::
+        ;; set new current ADPCM-A channel
+        ld      a, #1
+        ld      (state_adpcm_a_channel), a
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_CTX_3
+;;; Set the current ADPCM-A context to channel 3 ADPCM-A opcode processing
+;;; ------
+adpcm_a_ctx_3::
+        ;; set new current ADPCM-A channel
+        ld      a, #2
+        ld      (state_adpcm_a_channel), a
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_CTX_4
+;;; Set the current ADPCM-A context to channel 4 ADPCM-A opcode processing
+;;; ------
+adpcm_a_ctx_4::
+        ;; set new current ADPCM-A channel
+        ld      a, #3
+        ld      (state_adpcm_a_channel), a
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_CTX_5
+;;; Set the current ADPCM-A context to channel 5 ADPCM-A opcode processing
+;;; ------
+adpcm_a_ctx_5::
+        ;; set new current ADPCM-A channel
+        ld      a, #4
+        ld      (state_adpcm_a_channel), a
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_CTX_6
+;;; Set the current ADPCM-A context to channel 6 ADPCM-A opcode processing
+;;; ------
+adpcm_a_ctx_6::
+        ;; set new current ADPCM-A channel
+        ld      a, #5
+        ld      (state_adpcm_a_channel), a
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_INSTRUMENT_EXT
+;;; Configure an ADPCM-A channel based on an instrument's data
+;;; ------
+;;; [ hl ]: ADPCM-A channel
+;;; [hl+1]: instrument number
+adpcm_a_instrument_ext::
+        ;; set new current ADPCM-A channel
+        ld      a, (hl)
+        ld      (state_adpcm_a_channel), a
+        inc     hl
+        jp      adpcm_a_instrument
 
 
 ;;; ADPCM_A_INSTRUMENT
 ;;; Configure an ADPCM-A channel based on an instrument's data
 ;;; ------
-;;; [ hl ]: ADPCM-A channel
-;;; [hl+1]: instrument number
+;;; [ hl ]: instrument number
 adpcm_a_instrument::
         push    bc
 
         ;; b: ADPCM-A channel
-        ld      b, (hl)
-        inc     hl
+        ld      a, (state_adpcm_a_channel)
+        ld      b, a
         ;; a: instrument
         ld      a, (hl)
         inc     hl
 
         push    hl
         push    de
-        ;; save ADPCM-A channel
-        push    bc
 
         ;; hl: instrument address in ROM
         ;; (ADPCM-A channel still saved in b)
@@ -72,7 +182,8 @@ adpcm_a_instrument::
         ld      d, #NSS_ADPCM_A_INSTRUMENT_PROPS
 
         ;; b: ADPCM-A channel
-        pop     bc
+        ld      a, (state_adpcm_a_channel)
+        ld      b, a
 
         ;; a: start of ADPCM-A property registers
         ld      a, #REG_ADPCM_A1_ADDR_START_LSB
@@ -94,17 +205,28 @@ _adpcm_a_loop:
         ret
 
 
-;;; ADPCM_A_ON
+;;; ADPCM_A_ON_EXT
 ;;; Start sound playback on a ADPCM-A channel
 ;;; ------
 ;;; [ hl ]: ADPCM-A channel
+adpcm_a_on_ext::
+        ;; set new current ADPCM-A channel
+        ld      a, (hl)
+        ld      (state_adpcm_a_channel), a
+        inc     hl
+        jp      adpcm_a_on
+
+
+;;; ADPCM_A_ON
+;;; Start sound playback on a ADPCM-A channel
+;;; ------
 adpcm_a_on::
         push    bc
         push    de
 
         ;; d: ADPCM-A channel
-        ld      d, (hl)
-        inc     hl
+        ld      a, (state_adpcm_a_channel)
+        ld      d, a
 
         ;; TODO remove this default pan+volume
         ld      a, #REG_ADPCM_A1_PAN_VOLUME
@@ -131,21 +253,38 @@ _on_bit:
 
         pop     de
         pop     bc
+
+        ;; ADPCM-A context will now target the next channel
+        ld      a, (state_adpcm_a_channel)
+        inc     a
+        ld      (state_adpcm_a_channel), a
+
         ld      a, #1
         ret
+
+
+;;; ADPCM_A_OFF_EXT
+;;; Stop the playback on a ADPCM-A channel
+;;; ------
+;;; [ hl ]: ADPCM-A channel
+adpcm_a_off_ext::
+        ;; set new current ADPCM-A channel
+        ld      a, (hl)
+        ld      (state_adpcm_a_channel), a
+        inc     hl
+        jp      adpcm_a_off
 
 
 ;;; ADPCM_A_OFF
 ;;; Stop the playback on a ADPCM-A channel
 ;;; ------
-;;; [ hl ]: ADPCM-A channel
 adpcm_a_off::
         push    bc
         push    de
 
         ;; d: ADPCM-A channel
-        ld      d, (hl)
-        inc     hl
+        ld      a, (state_adpcm_a_channel)
+        ld      d, a
 
         ;; a: bit channel + stop bit
         ld      a, #0
@@ -163,6 +302,12 @@ _off_bit:
 
         pop     de
         pop     bc
+
+        ;; ADPCM-A context will now target the next channel
+        ld      a, (state_adpcm_a_channel)
+        inc     a
+        ld      (state_adpcm_a_channel), a
+
         ld      a, #1
         ret
 
@@ -323,6 +468,22 @@ _no_delta_shift:
 
         pop     hl
         pop     de
+        pop     bc
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_B_NOTE_OFF
+;;; Stop sample playback on the ADPCM-B channel
+;;; ------
+adpcm_b_note_off::
+        push    bc
+
+        ;; stop the ADPCM-B channel
+        ld      b, #REG_ADPCM_B_START_STOP
+        ld      c, #1           ; reset flag (clears start and repeat in YM2610)
+        call    ym2610_write_port_a
+
         pop     bc
         ld      a, #1
         ret
