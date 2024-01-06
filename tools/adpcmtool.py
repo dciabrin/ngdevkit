@@ -147,7 +147,8 @@ class ym2610_adpcma(object):
         pcm12s = [s >> 4 for s in pcm16s]
         # YM2610 only plays back multiples of 256 bytes
         # (512 adpcm samples). If the input is not aligned, add some padding
-        padding = [0] * (len(pcm16s)%512)
+        ceil = ((len(pcm12s)+511)//512)*512;
+        padding = [0] * (ceil - len(pcm12s))
         adpcms = [self._encode_sample(s) for s in pcm12s+padding]
         return adpcms
 
