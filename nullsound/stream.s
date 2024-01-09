@@ -36,6 +36,9 @@
 state_stream_in_use::
         .db     0x00
 
+state_stream_addr::
+        .dw     0x00
+
 state_stream_current_addr::
         .dw     0x00
 
@@ -49,6 +52,7 @@ init_stream_state_tracker::
         ld      a, #0
         ld      (state_stream_in_use), a
         ld      bc, #0
+        ld      (state_stream_addr), bc
         ld      (state_stream_current_addr), bc
         ld      (state_stream_instruments), bc
         ret
@@ -94,10 +98,12 @@ _no_more_processing:
 ;;; Play music or sfx from a pre-compiled stream of sound opcodes
 ;;; the data is encoded in the nullsound stream format
 ;;; ------
-;;; bc: nullsound stream to play
+;;; bc: nullsound instruments to use
+;;; de: nullsound stream to play
 ;;; [a modified - other registers saved]
 snd_stream_play::
         call    snd_stream_stop
+        ld      (state_stream_addr), de
         ld      (state_stream_current_addr), de
         ld      (state_stream_instruments), bc
         ld      a, #1
@@ -138,8 +144,8 @@ snd_stream_stop::
 nss_opcodes:
         .dw     write_port_a
         .dw     write_port_b
-        .dw     0
-        .dw     finish
+        .dw     nss_loop
+        .dw     nss_end
         .dw     run_timer_b
         .dw     wait_int_b
         .dw     fm_instrument_ext
@@ -224,10 +230,29 @@ write_port_b::
         ret
 
 
-;;; FINISH
+;;; NSS_LOOP
+;;; jump to a location from the start of the NSS stream
+;;; ------
+;;; [ hl ]: offset LSB
+;;; [hl+1]: offset MSB
+nss_loop::
+        push    bc
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
+        inc     hl
+        ld      hl, (state_stream_addr)
+        add     hl, bc
+        ld      (state_stream_current_addr), hl
+        pop     bc
+        ld      a, #1
+        ret
+
+
+;;; NSS_END
 ;;; signal the end of the NSS stream to the player
 ;;; ------
-finish::
+nss_end::
         xor     a
         ld      (state_stream_in_use), a
         ld      a, #0
