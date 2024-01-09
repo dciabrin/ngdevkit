@@ -410,3 +410,99 @@ _fm_off_no_2:
 
         ld      a, #1
         ret
+
+
+;;; OPX_SET_COMMON
+;;; Set an operator's property for the current FM channel
+;;; ------
+;;; [ b  ]: register of the OP's property
+;;; [ c  ]: value
+
+opx_set_common::
+        push    bc
+        push    de
+
+        ;; e: fm channel
+        ld      a, (state_fm_channel)
+        ld      e, a
+
+        ;; adjust register based on channel
+        bit     0, e
+        jp      z, _no_adj
+        inc     b
+_no_adj:
+
+        ;; TODO MACRO: write_port_a_or_b
+        ld      a, e
+        cp      #2
+        jp      c, _opx_common_port_a
+        call    ym2610_write_port_b
+        jp      _opx_post_common
+_opx_common_port_a:
+        call    ym2610_write_port_a
+_opx_post_common:
+        ;; END MACRO
+
+        pop     de
+        pop     bc
+        ret
+
+
+;;; OP1_LVL
+;;; Set the volume of OP1 for the current FM channel
+;;; ------
+;;; [ hl ]: volume level
+op1_lvl::
+        push    bc
+        ld      b, #REG_FM1_OP1_TOTAL_LEVEL
+        ld      c, (hl)
+        inc     hl
+        call    opx_set_common
+        pop     bc
+        ld      a, #1
+        ret
+
+
+;;; OP2_LVL
+;;; Set the volume of OP2 for the current FM channel
+;;; ------
+;;; [ hl ]: volume level
+op2_lvl::
+        push    bc
+        ld      b, #REG_FM1_OP2_TOTAL_LEVEL
+        ld      c, (hl)
+        inc     hl
+        call    opx_set_common
+        pop     bc
+        ld      a, #1
+        ret
+
+
+;;; OP3_LVL
+;;; Set the volume of OP3 for the current FM channel
+;;; ------
+;;; [ hl ]: volume level
+op3_lvl::
+        push    bc
+        ld      b, #REG_FM1_OP3_TOTAL_LEVEL
+        ld      c, (hl)
+        inc     hl
+        call    opx_set_common
+        pop     bc
+        ld      a, #1
+        ret
+
+
+;;; OP4_LVL
+;;; Set the volume of OP4 for the current FM channel
+;;; ------
+;;; [ hl ]: volume level
+op4_lvl::
+        push    bc
+        ld      b, #REG_FM1_OP4_TOTAL_LEVEL
+        ld      c, (hl)
+        inc     hl
+        call    opx_set_common
+        pop     bc
+        ld      a, #1
+        ret

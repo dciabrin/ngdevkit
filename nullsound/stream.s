@@ -173,6 +173,10 @@ nss_opcodes:
         .dw     adpcm_a_instrument
         .dw     adpcm_a_on
         .dw     adpcm_a_off
+        .dw     op1_lvl
+        .dw     op2_lvl
+        .dw     op3_lvl
+        .dw     op4_lvl
         
 
 
