@@ -178,7 +178,8 @@ nss_opcodes:
         .dw     op2_lvl
         .dw     op3_lvl
         .dw     op4_lvl
-        
+        .dw     fm_pitch
+
 
 
 ;;; Process a single NSS opcode

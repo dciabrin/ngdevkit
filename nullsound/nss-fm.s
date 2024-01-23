@@ -36,9 +36,17 @@
 ;;; ------
 
 ;;; context: current fm channel for opcode actions
+_state_fm_start:
 state_fm_channel::
         .db     0
 
+;;; detune per FM channel
+state_fm_detune::
+        .db     0
+        .db     0
+        .db     0
+        .db     0
+_state_fm_end:
 
 
         .area  CODE
@@ -47,9 +55,15 @@ state_fm_channel::
 ;;; ------
 ;;; [a modified - other registers saved]
 init_nss_fm_state_tracker::
-        ld      a, #0
-        ld      (state_fm_channel), a
+        ld      hl, #_state_fm_start
+        ld      d, h
+        ld      e, l
+        inc     de
+        ld      (hl), #0
+        ld      bc, #_state_fm_end-_state_fm_start
+        ldir
         ret
+
 
 ;;;  Reset FM playback state.
 ;;;  Called before waiting for the next tick
@@ -219,6 +233,31 @@ _fm_end:
         ret
 
 
+;;; FM_PITCH
+;;; Configure note detune for the current FM channel
+;;; ------
+;;; [ hl ]: detune
+fm_pitch::
+        push    bc
+        ;; bc: address of detune for current FM channel
+        ld      bc, #state_fm_detune
+        ld      a, (state_fm_channel)
+        add     a, c
+        ld      c, a
+        add     a, b
+        sub     c
+        ld      b, a
+
+        ;; a: detune
+        ld      a, (hl)
+        inc     hl
+        ld      (bc), a
+
+        pop     bc
+        ld      a, #1
+        ret
+
+
 ;;; Semitone frequency table
 ;;; ------
 ;;; A note in nullsound is represented as a tuple <octave, semitone>,
@@ -238,6 +277,51 @@ fm_note_f_num:
         .db      0x04, 0x0e  ; 1038 - A
         .db      0x04, 0x4c  ; 1100 - A#
         .db      0x04, 0x8d  ; 1165 - B
+
+
+;;; Get the effective F-num from the current FM channel
+;;; ------
+;;; [ hl ]: F-Num position in the semitone frequency table
+;;; OUT:
+;;;   hl  : detuned F-num based on current detune context
+fm_get_f_num:
+        push    bc
+        ld      a, (hl)
+        inc     hl
+        ld      b, a
+        ld      a, (hl)
+        ld      c, a
+        ;; hl: 10bits f-num
+        ld      h, b
+        ld      l, c
+
+        ;; bc: address of detune for current FM channel
+        ld      bc, #state_fm_detune
+        ld      a, (state_fm_channel)
+        add     a, c
+        ld      c, a
+        add     a, b
+        sub     c
+        ld      b, a
+
+        ;; a: detune
+        ld      a, (bc)
+
+        ;; hl += a (16bits + signed 8bits)
+        cp      #0x80
+        jr      c, _detune_positive
+        dec     h
+_detune_positive:
+        ; Then do addition as usual
+        ; (to handle the "lower byte")
+        add     a, l
+        ld      l, a
+        adc     a, h
+        sub     l
+        ld      h, a
+
+        pop     bc
+        ret
 
 
 ;;; FM_NOTE_ON_EXT
@@ -294,23 +378,30 @@ _fm_no_2_stop:
         ;; a: semitone
         ld      a, b
         and     #0xf
-        ;; lh: semitone -> f_num address
+        ;; hl: semitone -> f_num address
         ld      hl, #fm_note_f_num
         sla     a
         ld      b, #0
         ld      c, a
         add     hl, bc
+        ;; hl: fnum address -> (de)tuned F-num
+        call    fm_get_f_num
         ;; configure REG_FMx_BLOCK_FNUM_2
-        ld      a, (hl)
-        inc     hl
+        ;; this is buffered by the YM2610 and must be set
+        ;; before setting REG_FMx_BLOCK_FNUM_1
+        ;; c: block | f_num MSB
+        ld      a, h
         or      d
         ld      c, a
-        ld      a, #0xa5
+        ;; a: base f_num2 register in ym2610
+        ld      a, #REG_FM1_BLOCK_FNUM_2
+        ;; d: fm channel
         ld      d, e
         res     1, d
         add     d
+        ;; b: f_num2 register for the FM channel
         ld      b, a
-        ld      a,e
+        ld      a, e
         ;; TODO MACRO: write_port_a_or_b
         cp      #2
         jp      c, _fm_fnum_2_port_a
@@ -324,10 +415,9 @@ _fm_post_fnum_2:
         ld      a, b
         sub     #4
         ld      b, a
-        ld      a, (hl)
-        inc     hl
-        ld      c, a
-        ld      a,e
+        ;; c: f_num LSB
+        ld      c, l
+        ld      a, e
         ;; TODO MACRO: write_port_a_or_b
         cp      #2
         jp      c, _fm_fnum_1_port_a
