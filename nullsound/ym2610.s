@@ -81,43 +81,54 @@ _ym2610_wait_data_write:
         pop     bc
         ret
 
+
+
+
 ;;; Reset YM2610
 ;;; ------------
-;;; Mute the ym2610 FM channels, stop ADPCM playback and
-;;; and reset internal timers
+;;; Reset ym2610 timers, channels playback and volumes
 ym2610_reset::
         push    bc
         push    de
+
         ;; reset all timers
         ld      b, #REG_TIMER_FLAGS
         ld      c, #0x30
         call    ym2610_write_port_a
-        ;; FM
-        ;; mute OPs of all FM channels
+
+        ;; FM playback can't be reset, the quickest way of stopping
+        ;; sound output from a channel is to configure its OPs for a
+        ;; very fast release rate and "key off" the channel's OPs.
+        ;; This helps prevent a "pop" noise when a music is restarted
+        ;; too quickly after ym2610_reset and operators's level are
+        ;; reconfigured while a note release is still ongoing.
         ld      d, #4
-        ld      a, #REG_FM1_OP1_TOTAL_LEVEL
+        ld      e, d
+        ld      a, #REG_FM1_OP1_SUSTAIN_LEVEL_RELEASE_RATE
         ld      b, a
-        ld      c, #0x7f        ; min volume
-_reset_fm:
+        ld      c, #0x1f        ; sustain level: 1, release rate: 15
+_release_ops:
         call    ym2610_write_port_a
         call    ym2610_write_port_b
         inc     b
         call    ym2610_write_port_a
         call    ym2610_write_port_b
-        add     a, #4
+        add     a, e
         ld      b, a
         dec     d
-        jp      nz, _reset_fm
+        jp      nz, _release_ops
+
         ;; stop note of all FM channels
         ld      b, #REG_FM_KEY_ON_OFF_OPS
-        ld      c, #0           ; stop all OPs for channel FM1
+        ld      c, #YM2610_FM1
         call    ym2610_write_port_a
-        ld      c, #1           ; stop all OPs for channel FM2
+        ld      c, #YM2610_FM2
         call    ym2610_write_port_a
-        ld      c, #5           ; stop all OPs for channel FM3
+        ld      c, #YM2610_FM3
         call    ym2610_write_port_a
-        ld      c, #6           ; stop all OPs for channel FM4
+        ld      c, #YM2610_FM4
         call    ym2610_write_port_a
+
         ;; ADPCM-A
         ld      b, #REG_ADPCM_A_START_STOP
         ld      c, #0xbf        ; stop all channels A
@@ -143,6 +154,7 @@ _reset_fm:
         ld      b, #REG_ADPCM_PLAYBACK_MASK
         ld      c, #0x00        ; unmask all channels
         call    ym2610_write_port_a
+
         pop     de
         pop     bc
         ret

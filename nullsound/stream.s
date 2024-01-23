@@ -120,8 +120,9 @@ snd_stream_play::
 ;;; ------
 ;;; [a modified - other registers saved]
 snd_stream_stop::
+        ;; force-stop any active channels, disable timers
         call    ym2610_reset
-
+        ;; clear playback state tracker
         ld      a, #0
         ld      (state_stream_in_use), a
         ld      (state_timer_int_b_count), a
@@ -257,8 +258,7 @@ nss_loop::
 ;;; signal the end of the NSS stream to the player
 ;;; ------
 nss_end::
-        xor     a
-        ld      (state_stream_in_use), a
+        call    snd_stream_stop
         ld      a, #0
         ret
 

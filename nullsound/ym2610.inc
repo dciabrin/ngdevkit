@@ -19,6 +19,12 @@
 ;;; https://wiki.neogeodev.org/index.php?title=YM2610_registers
 
 
+;;; Common macros
+        .equ    YM2610_FM1,                             1
+        .equ    YM2610_FM2,                             2
+        .equ    YM2610_FM3,                             5
+        .equ    YM2610_FM4,                             6
+
 ;;; FM
 ;;; These macros are meant to be used with Z80 port 4 and port 5
         .equ    REG_FM_LFO_CONTROL,                     0x22
