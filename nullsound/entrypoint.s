@@ -22,6 +22,7 @@
 
         .include "helpers.inc"
         .include "ports.inc"
+        .include "ym2610.inc"
 
         .equ    MAX_PENDING_COMMANDS, 64
 
@@ -57,7 +58,11 @@
 ;;;
         .org    0x0038
         di
-        ;; TODO
+        ex      af, af'
+        exx
+        call    update_timer_state_tracker
+        exx
+        ex      af', af
         ei
         reti
 
@@ -107,8 +112,8 @@ init_z80_and_wait:
         ;; MVS cabinets to switch game and map the game's sound ROM in the
         ;; Z80 address space.
         prepare_wait_in_ram_opcodes
-        ;; Returns to RAM and busy-loop until a NMI is triggered and resumes
-        ;; the driver's initialization
+        ;; Returns to RAM and busy-loop until a NMI is triggered and proceeds
+        ;; with the rest of the driver initialization
         ret
 
 
@@ -118,8 +123,8 @@ init_z80_and_wait:
 ;;; This is a simple state machine:
 ;;;  . process pending commands received via NMI
 ;;;  . update the various state trackers
-;;;     . interrupts received, time tracking
-;;;     . state of the ym2610 (ADPCM, FM and SSG...)
+;;;     . interrupts received
+;;;     . state of the ym2610 (ADPCM playing...)
 ;;;     . long running tasks (music player, volume fading...)
 ;;;
 snd_start_driver::
@@ -127,7 +132,9 @@ snd_start_driver::
         call    ym2610_reset
 
         ;; init the state trackers
+        call    init_timer_state_tracker
         call    init_adpcm_state_tracker
+        call    init_stream_state_tracker
 
         ;; reset the pending commands buffer
         xor     a
@@ -139,12 +146,10 @@ snd_mainloop:
         call    snd_process_pending_commands
 
         ;; Update the state trackers
-        ;; TODO: timer state tracker
-        ;; TODO: VGM state tracker
+        call    update_stream_state_tracker
         call    update_adpcm_state_tracker
-        ;; TODO: CD state tracker
-        ;; TODO: optional user state tracker
         ;; TODO: master volume state tracker
+        ;; TODO: CD state tracker
 
         jp      snd_mainloop
 

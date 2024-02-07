@@ -19,7 +19,7 @@ all: nullsound.lib
 -include ../Makefile.config
 
 INCLUDE_FILES=helpers ports ym2610
-OBJS=entrypoint bios-commands adpcm ym2610
+OBJS=entrypoint bios-commands adpcm ym2610 stream timer nss-fm nss-adpcm
 LIB=nullsound.lib
 
 VERSION=@version@
