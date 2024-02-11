@@ -149,8 +149,10 @@ fm_instrument::
         push    de
 
         ;; b: fm channel
+        ld      c, a
         ld      a, (state_fm_channel)
         ld      b, a
+        ld      a, c
 
         ;; hl: instrument address in ROM
         sla     a
