@@ -45,6 +45,8 @@ state_timer_int_b_count::
 state_timer_int_b_wait::
         .db     0
 
+state_timer_int_b_reached::
+        .db     0
 
         .area  CODE
 
@@ -54,10 +56,13 @@ init_timer_state_tracker::
         ld      (state_timer_int_a_wait), a
         ld      (state_timer_int_b_count), a
         ld      (state_timer_int_b_wait), a
+        ld      (state_timer_int_b_reached), a
         ret
 
 
 update_timer_state_tracker::
+        ld      a, #1
+        ld      (state_timer_int_b_reached), a
         ;; keep track of the new interrupt
         ld      a, (state_timer_int_b_count)
         inc     a

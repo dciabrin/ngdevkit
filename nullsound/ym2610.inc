@@ -243,13 +243,17 @@
 
 ;;; SSG
 ;;; These macros are meant to be used with Z80 port 4 and port 5
-        .equ    REG_SSG_A_FINE_TUNE,    0x00
-        .equ    REG_SSG_A_COARSE_TUNE,  0x01
-        .equ    REG_SSG_B_FINE_TUNE,    0x02
-        .equ    REG_SSG_B_COARSE_TUNE,  0x03
-        .equ    REG_SSG_C_FINE_TUNE,    0x04
-        .equ    REG_SSG_C_COARSE_TUNE,  0x05
-        .equ    REG_SSG_ENABLE,         0x07
-        .equ    REG_SSG_A_VOLUME,       0x08
-        .equ    REG_SSG_B_VOLUME,       0x09
-        .equ    REG_SSG_C_VOLUME,       0x0a
+        .equ    REG_SSG_A_FINE_TUNE,     0x00
+        .equ    REG_SSG_A_COARSE_TUNE,   0x01
+        .equ    REG_SSG_B_FINE_TUNE,     0x02
+        .equ    REG_SSG_B_COARSE_TUNE,   0x03
+        .equ    REG_SSG_C_FINE_TUNE,     0x04
+        .equ    REG_SSG_C_COARSE_TUNE,   0x05
+        .equ    REG_SSG_NOISE_TONE,      0x06
+        .equ    REG_SSG_ENABLE,          0x07
+        .equ    REG_SSG_A_VOLUME,        0x08
+        .equ    REG_SSG_B_VOLUME,        0x09
+        .equ    REG_SSG_C_VOLUME,        0x0a
+        .equ    REG_SSG_ENV_FINE_TUNE,   0x0b
+        .equ    REG_SSG_ENV_COARSE_TUNE, 0x0c
+        .equ    REG_SSG_ENV_SHAPE,       0x0d

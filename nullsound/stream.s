@@ -75,7 +75,8 @@ update_stream_state_tracker::
         ld      b, a
         ld      a, (state_timer_int_b_count)
         cp      b
-        jp      c, _no_more_processing
+        ;; if we can't, check whether we have macro state to process
+        jp      c, _check_update_stream_macros
         sub     b
         ld      (state_timer_int_b_count), a
 process_opcodes::
@@ -90,6 +91,17 @@ _loop_opcode:
         ld      (state_stream_current_addr), hl
         pop     ix
 _no_more_processing:
+        pop     bc
+        pop     hl
+        ret
+_check_update_stream_macros:
+        ld      a, (state_timer_int_b_reached)
+        cp      a, #1
+        jp      nz, _no_macro_update
+        call    update_ssg_macros
+        ld      a, #0
+        ld      (state_timer_int_b_reached), a
+_no_macro_update:
         pop     bc
         pop     hl
         ret
@@ -109,6 +121,7 @@ snd_stream_play::
         ld      a, #1
         ld      (state_stream_in_use), a
         call    init_nss_fm_state_tracker
+        call    init_nss_ssg_state_tracker
         call    init_nss_adpcm_state_tracker
         ;; start stream playback, it will get preempted
         ;; as soon as a wait opcode shows up in the stream
@@ -179,6 +192,13 @@ nss_opcodes:
         .dw     op3_lvl
         .dw     op4_lvl
         .dw     fm_pitch
+        .dw     ssg_ctx_1
+        .dw     ssg_ctx_2
+        .dw     ssg_ctx_3
+        .dw     ssg_macro
+        .dw     ssg_note_on
+        .dw     ssg_note_off
+        .dw     ssg_vol
 
 
 
@@ -306,9 +326,12 @@ wait_int_b::
         ld      a, (hl)
         inc     hl
         ld      (state_timer_int_b_wait), a
+        xor     a
+        ld      (state_timer_int_b_reached), a
 
         ;; reset playback contexts
         call    fm_ctx_reset
+        call    ssg_ctx_reset
         call    adpcm_a_ctx_reset
         
         ld      a, #0

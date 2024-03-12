@@ -74,11 +74,18 @@ _ym2610_wait_address_write:
 ;;; call + pushes + ret = 83 T-cycles (20.75us?)
 _ym2610_wait_data_write:
         push    bc
-        push    de
-        push    hl
-        pop     hl
-        pop     de
         pop     bc
+        push    bc
+        pop     bc
+        push    bc
+        pop     bc
+        ;; FIXME: When a lot of activity is happening on
+        ;; the YM2610, sometimes the next IRQ seems to
+        ;; fail to trigger. Somehow probing the timer/busy
+        ;; often seems to mitigate the issue...
+        ;; TODO: check why this happens and whether this
+        ;; reproduces on real hardware
+        in      a, (PORT_YM2610_STATUS)
         ret
 
 
@@ -127,6 +134,18 @@ _release_ops:
         ld      c, #YM2610_FM3
         call    ym2610_write_port_a
         ld      c, #YM2610_FM4
+        call    ym2610_write_port_a
+
+        ;; stop SSG output
+        ld      b, #REG_SSG_A_VOLUME
+        ld      c, #0
+        call    ym2610_write_port_a
+        inc     b
+        call    ym2610_write_port_a
+        inc     b
+        call    ym2610_write_port_a
+        ld      b, #REG_SSG_ENABLE
+        ld      c, #0xff
         call    ym2610_write_port_a
 
         ;; ADPCM-A

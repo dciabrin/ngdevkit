@@ -224,6 +224,11 @@ _ret_from_cmd:
 _no_pending_commands:
         ret
 
+        ;; inline the definition of various global precalc tables, to
+        ;; speed up the 16bit indexing at runtime.
+        ;; TODO(find a clean asxxxx/asmlnk way to do that)
+        .include "buffers.s"
+
 
 
 ;;; Sound driver state in memory
