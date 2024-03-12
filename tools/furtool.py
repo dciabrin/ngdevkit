@@ -121,6 +121,9 @@ def ebit(data, msb, lsb):
 class fur_module:
     name: str = ""
     author: str = ""
+    speed: int = 0
+    arpeggio: int = 0
+    frequency: float = 0.0
     instruments: list[int] = field(default_factory=list)
     samples: list[int] = field(default_factory=list)
 
@@ -133,23 +136,39 @@ def read_module(bs):
     infodesc = bs.u4()
     bs.seek(infodesc)
     assert bs.read(4) == b"INFO"
-    bs.read(18)  # skip
+    bs.read(4) # skip size
+    bs.u1() # skip timebase
+    mod.speed = bs.u1()
+    bs.u1() # skip speed2
+    mod.arpeggio = bs.u1()
+    mod.frequency = bs.uf4()
+    pattern_len = bs.u2()
+    nb_orders = bs.u2()
+    bs.read(2)  # skip highlights
     nb_instruments = bs.u2()
     nb_wavetables = bs.u2()
     nb_samples = bs.u2()
-    nb_patterns = bs.u4()
+    nb_patterns = bs.u4()  # skip global pattern count
     chips = [x for x in bs.read(32)]
     assert chips[:chips.index(0)] == [165]  # single ym2610 chip
     bs.read(32 + 32 + 128)  # skip chips vol, pan, flags
     mod.name = bs.ustr()
     mod.author = bs.ustr()
+    mod.pattern_len = pattern_len
     bs.uf4()  # skip tuning
     bs.read(20)  # skip furnace configs
     mod.instruments = [bs.u4() for i in range(nb_instruments)]
     _ = [bs.u4() for i in range(nb_wavetables)]
     mod.samples = [bs.u4() for i in range(nb_samples)]
-    _ = [bs.u4() for i in range(nb_patterns)]
+    mod.patterns = [bs.u4() for i in range(nb_patterns)]
+    # 14 tracks in ym2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    mod.orders = [[-1 for x in range(14)] for y in range(nb_orders)]
+    for i in range(14):
+        for o in range(nb_orders):
+            mod.orders[o][i] = bs.u1()
+    mod.fxcolumns = [bs.u1() for x in range(14)]
     return mod
+
 
 
 @dataclass
@@ -191,6 +210,14 @@ class fm_instrument:
 
 
 @dataclass
+class ssg_macro:
+    name: str = ""
+    prog: list[int] = field(default_factory=list)
+    keys: list[int] = field(default_factory=list)
+    offset: list[int] = field(default_factory=list)
+
+
+@dataclass
 class adpcm_a_instrument:
     name: str = ""
     sample: adpcm_a_sample = None
@@ -224,14 +251,123 @@ def read_fm_instrument(bs):
     return ifm
 
 
-def read_instrument(bs, smp):
+@dataclass
+class ssg_prop:
+    name: str = ""
+    offset: int = 0
+
+    
+def read_ssg_macro(length, bs):
+    # TODO -1 are unsupported in nullsound
+    code_map = {0: ssg_prop("volume", 3),      # volume
+                3: ssg_prop("waveform", 4),    # noise_tune
+                6: ssg_prop("env", 0),         # envelope shape
+                7: ssg_prop("env_vol_num", 1), # volume envelope fine
+                8: ssg_prop("env_vol_den", 2)  # volume envelope coarse
+                }
+
+    blocks={}
+    init=bs.pos
+    max_pos = bs.pos + length
+    header_len = bs.u2()
+    # pass: read all macro blocks
+    while bs.pos < max_pos:
+        header_start = bs.pos
+        code = bs.u1()
+        if code == 255:
+            break
+        length = bs.u1()
+        # TODO unsupported. no loop
+        loop = bs.u1()
+        # TODO unsupported. last macro stays
+        release = bs.u1()
+        # TODO meaning?
+        mode = bs.u1()
+        msize, mtype = ubits(bs.u1(), [7, 6], [2, 1])
+        assert msize == 0, "macro value should be of type '8-bit unsigned'"
+        assert mtype == 0, "macro should be of type 'sequence'"
+        # TODO unsupported. no delay
+        delay = bs.u1()
+        # TODO unsupported. same speed as the module tick
+        speed = bs.u1()
+        header_end = bs.pos
+        assert header_end - header_start == header_len
+        data = [bs.u1() for i in range(length)]
+        blocks[code_map[code].offset]=data
+    assert bs.pos == max_pos
+    # pass: create a waveform property if it's not there
+    # we need it to enable the sound output on a SSG channel
+    if 0 not in blocks:
+        blocks[0] = [8] # enable envelope
+    # TODO tidy up
+    # pass: convert waveform for noise_tone register
+    if 4 in blocks:
+        # only read a single waveform as we don't allow
+        # macros on this register right now
+        wav=blocks[4][0]
+        env, noise, tone = ubits(wav+1,[2,2],[1,1],[0,0]) # +1 to convert to bitfield
+        # pass: store envelope bit as mode for volume register
+        if 3 in blocks:
+            new_vols=[env<<4|v for v in blocks[3]]
+            blocks[3]=new_vols
+        new_wav=(noise<<3|tone)^0xff
+        blocks[4]=[new_wav]
+        env, noise, tone = ubits(wav+1,[2,2],[1,1],[0,0]) # +1 to convert to bitfield
+    # TODO tidy up
+    # pass: hardcode auto-env into precomputed env period
+    # Furnace's auto-env changed w.r.t current note frequency,
+    # for the time being, hardcode it to A-2 (440Hz)
+    # TODO: implement the logics in nullsound
+    if 1 in blocks or 2 in blocks:
+        # using one of numerator and denominator, means
+        # the other one has to be used. When one is not
+        # set in the Furnace macro, revert to using 1 for
+        # it, as it is the fallback value in Furnace
+        if 1 not in blocks:
+            blocks[1] = [1]*len(blocks[2])
+        if 2 not in blocks:
+            blocks[2] = [1]*len(blocks[1])
+        def vol_env(n,d):
+            n=max(1,n)
+            d=max(1,d)
+            period = ((125000//440)*d//n)//16
+            return period&0xff, period>>8
+        vols = [vol_env(n,d) for n,d in zip(blocks[1], blocks[2])]
+        blocks[1] = [v[0] for v in vols]
+        blocks[2] = [v[1] for v in vols]
+    # pass: create macro steps from blocks
+    keys = sorted(blocks.keys())
+    offset = [v if i==0 else keys[i]-keys[i-1]-1 for i,v in enumerate(keys)]
+    prog = []
+    step = [-1]
+    while step:
+        step = []
+        for k,o in zip(keys, offset):
+            if not blocks[k]:
+                continue
+            v = blocks[k].pop(0)
+            o2 = k if not step else o
+            p = [o2, v]
+            step.extend(p)
+        prog.extend(step+[255])
+    issg = ssg_macro(prog=prog, keys=keys, offset=offset)
+    return issg
+
+
+def read_instrument(nth, bs, smp):
+    def asm_ident(x):
+        return re.sub(r"\W|^(?=\d)", "_", x).lower()
+    
     assert bs.read(4) == b"INS2"
     endblock = bs.pos + bs.u4()
     assert bs.u2() >= 127  # format version
     itype = bs.u2()
-    assert itype in [1, 37, 38]  # FM, ADPCM-A, ADPCM-B
+    assert itype in [1, 6, 37, 38]  # FM, SSG, ADPCM-A, ADPCM-B
     # for when the instrument has no SM feature
     sample = 0
+    name = ""
+    ins = None
+    mac = None
     while bs.pos < endblock:
         feat = bs.read(2)
         length = bs.u2()
@@ -245,24 +381,34 @@ def read_instrument(bs, smp):
         elif feat == b"SM":
             sample = bs.u2()
             bs.u2()  # unused flags and waveform
+        elif feat == b"MA" and itype == 6:
+            mac = read_ssg_macro(length, bs)
         else:
-            print("unexpected feature: %s" % feat.decode())
+            dbg("unexpected feature in sample %02x%s: %s" % (nth, (" (%s)"%name if name else ""), feat.decode()))
             bs.read(length)
     # for ADPCM sample, populate sample data
     if itype in [37, 38]:
         ins = {37: adpcm_a_instrument,
                38: adpcm_b_instrument}[itype]()
         ins.sample = smp[sample]
-    # generate a ASM name for the instrument
-    ins.name = re.sub(r"\W|^(?=\d)", "_", name).lower()
-    return ins
+    # generate a ASM name for the instrument or macro
+    if itype == 6:
+        mac.name = asm_ident("macro_%02x_%s"%(nth, name))
+        mac.load_name = asm_ident("macro_%02x_load_func"%nth)
+        return mac
+    else:
+        ins.name = asm_ident("instr_%02x_%s"%(nth, name))
+        return ins
 
 
 def read_instruments(ptrs, smp, bs):
     ins = []
+    n = 0
     for p in ptrs:
         bs.seek(p)
-        ins.append(read_instrument(bs, smp))
+        ins.append(read_instrument(n, bs, smp))
+        # print(ins[-1].name)
+        n += 1
     return ins
 
 
@@ -272,19 +418,21 @@ def read_sample(bs):
     name = bs.ustr()
     adpcm_samples = bs.u4()
     data_bytes = adpcm_samples // 2
-
+    data_padding = 0
     assert adpcm_samples % 2 == 0
-    assert data_bytes % 256 == 0
+    if data_bytes % 256 == 0:
+        dbg("length sample '%s' is not a multiple of 256bytes, padding added")
+        data_padding = (((data_bytes+255)//256)*256) - data_bytes
     _ = bs.u4()  # unused compat frequency
     c4_freq = bs.u4()
     stype = bs.u1()
     assert stype in [5, 6]  # ADPCM-A, ADPCM-B
-    assert c4_freq == {5: 18500, 6: 44100}[stype]
+    # assert c4_freq == {5: 18500, 6: 44100}[stype]
     bs.u1()  # unused play direction
     bs.u2()  # unused flags
     bs.read(8)  # unused looping info
     bs.read(16)  # unused rom allocation
-    data = bs.read(data_bytes)
+    data = bs.read(data_bytes) + bytearray(data_padding)
     # generate a ASM name for the instrument
     insname = re.sub(r"\W|^(?=\d)", "_", name).lower()
     ins = {5: adpcm_a_sample,
@@ -324,6 +472,77 @@ def asm_fm_instrument(ins, fd):
     print("", file=fd)
 
 
+def asm_ssg_macro(mac, fd):
+    prev = 0
+    cur = mac.prog.index(255, 0)
+    lines = []
+    while cur != prev:
+        line = mac.prog[prev:cur+1]
+        lines.append(", ".join(["0x%02x"%x for x in line]))
+        prev = cur+1
+        cur = mac.prog.index(255,cur+1)
+    # macro actions
+    print("%s:" % mac.name, file=fd)
+    longest = max([len(x) for x in lines])
+    step = 0
+    print("        ;; macro load function", file=fd)
+    print("        .dw     %s" % mac.load_name, file=fd)
+    print("        ;; macro actions", file=fd)
+    for l in lines:
+        print("        .db     %s   ; tick %d"%(l.ljust(longest), step), file=fd)
+        step += 1
+    print("        .db     %s   ; end"%"0xff".ljust(longest), file=fd)
+    print("", file=fd)
+    # load func
+    asm_ssg_load_func(mac, fd)
+
+    
+def asm_ssg_load_func(mac, fd):
+    def asm_ssg(reg):
+        print("        ld      b, #0x%02x"%reg, file=fd)
+        print("        ld      c, (hl)", file=fd)
+        print("        call    ym2610_write_port_a", file=fd)
+    def asm_cha(reg):
+        print("        ld      a, (state_ssg_channel)", file=fd)
+        print("        add     #0x%02x"%reg, file=fd)
+        print("        ld      b, a", file=fd)
+        print("        ld      c, (hl)", file=fd)
+        print("        call    ym2610_write_port_a", file=fd)
+    def offset(off):
+        if off==1:
+            print("        inc     hl", file=fd)
+        else:
+            print("        ld      bc, #%d"%off, file=fd)
+            print("        add     hl, bc", file=fd)
+        pass
+    ssg_map = {
+        0: 0x0d, # REG_SSG_ENV_SHAPE
+        1: 0x0b, # REG_SSG_ENV_FINE_TUNE
+        2: 0x0c, # REG_SSG_ENV_COARSE_TUNE
+    }
+    cha_map = {
+        3: 0x08  # REG_SSG_A_VOLUME
+    }
+    # TODO these are ignored for the time being
+    ignore_map = {
+        4: 0x06  # REG_SSG_NOISE_TONE
+        }
+    print("%s::" % mac.load_name, file=fd)
+    data = zip(range(len(mac.offset)), mac.offset, mac.keys)
+    filtered = [(i,o,k) for i,o,k in data if k not in ignore_map]
+    for i, o, k in filtered:
+        if i != 0:
+            offset(o+1)
+        if k in ssg_map:
+            asm_ssg(ssg_map[k])
+        elif k in cha_map:
+            asm_cha(cha_map[k])
+        else:
+            error("no ASM for SSG property: %d"%k)
+    print("        ret", file=fd)
+    print("", file=fd)
+
+
 def asm_adpcm_instrument(ins, fd):
     name = ins.sample.name.upper()
     print("%s:" % ins.name, file=fd)
@@ -333,7 +552,8 @@ def asm_adpcm_instrument(ins, fd):
 
 
 def generate_instruments(mod, sample_map_name, ins_name, ins, fd):
-    print(";;; NSS instruments - generated by furtool.py (ngdevkit)", file=fd)
+    print(";;; NSS instruments and macros", file=fd)
+    print(";;; generated by furtool.py (ngdevkit)", file=fd)
     print(";;; ---", file=fd)
     print(";;; Song title: %s" % mod.name, file=fd)
     print(";;; Song author: %s" % mod.author, file=fd)
@@ -345,11 +565,15 @@ def generate_instruments(mod, sample_map_name, ins_name, ins, fd):
     print('        .include "%s"' % sample_map_name, file=fd)
     print("", file=fd)
     inspp = {fm_instrument: asm_fm_instrument,
+             ssg_macro: asm_ssg_macro,
              adpcm_a_instrument: asm_adpcm_instrument,
              adpcm_b_instrument: asm_adpcm_instrument}
-    print("%s::" % ins_name, file=fd)
-    for i in ins:
-        print("        .dw     %s" % i.name, file=fd)
+    if ins:
+        print("%s::" % ins_name, file=fd)
+        for i in ins:
+            print("        .dw     %s" % i.name, file=fd)
+    else:
+        print(";; no instruments defined in this song", file=fd)
     print("", file=fd)
     for i in ins:
         inspp[type(i)](i, fd)

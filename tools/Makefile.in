@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2019 Damien Ciabrini
+# Copyright (c) 2015-2024 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@ all:
 
 -include ../Makefile.config
 
-TOOLS=paltool.py tiletool.py adpcmtool.py vromtool.py furtool.py
+TOOLS=paltool.py tiletool.py adpcmtool.py vromtool.py furtool.py nsstool.py
 
 install: $(TOOLS)
 	$(INSTALL) -d $(DESTDIR)$(prefix)/bin && \
