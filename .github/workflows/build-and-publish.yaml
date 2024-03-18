@@ -61,7 +61,7 @@ jobs:
         run: |
           echo -e "[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
           pacman -Sy
-          pacman -S --noconfirm mingw-w64-ucrt-x86_64-ngdevkit-toolchain
+          pacman -S --disable-download-timeout --noconfirm mingw-w64-ucrt-x86_64-ngdevkit-toolchain
 
       - name: Build
         run: ./.github/scripts/build-msys2.sh
