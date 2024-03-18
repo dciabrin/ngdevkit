@@ -24,8 +24,12 @@ LIB=nullsound.lib
 
 VERSION=@version@
 
+# NOTE: it's unclear whether a real ar lib can be passed as a .rel
+# argument to the linker, at least it sometimes fail to parse on MSYS2
+# make a bare concatenation of all .rel instead, as it does not contain
+# binary characters and can be reliably parsed by ASLink/sdld
 $(LIB): $(OBJS:%=%.rel)
-	$(NGSDAR) -rc $@ $^
+	cat $^ > $@
 
 %.rel: %.s
 	$(NGSDAS) -g -l -p -u -o $@ $<
