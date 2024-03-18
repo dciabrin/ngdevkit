@@ -27,7 +27,7 @@ jobs:
 
       - name: Install dependencies for ngdevkit-examples
         run: >
-          sudo apt-get install -y ngdevkit-gngeo python3-pygame imagemagick
+          sudo apt-get install -y python3-yaml ngdevkit-gngeo python3-pygame imagemagick
           sox libsox-fmt-mp3 libglew-dev libsdl2-dev
 
       - name: Test by compiling ngdevkit-examples
