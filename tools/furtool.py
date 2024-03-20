@@ -504,10 +504,9 @@ def asm_ssg_load_func(mac, fd):
         print("        call    ym2610_write_port_a", file=fd)
     def asm_cha(reg):
         print("        ld      a, (state_ssg_channel)", file=fd)
-        print("        add     #0x%02x"%reg, file=fd)
         print("        ld      b, a", file=fd)
         print("        ld      c, (hl)", file=fd)
-        print("        call    ym2610_write_port_a", file=fd)
+        print("        call    ssg_mix_volume", file=fd)
     def offset(off):
         if off==1:
             print("        inc     hl", file=fd)

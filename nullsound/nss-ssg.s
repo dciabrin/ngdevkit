@@ -80,6 +80,9 @@ state_mirrored_ssg_end:
         ;;; SSG C
         .blkb   SSG_STATE_SIZE
 
+;;; note volume, to be substracted from instrument/macro volume
+state_note_vol:
+        .blkb   3
 
 _state_ssg_end:
 
@@ -261,6 +264,38 @@ macro_noop_load:
 
 
  
+;;; Mix requested volume with current note volume
+;;; ------
+;;; b : channel
+;;; c : requested volume
+ssg_mix_volume::
+        push    hl
+        ld      hl, #state_note_vol
+        ;; hl + channel (8bit add)
+        ld      a, b
+        add     a, l
+        ld      l, a
+        adc     a, h
+        sub     l
+        ld      h, a
+
+        ;; l: current note volume for channel
+        ld      l, (hl)
+
+        ;; mix volumes, min to 0
+        ld      a, c
+        sub     l
+        jr      nc, _mix_set
+        ld      a, #0
+_mix_set:
+        ld      c, a
+        ld      a, b
+        add     #REG_SSG_A_VOLUME
+        ld      b, a
+        call    ym2610_write_port_a
+        pop     hl
+        ret
+
 
 ;;;  Reset SSG playback state.
 ;;;  Called before waiting for the next tick
@@ -489,8 +524,29 @@ _off_post_s1:
 ;;; ------
 ;;; [ hl ]: volume level
 ssg_vol::
-        ;; TODO
+        push    de
+
+        ;; de: note volume for current channel (8bit add)
+        ld      de, #state_note_vol
+        ld      a, (state_ssg_channel)
+        add     a, e
+        ld      e, a
+        adc     a, d
+        sub     e
+        ld      d, a
+
+        ;; a: volume
+        ld      a, (hl)
         inc     hl
+        ld      b, a
+
+        ;; (de): substracted mix volume (15-a)
+        sub     a, #15
+        neg
+        ld      (de), a
+
+        pop     de
+
         ld      a, #1
         ret
         
