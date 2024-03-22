@@ -23,13 +23,18 @@ import re
 import sys
 import zlib
 from dataclasses import dataclass, field
-from struct import pack, unpack_from
+from struct import pack, unpack, unpack_from
+from adpcmtool import ym2610_adpcma, ym2610_adpcmb
 
 VERBOSE = False
 
 
 def error(s):
     sys.exit("error: " + s)
+
+
+def warning(s):
+    dbg("warning: " + s)
 
 
 def dbg(s):
@@ -195,6 +200,12 @@ class adpcm_a_sample:
 
 @dataclass
 class adpcm_b_sample:
+    name: str = ""
+    data: bytearray = field(default=b"", repr=False)
+
+
+@dataclass
+class pcm_sample:
     name: str = ""
     data: bytearray = field(default=b"", repr=False)
 
@@ -383,13 +394,25 @@ def read_instrument(nth, bs, smp):
             bs.u2()  # unused flags and waveform
         elif feat == b"MA" and itype == 6:
             mac = read_ssg_macro(length, bs)
+        elif feat == b"NE":            
+            # NES DPCM tag is present when the instrument
+            # uses a PCM sample instead of ADPCM. Skip it
+            assert bs.u1()==0, "sample map unsupported"
         else:
-            dbg("unexpected feature in sample %02x%s: %s" % (nth, (" (%s)"%name if name else ""), feat.decode()))
+            warning("unexpected feature in sample %02x%s: %s" % \
+                    (nth, (" (%s)"%name if name else ""), feat.decode()))
             bs.read(length)
     # for ADPCM sample, populate sample data
     if itype in [37, 38]:
         ins = {37: adpcm_a_instrument,
                38: adpcm_b_instrument}[itype]()
+        if isinstance(smp[sample],pcm_sample):
+            # the sample is encoded in PCM, so it has to be converted
+            # to be played back on the hardware.
+            warning("sample '%s' is encoded in PCM, converting to ADPCM-%s"%\
+                (smp[sample].name, "A" if itype==37 else "B"))
+            converted = convert_sample(smp[sample], itype)
+            smp[sample] = converted
         ins.sample = smp[sample]
     # generate a ASM name for the instrument or macro
     if itype == 6:
@@ -417,16 +440,22 @@ def read_sample(bs):
     _ = bs.u4()  # endblock
     name = bs.ustr()
     adpcm_samples = bs.u4()
-    data_bytes = adpcm_samples // 2
-    data_padding = 0
-    assert adpcm_samples % 2 == 0
-    if data_bytes % 256 == 0:
-        dbg("length sample '%s' is not a multiple of 256bytes, padding added")
-        data_padding = (((data_bytes+255)//256)*256) - data_bytes
     _ = bs.u4()  # unused compat frequency
     c4_freq = bs.u4()
     stype = bs.u1()
-    assert stype in [5, 6]  # ADPCM-A, ADPCM-B
+    if stype in [5,6]: # ADPCM-A, ADPCM-B
+        assert adpcm_samples % 2 == 0
+        data_bytes = adpcm_samples // 2
+        data_padding = 0
+        if data_bytes % 256 != 0:
+            dbg("length of sample '%s' (%d bytes) is not a multiple of 256bytes, padding added"%\
+                (str(name), data_bytes))
+            data_padding = (((data_bytes+255)//256)*256) - data_bytes
+    elif stype == 16: # PCM16 (requires conversion to ADPCM)
+        data_bytes = adpcm_samples * 2
+        data_padding = 0  # adpcmtool codecs automatically adds padding
+    else:
+        error("sample '%s' is of unsupported type: %d"%(str(name), stype))
     # assert c4_freq == {5: 18500, 6: 44100}[stype]
     bs.u1()  # unused play direction
     bs.u2()  # unused flags
@@ -436,8 +465,21 @@ def read_sample(bs):
     # generate a ASM name for the instrument
     insname = re.sub(r"\W|^(?=\d)", "_", name).lower()
     ins = {5: adpcm_a_sample,
-           6: adpcm_b_sample}[stype](insname, data)
+           6: adpcm_b_sample,
+           16: pcm_sample}[stype](insname, data)
     return ins
+
+
+def convert_sample(pcm_sample, totype):
+    codec = {37: ym2610_adpcma,
+             38: ym2610_adpcmb}[totype]()
+    pcm16s = unpack('<%dh' % (len(pcm_sample.data)>>1), pcm_sample.data)
+    adpcms=codec.encode(pcm16s)
+    adpcms_packed = [(adpcms[i] << 4 | adpcms[i+1]) for i in range(0, len(adpcms), 2)]
+    # convert sample to the right class
+    converted = {37: adpcm_a_sample,
+                 38: adpcm_b_sample}[totype](pcm_sample.name, bytes(adpcms_packed))
+    return converted
 
 
 def read_samples(ptrs, bs):
@@ -633,6 +675,11 @@ def main():
     m = read_module(bs)
     smp = read_samples(m.samples, bs)
     ins = read_instruments(m.instruments, smp, bs)
+    # module might have unused samples, leave them in the output
+    # if these are pcm_samples, convert them to adpcm_a to avoid errors
+    for i,s in enumerate(smp):
+        if isinstance(s, pcm_sample):
+            smp[i] = convert_sample(s, 37)
 
     if arguments.output:
         outfd = open(arguments.output, "w")
