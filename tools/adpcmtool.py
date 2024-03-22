@@ -247,7 +247,7 @@ class ym2610_adpcmb(object):
         # (512 adpcm samples). If the input is not aligned, add some padding
         ceil = ((len(pcm16s)+511)//512)*512;
         padding = [0] * (ceil - len(pcm16s))
-        adpcms = [self._encode_sample(s) for s in pcm16s+padding]
+        adpcms = [self._encode_sample(s) for s in list(pcm16s)+padding]
         return adpcms
 
     def decode(self, adpcm4s):
