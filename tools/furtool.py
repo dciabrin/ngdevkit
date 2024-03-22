@@ -568,7 +568,7 @@ def asm_ssg_load_func(mac, fd):
     ignore_map = {
         4: 0x06  # REG_SSG_NOISE_TONE
         }
-    print("%s::" % mac.load_name, file=fd)
+    print("%s:" % mac.load_name, file=fd)
     data = zip(range(len(mac.offset)), mac.offset, mac.keys)
     filtered = [(i,o,k) for i,o,k in data if k not in ignore_map]
     for i, o, k in filtered:
