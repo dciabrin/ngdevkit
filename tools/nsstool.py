@@ -531,7 +531,7 @@ def compact_instr(nss):
         elif type(op) in fm_ctx_map.keys():
             fm_ctx = fm_ctx_map[type(op)]
             out.append(op)
-        if type(op) == s_macro:
+        elif type(op) == s_macro:
             if s_is[s_ctx] != op.macro:
                 s_is[s_ctx] = op.macro
                 out.append(op)
