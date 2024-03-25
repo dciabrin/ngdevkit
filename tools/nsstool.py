@@ -387,15 +387,16 @@ def convert_b_row(row, channel, opcodes):
     return jmp_to_order
 
 
-def raw_nss(m, p, bs):
+def raw_nss(m, p, bs, channels):
     # unoptimized nss opcodes generated from the Furnace song
     nss = []
     
-    # debug: only convert the following channels
-    fm_channels = [0,1,2,3]
-    s_channels = [4,5,6]
-    a_channels = [7,8,9,10,11,12]
-    b_channel = [13]
+    # channels to consider for conversion
+    chlist = [int(c, 16) for c in sorted(list(channels.lower()))]
+    f_channels = list(filter(lambda x: 0 <= x <= 3, chlist))
+    s_channels = list(filter(lambda x: 4 <= x <= 6, chlist))
+    a_channels = list(filter(lambda x: 7 <= x <= 12, chlist))
+    b_channel = list(filter(lambda x: x == 13, chlist))
 
     # initialize stream speed from module 
     tick = m.speed
@@ -445,7 +446,7 @@ def raw_nss(m, p, bs):
             opcodes = []
 
             # FM channels
-            for channel in fm_channels:
+            for channel in f_channels:
                 row = order_patterns[channel].rows[index]
                 j = convert_fm_row(row, channel, opcodes)
                 jmp_to_order = max(jmp_to_order, j)
@@ -661,6 +662,8 @@ def main():
     parser.add_argument("-n", "--name",
                         help="Name of the ASM label for the NSS data. Empty name skips label.")
 
+    parser.add_argument("-c", "--channels", help="Process specific channels. One hex digit per channel", default='0123456789abcd')
+
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
                         default=False, help="print details of processing")
 
@@ -677,6 +680,10 @@ def main():
     else:
         name = "nss_stream"
 
+    # validate channel filtering option
+    if not all(['0' <= c <= 'd' for c in arguments.channels.lower()]):
+        error("invalid channel filter")
+
     register_nss_ops()
 
     dbg("Loading Furnace module %s"%arguments.FILE)
@@ -685,7 +692,7 @@ def main():
     p = read_all_patterns(m, bs)
     
     dbg("Convert Furnace patterns to unoptimized sequence of NSS opcodes")
-    nss = raw_nss(m, p, bs)
+    nss = raw_nss(m, p, bs, arguments.channels)
     
     dbg("Transformation passes:")
     dbg(" - remove unreference NSS labels")
