@@ -248,7 +248,12 @@ def read_fm_instrument(bs):
     bs.u1()  # unused
     for _ in range(4):
         op = fm_operator()
-        op.detune, op.multiply = ubits(bs.u1(), [6, 4], [3, 0])
+        tmpdetune, op.multiply = ubits(bs.u1(), [6, 4], [3, 0])
+        # convert furnace detune format into ym2610 format
+        tmpdetune-=3
+        if tmpdetune<0:
+            tmpdetune=abs(tmpdetune)+0b100
+        op.detune=tmpdetune
         (op.total_level,) = ubits(bs.u1(), [6, 0])
         # RS is env_scale in furnace UI. key_scale in wiki?
         op.key_scale, op.attack_rate = ubits(bs.u1(), [7, 6], [4, 0])
