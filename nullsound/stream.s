@@ -199,6 +199,7 @@ nss_opcodes:
         .dw     ssg_note_on
         .dw     ssg_note_off
         .dw     ssg_vol
+        .dw     fm_vol
 
 
 

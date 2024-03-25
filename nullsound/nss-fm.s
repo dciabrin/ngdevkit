@@ -27,6 +27,9 @@
         .equ    NSS_FM_NEXT_REGISTER,           4
         .equ    NSS_FM_NEXT_REGISTER_GAP,       16
         .equ    NSS_FM_END_OF_REGISTERS,        0xb7
+        .equ    INSTR_TL_OFFSET,                4
+        .equ    INSTR_FB_ALGO_OFFSET,           28
+        .equ    INSTR_ALGO_MASK,                7
 
 
 
@@ -46,10 +49,27 @@ state_fm_detune::
         .db     0
         .db     0
         .db     0
+
+;;; current note volume per FM channel
+state_fm_vol::
+        .db     0
+        .db     0
+        .db     0
+        .db     0
+
+;;; bitfields for the output OPs based on the channel's configured algorithm
+state_fm_out_ops::
+        .db     0
+        .db     0
+        .db     0
+        .db     0
+
 _state_fm_end:
 
 
         .area  CODE
+
+
 ;;;  Reset FM playback state.
 ;;;  Called before playing a stream
 ;;; ------
@@ -135,6 +155,167 @@ fm_instrument_ext::
         jp      fm_instrument
 
 
+;;; output OPs based on the layout of each FM algorithm of the YM2610
+;;;  7   6   5   4   3   2   1   0
+;;; ___ ___ ___ ___ OP4 OP3 OP2 OP1
+fm_out_ops_table:
+        .db     0x8             ; algo 0: OP4
+        .db     0x8             ; algo 1: OP4
+        .db     0x8             ; algo 2: OP4
+        .db     0x8             ; algo 3: OP4
+        .db     0xa             ; algo 4: OP2, OP4
+        .db     0xe             ; algo 5: OP2, OP3, OP4
+        .db     0xe             ; algo 6: OP2, OP3, OP4
+        .db     0xf             ; algo 7: OP1, OP2, OP3, OP4
+
+
+;;; fm_set_out_ops_bitfield
+;;; Configure the output OPs on an instrument's data
+;;; ------
+;;; hl: instrument address
+fm_set_out_ops_bitfield::
+        push    hl
+
+        ;; de: OPs out address for channel
+        ld      hl, #state_fm_out_ops
+        ld      a, (state_fm_channel)
+        ld      c, a
+        ld      b, #0
+        add     hl, bc
+        ld      d, h
+        ld      e, l
+
+        ;; hl: address of instrument data's algo
+        pop     hl
+        ld      bc, #INSTR_FB_ALGO_OFFSET
+        add     hl, bc
+
+        ;; a: algo
+        ld      a, (hl)
+        and     #INSTR_ALGO_MASK
+
+        ;; hl: bitfield address for algo
+        ld      hl, #fm_out_ops_table
+        ld      c, a
+        ld      b, #0
+        add     hl, bc
+
+        ;; set OPs out info for current channel
+        ld      a, (hl)
+        ld      (de), a
+
+        ret
+
+
+;;; fm_set_ops_level
+;;; Configure the operators of an FM channel based on an instrument's data
+;;; ------
+;;; hl: instrument address
+fm_set_ops_level::
+        push    hl
+
+        ;; bc: current channel
+        ld      a, (state_fm_channel)
+        ld      c, a
+        ld      b, #0
+
+        ;; d: note volumes for current channel
+        ld      hl, #state_fm_vol
+        add     hl, bc
+        ld      d, (hl)
+
+        ;; e: bitfields for the output OPs
+        ld      hl, #state_fm_out_ops
+        add     hl, bc
+        ld      e, (hl)
+
+        ;; e7: bit to target the right ym2610 port for channel
+        ld      a, (state_fm_channel)
+        cp      #2
+        jr      c, _ops_channel12
+        set     7, e
+_ops_channel12:
+        ;; b: OP1 start register in YM2610 for current channel
+        res     1, a
+        add     a, #REG_FM1_OP1_TOTAL_LEVEL
+        ld      b, a
+
+        ;; hl: ops total level (8bit add)
+        pop     hl              ; instrument address
+        ld      a, #INSTR_TL_OFFSET
+        add     a, l
+        ld      l, a
+        adc     a, h
+        sub     l
+        ld      h, a
+
+_ops_loop:
+        ;; check whether current OP is an output
+        bit     0, e
+        jr      z, _ops_next_op
+        ;; current OP's total level per instrument
+        ld      a, (hl)
+        ;; mix with note volume and clamp
+        add     d
+        bit     7, a
+        jr      z, _ops_post_clamp
+        ld      a, #127
+_ops_post_clamp:
+        and     #0x7f
+        ld      c, a
+        bit     7, e
+        jr      z, _ops_port_a
+        call    ym2610_write_port_b
+        jr      _ops_next_op
+_ops_port_a:
+        call    ym2610_write_port_a
+_ops_next_op:
+        ;; next OP in instrument data
+        inc     hl
+        ;; next OP in YM2610
+        ld      a, b
+        add     a, #NSS_FM_NEXT_REGISTER
+        ld      b, a
+        ;; shirt right to get next OP in bitfield (keep e6 bit clean)
+        sra     e
+        res     6, e
+        ld      a, e
+        and     #0xf
+        jr      nz, _ops_loop
+_ops_end_loop:
+        ret
+
+
+;;; FM_VOL
+;;; Set the note volume for the current FM channel
+;;; Note: FM_INSTRUMENT must have run before this opcode
+;;; ------
+;;; [ hl ]: volume [0-127]
+fm_vol::
+        push    de
+
+        ;; de: volume for channel (8bit add)
+        ld      de, #state_fm_vol
+        ld      a, (state_fm_channel)
+        add     a, e
+        ld      e, a
+        adc     a, d
+        sub     e
+        ld      d, a
+
+        ;; a: volume (difference from max volume)
+        ld      a, #127
+        sub     (hl)
+        inc     hl
+
+        ld      (de), a
+
+        pop     de
+
+        ld      a, #1
+        ret
+
+
 ;;; FM_INSTRUMENT
 ;;; Configure the operators of an FM channel based on an instrument's data
 ;;; ------
@@ -168,6 +349,10 @@ fm_instrument::
         inc     hl
         push    de
         pop     hl
+
+        ;; save instrument address for helper funcs
+        push    hl
+        push    hl
 
         ;; d: all FM properties
         ld      d, #NSS_FM_INSTRUMENT_PROPS
@@ -228,6 +413,14 @@ _fm_port_b_loop:
         jp      _fm_port_b_loop
 
 _fm_end:
+        ;; set the output OPs for this instrument
+        pop     hl
+        call    fm_set_out_ops_bitfield
+        ;; adjust real volume for channel based on instrument's
+        ;; config and current note volume
+        pop     hl
+        call    fm_set_ops_level
+
         pop     de
         pop     hl
         pop     bc

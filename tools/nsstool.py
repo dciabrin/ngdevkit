@@ -243,6 +243,7 @@ def register_nss_ops():
         ("s_note"  , ["note"]),
         ("s_stop"  , ),
         ("s_vol"   , ["volume"]),
+        ("fm_vol"  , ["volume"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -265,10 +266,12 @@ def convert_fm_row(row, channel, opcodes):
     if not is_empty(row):
         # context
         opcodes.append(ctx_t[channel]())
+        # volume (must be in the NSS stream before instrument)
+        if row.vol != -1:
+            opcodes.append(fm_vol(row.vol))
         # instrument
         if row.ins != -1:
             opcodes.append(fm_instr(row.ins))
-        # TODO volume
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
