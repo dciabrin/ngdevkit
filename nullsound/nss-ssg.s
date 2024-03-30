@@ -26,6 +26,7 @@
         
         .equ    NOTE_OFFSET,(state_mirrored_ssg_note-state_mirrored_ssg)
         .equ    PROPS_OFFSET,(state_mirrored_ssg_props-state_mirrored_ssg)
+        .equ    ENVELOPE_OFFSET,(state_mirrored_ssg_envelope-state_mirrored_ssg)
         .equ    WAVEFORM_OFFSET,(state_mirrored_ssg_waveform-state_mirrored_ssg)
         .equ    SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg)
 
@@ -68,6 +69,7 @@ state_mirrored_ssg:
 state_mirrored_ssg_note:
         .dw     0               ; note (fine+coarse)
 state_mirrored_ssg_props:
+state_mirrored_ssg_envelope:
         .db     0               ; envelope shape
         .db     0               ; vol envelope fine
         .db     0               ; vol envelope coarse
@@ -118,8 +120,13 @@ init_nss_ssg_state_tracker::
 ;;; update the mirror state for a SSG channel based on
 ;;; the macro program configured for this channel
 ;;; ------
-;;; [ de ]: mirrored state of the current ssg channel
-;;; [ hl ]: pointer to macro location for the current ssg channel
+;;; IN:
+;;; de: mirrored state of the current ssg channel
+;;; hl: pointer to macro location for the current ssg channel
+;;; OUT:
+;;; de: address of the next macro step
+;;;  a: 1: step updated the mirrored state
+;;;     0: end of macro (no update)
 ;;; bc, de, hl modified
 eval_macro_step::
         push    hl              ; macro location ptr
@@ -138,15 +145,21 @@ eval_macro_step::
 _upd_macro:
         cp      a, #0xff
         jp      z, _end_upd_macro
-        ;; de: next offset in mirrored state
-        add     e
+        ;; de: next offset in mirrored state (8bit add)
+        add     a, e
         ld      e, a
+        adc     a, d
+        sub     e
+        ld      d, a
         ;; (de): (hl)
         ldi
         ld      a, (hl)
         inc     hl
         jp      _upd_macro
 _end_upd_macro:
+        ;; return the end address of the step
+        ld      d, h
+        ld      e, l
         ld      a, (hl)
         cp      a, #0xff
         jp      nz, _end_macro
@@ -156,6 +169,8 @@ _end_upd_macro:
         ld      (hl), a
         inc     hl
         ld      (hl), a
+        ;; a: macro cleared, but still load this step
+        ld      a, #1
         ret
 _end_macro:
         push    hl
@@ -166,7 +181,9 @@ _end_macro:
         ld      (hl), a
         inc     hl
         ld      a, b
-        ld      (hl), a        
+        ld      (hl), a
+        ;; a: macro == 0, will drive the next load
+        or      c
         ret        
 
         
@@ -175,89 +192,102 @@ _end_macro:
 ;;; all the SSG channels. Meant to run once per tick
 update_ssg_macros::
         push    de
-        ;; TODO can we use another register?
+        ;; TODO should we consider IX and IY scratch registers?
         push    iy
+        push    ix
 
-        ;; update mirrored state of all SSG channels
-        ld      de, #state_mirrored_ssg_props
-        ld      hl, #state_macro_pos
-        ld      iy, #3
-_upd_mirrored:
-        push    hl              ; macro_pos
-        push    de              ; state_mirrored
-        call    eval_macro_step
-        pop     hl              ; state_mirrored
-        ld      bc, #SSG_STATE_SIZE
-        add     hl, bc
-        ld      d, h
-        ld      e, l
-        pop     hl              ; macro_pos
-        inc     hl
-        inc     hl
-        dec_iyl
-        jp      nz, _upd_mirrored
-                
         ;; macros expect the right ssg channel context,
         ;; so save the current channel context and loop
         ;; it artificially before calling the macro
         ld      a, (state_ssg_channel)
         push    af
+
+        ;; update mirrored state of all SSG channels
+
+        ;; state:
+        ld      de, #state_mirrored_ssg_props ; ssg_a mirror state
+        ld      hl, #state_macro_pos          ; ssg_a macro pos
+        ld      ix, #state_macro_load_func    ; ssg_a load function
         xor     a
-        ld      (state_ssg_channel), a
+        ld      (state_ssg_channel), a        ; ssg ctx: ssg_a
         
-        ;; load mirrored state (except waveform) of all SSG channels
-        ld      hl, #state_mirrored_ssg_props
-        ld      de, #state_macro_load_func
         ld      iy, #3
-_ld_mirrored:
-        push    hl              ; state_mirrored
+_update_loop:
+        push    hl              ; macro_pos
+        push    de              ; state_mirrored
+        push    de              ; state_mirrored
+        call    eval_macro_step
+        pop     hl              ; state_mirrored
+
+        ;; skip loading for this channel if macro is finished
+        cp      #0
+        jr      nz, _prepare_ld_call
+        inc     ix
+        inc     ix
+        jr      _post_call_load_func
+_prepare_ld_call:
         ;; bc: load_func for this SSG channel
-        ld      a, (de)
+        ld      a, (ix)
         ld      c, a
-        inc     de
-        ld      a, (de)
+        inc     ix
+        ld      a, (ix)
         ld      b, a
-        inc     de
-        push    de              ; pointer to next load_func
-        ;; a: number -> bitfield
+        inc     ix
+
+        ;; a: bitfield representation of current channel
         ld      a, (state_ssg_channel)
         sla     a
         jp      nz, _ld_call
         inc     a
 _ld_call:
-        ;; check whether the current channel is active
+
+        ;; check whether the current channel is playing a note
         ld      d, a
         ld      a, (state_mirrored_enabled)
         xor     #0xff
         and     d
-        jp      z, _ld_call_ret
-        ;; call the load_func
-        ld      de, #_ld_call_ret
+        jp      z, _post_call_load_func
+        ;; call the load_func (address: bc, args: hl)
+        ld      de, #_post_call_load_func
         push    de
         push    bc
         ret
-_ld_call_ret:
-        ;; fake the current ssg context for the macro
-        ld      a, (state_ssg_channel)
-        inc     a
-        ld      (state_ssg_channel), a
-        pop     de              ; pointer to next load func
+_post_call_load_func:
+
+        ;; prepare to update the next channel
+        ;; de: next state_mirrored
         pop     hl              ; state_mirrored
         ld      bc, #SSG_STATE_SIZE
         add     hl, bc
+        ld      d, h
+        ld      e, l
+        ;; hl: next macro_pos
+        pop     hl              ; macro_pos
+        inc     hl
+        inc     hl
+        ;; ix: next load function is already set
+        ;; next ssg context
+        ld      a, (state_ssg_channel)
+        inc     a
+        ld      (state_ssg_channel), a
+
         dec_iyl
-        jp      nz, _ld_mirrored
+        jp      nz, _update_loop
 
         ;; restore the real ssg channel context
         pop     af
         ld      (state_ssg_channel), a
 
+        pop     ix
         pop     iy
         pop     de
         ret
 
+
+
 ;;; macro_noop_load
 ;;; no-op function when no macro is configured for a SSG channel
+;;; TODO is it still in use?
 ;;; ------
 macro_noop_load:
         ret
@@ -374,11 +404,34 @@ ssg_macro::
         ld      l, e
         
         ;; de: push function in ROM
+        ;; TODO should be replaced by list of memory offsets to
+        ;; load into ym2610 registers.
+        ;; NOTE: the destination registers would be offset:
+        ;;   - 0: for a SSG register shared across SSG channels
+        ;;   - n: for targeting the (base+n'th) register (CHECK)
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
-        inc     hl        
-        push    hl              ; save macro_data
+        inc     hl
+        ;; hl (at this point): macro data
+
+        ;; bc: address of current macro's data for current channel
+        ld      bc, #state_macro
+        ld      a, (state_ssg_channel)
+        sla     a
+        ;; bc + a (8bit add)
+        add     a, c
+        ld      c, a
+        adc     a, b
+        sub     c
+        ld      b, a
+
+        push    bc              ; save address of current macro's data
+        ld      a, l
+        ld      (bc), a
+        inc     bc
+        ld      a, h
+        ld      (bc), a
 
         ;; configure push function for this channel
         ld      hl, #state_macro_load_func
@@ -390,28 +443,57 @@ ssg_macro::
         adc     a, h
         sub     l
         ld      h, a
-        ;; set push function 
+        ;; set push function
         ld      (hl), e
         inc     hl
         ld      (hl), d
-        
-        ;; de: macro data in ROM
-        pop     de
-        
-        ;; configure macro data for this channel
-        ld      hl, #state_macro
+
+        ;; de: mirrored state's properties for current channel
+        ld      de, #state_mirrored_ssg_props
+        ;; c: current channel
         ld      a, (state_ssg_channel)
-        sla     a
-        ;; hl + a (8bit add)
-        add     a, l
-        ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
-        ;; set macro data 
-        ld      (hl), e
-        inc     hl
-        ld      (hl), d
+        ld      c, a
+        ;; a: offset in bytes for current mirrored state
+        xor     a
+        bit     1, c
+        jp      z, _m_on_post_double
+        ld      a, #SSG_STATE_SIZE
+        add     a
+_m_on_post_double:
+        bit     0, c
+        jp      z, _m_on_post_plus
+        add     #SSG_STATE_SIZE
+_m_on_post_plus:
+        ;; de + a (8bit add)
+        add     a, e
+        ld      e, a
+        adc     a, d
+        sub     e
+        ld      d, a
+
+        ;; bc: mirrored_state's properties (de+a)
+        ld      b, d
+        ld      c, e
+
+        ;; mirrored: update mirrored state with macro's properties
+        pop     hl              ; (hl) = address of current macro's data
+        push    bc              ; save mirrored_state's properties
+        call    eval_macro_step
+        ;; after this call, de points to the next macro step,
+        ;; which is the part meant to be played for notes
+
+        ;; load the envelope shape into ym2610, if it's present
+        pop     hl              ; mirrored_state's properties
+        ;; ld      bc, #ENVELOPE_OFFSET
+        ;; add     hl, bc
+        ;; a: mirrored envelope shape
+        ld      a, (hl)
+        bit     7, a
+        jr      nz, _on_post_load
+        ld      b, #REG_SSG_ENV_SHAPE
+        ld      c, a
+        call    ym2610_write_port_a
+_on_post_load:
 
         pop     hl
         pop     de
@@ -451,7 +533,7 @@ _off_post_plus:
         sub     e
         ld      d, a
         
-        ;; de: mirrored waveform
+        ;; de: mirrored waveform (8bit add)
         ld      a, #WAVEFORM_OFFSET
         add     a, e
         ld      e, a
@@ -590,7 +672,7 @@ ssg_note_on::
         ld      d, a
         push    de
         
-        ;; (de): start of macro program
+        ;; (de): start of macro program, from (hl)
         ld      a, b
         ld      bc, #2
         ldir
@@ -642,9 +724,6 @@ _on_post_plus:
         pop     hl              ; ssg_macro
         push    bc              ; mirrored_state
         call    eval_macro_step
-        ;; nop
-        ;; nop
-        ;; nop
         
         ;; load mirrored state into the YM2610
 

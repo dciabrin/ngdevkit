@@ -226,6 +226,7 @@ class ssg_macro:
     prog: list[int] = field(default_factory=list)
     keys: list[int] = field(default_factory=list)
     offset: list[int] = field(default_factory=list)
+    autoenv: bool = False
 
 
 @dataclass
@@ -278,11 +279,12 @@ def read_ssg_macro(length, bs):
     code_map = {0: ssg_prop("volume", 3),      # volume
                 3: ssg_prop("waveform", 4),    # noise_tune
                 6: ssg_prop("env", 0),         # envelope shape
-                7: ssg_prop("env_vol_num", 1), # volume envelope fine
-                8: ssg_prop("env_vol_den", 2)  # volume envelope coarse
+                7: ssg_prop("env_vol_num", 1), # volume envelope numerator
+                8: ssg_prop("env_vol_den", 2)  # volume envelope denominator
                 }
 
     blocks={}
+    autoenv=False
     init=bs.pos
     max_pos = bs.pos + length
     header_len = bs.u2()
@@ -311,15 +313,14 @@ def read_ssg_macro(length, bs):
         data = [bs.u1() for i in range(length)]
         blocks[code_map[code].offset]=data
     assert bs.pos == max_pos
-    # pass: create a waveform property if it's not there
-    # we need it to enable the sound output on a SSG channel
+    # pass: create a "empty" waveform property if it's not there
+    # we need it to tell nullsound to not update the envelope SSG register
     if 0 not in blocks:
-        blocks[0] = [8] # enable envelope
-    # TODO tidy up
+        blocks[0] = [128] # do not update envelope (bit7 set)
     # pass: convert waveform for noise_tone register
     if 4 in blocks:
-        # only read a single waveform as we don't allow
-        # macros on this register right now
+        # NOTE: only read a single waveform as we don't allow
+        # sequence on this register right now
         wav=blocks[4][0]
         env, noise, tone = ubits(wav+1,[2,2],[1,1],[0,0]) # +1 to convert to bitfield
         # pass: store envelope bit as mode for volume register
@@ -328,33 +329,39 @@ def read_ssg_macro(length, bs):
             blocks[3]=new_vols
         new_wav=(noise<<3|tone)^0xff
         blocks[4]=[new_wav]
-        env, noise, tone = ubits(wav+1,[2,2],[1,1],[0,0]) # +1 to convert to bitfield
-    # TODO tidy up
-    # pass: hardcode auto-env into precomputed env period
-    # Furnace's auto-env changed w.r.t current note frequency,
-    # for the time being, hardcode it to A-2 (440Hz)
-    # TODO: implement the logics in nullsound
+    # pass: put auto-env information aside, it requires muls and divs
+    # and we don't want to do that at runtime on the Z80. Instead
+    # we will simulate that feature via a specific NSS opcode
     if 1 in blocks or 2 in blocks:
-        # using one of numerator and denominator, means
-        # the other one has to be used. When one is not
-        # set in the Furnace macro, revert to using 1 for
-        # it, as it is the fallback value in Furnace
-        if 1 not in blocks:
-            blocks[1] = [1]*len(blocks[2])
-        if 2 not in blocks:
-            blocks[2] = [1]*len(blocks[1])
-        def vol_env(n,d):
-            n=max(1,n)
-            d=max(1,d)
-            period = ((125000//440)*d//n)//16
-            return period&0xff, period>>8
-        vols = [vol_env(n,d) for n,d in zip(blocks[1], blocks[2])]
-        blocks[1] = [v[0] for v in vols]
-        blocks[2] = [v[1] for v in vols]
-    # pass: create macro steps from blocks
-    keys = sorted(blocks.keys())
-    offset = [v if i==0 else keys[i]-keys[i-1]-1 for i,v in enumerate(keys)]
+        # NOTE: only read a single element as we don't allow
+        # macros on these registers right now
+        num = blocks.get(1,[1])[0]
+        den = blocks.get(2,[1])[0]
+        autoenv=(num,den)
+        blocks.pop(1, None)
+        blocks.pop(2, None)
+    # pass: build macro program
+    # a macro program consists of two separate parts:
     prog = []
+    # the first parts is a sequence that initializes SSG registers
+    # that should not be updated at every tick (done in ssg_macro)
+    keys = sorted(filter(lambda x: x in [4,0],blocks.keys()))
+    iseq, _ = compile_macro_sequence(keys, blocks)
+    prog.extend(iseq)
+    # the second parts is a series of sequences that update SSG registers
+    # at every tick. Right now it only includes volume.
+    keys = sorted(filter(lambda x: x not in [4,0],blocks.keys()))
+    nseq, offset = compile_macro_sequence(keys, blocks)
+    prog.extend(nseq)
+    # add end of macro marker
+    prog.append(255)
+    issg = ssg_macro(prog=prog, keys=keys, offset=offset, autoenv=autoenv)
+    return issg
+
+
+def compile_macro_sequence(keys, blocks):
+    seq = []
+    offset = [v if i==0 else keys[i]-keys[i-1]-1 for i,v in enumerate(keys)]
     step = [-1]
     while step:
         step = []
@@ -365,9 +372,9 @@ def read_ssg_macro(length, bs):
             o2 = k if not step else o
             p = [o2, v]
             step.extend(p)
-        prog.extend(step+[255])
-    issg = ssg_macro(prog=prog, keys=keys, offset=offset)
-    return issg
+        if step:
+            seq.extend(step+[255])
+    return seq, offset
 
 
 def read_instrument(nth, bs, smp):
@@ -569,16 +576,12 @@ def asm_ssg_load_func(mac, fd):
     cha_map = {
         3: 0x08  # REG_SSG_A_VOLUME
     }
-    # TODO these are ignored for the time being
-    ignore_map = {
-        4: 0x06  # REG_SSG_NOISE_TONE
-        }
     print("%s:" % mac.load_name, file=fd)
     data = zip(range(len(mac.offset)), mac.offset, mac.keys)
-    filtered = [(i,o,k) for i,o,k in data if k not in ignore_map]
-    for i, o, k in filtered:
+    for i, o, k in data:
         if i != 0:
-            offset(o+1)
+            o+=1
+        offset(o)
         if k in ssg_map:
             asm_ssg(ssg_map[k])
         elif k in cha_map:
