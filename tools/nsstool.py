@@ -24,7 +24,7 @@ import sys
 import zlib
 from dataclasses import dataclass, field, astuple, make_dataclass
 from struct import pack, unpack_from
-from furtool import binstream, load_module, read_module
+from furtool import binstream, load_module, read_module, read_samples, read_instruments
 
 VERBOSE = False
 
@@ -244,6 +244,7 @@ def register_nss_ops():
         ("s_stop"  , ),
         ("s_vol"   , ["volume"]),
         ("fm_vol"  , ["volume"]),
+        ("s_env"   , ["fine", "coarse"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -593,6 +594,62 @@ def compact_ctx(nss):
     return out
 
 
+def simulate_ssg_autoenv(nss, ins):
+    semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
+    freqs = [
+        [  32.7 ,    34.65,    36.71,    38.89,   41.2 ,   43.65,   46.25,   49.0 ,   51.91,   55.0 ,   58.27,   61.74],
+        [  65.41,    69.3 ,    73.42,    77.78,   82.41,   87.31,   92.5 ,   98.0 ,  103.8 ,  110.0 ,  116.5 ,  123.5 ],
+        [ 130.8 ,   138.6 ,   146.8 ,   155.6 ,  164.8 ,  174.6 ,  185.0 ,  196.0 ,  207.7 ,  220.0 ,  233.1 ,  246.9 ],
+        [ 261.6 ,   277.2 ,   293.7 ,   311.1 ,  329.6 ,  349.2 ,  370.0 ,  392.0 ,  415.3 ,  440.0 ,  466.2 ,  493.9 ],
+        [ 523.3 ,   554.4 ,   587.3 ,   622.3 ,  659.3 ,  698.5 ,  740.0 ,  784.0 ,  830.6 ,  880.0 ,  932.3 ,  987.8 ],
+        [1047.0 ,  1109.0 ,  1175.0 ,  1245.0 , 1319.0 , 1397.0 , 1480.0 , 1568.0 , 1661.0 , 1760.0 , 1865.0 , 1976.0 ],
+        [2093.0 ,  2217.0 ,  2349.0 ,  2489.0 , 2637.0 , 2794.0 , 2960.0 , 3136.0 , 3322.0 , 3520.0 , 3729.0 , 3951.0 ],
+        [4186.0 ,  4435.0 ,  4699.0 ,  4978.0 , 5274.0 , 5588.0 , 5920.0 , 6272.0 , 6645.0 , 7040.0 , 7459.0 , 7902.0 ]
+    ]
+    out = []
+    s_ctx_map = {s_ctx_1: 0, s_ctx_2: 1, s_ctx_3: 2}
+    s_ctx = 0
+    s_is = [-1, -1, -1]
+    s_autoenv = [False, False, False]
+    s_period = [-1, -1, -1]
+    for op in nss:
+        if type(op) == wait_b:
+            s_ctx=0
+            out.append(op)
+        elif type(op) == s_macro:
+            if s_is[s_ctx] != op.macro:
+                s_is[s_ctx] = op.macro
+                # False if autoenv isn't defined
+                s_autoenv[s_ctx]=ins[op.macro].autoenv
+                s_period[s_ctx]=-1
+                out.append(op)
+        elif type(op) in s_ctx_map.keys():
+            s_ctx = s_ctx_map[type(op)]
+            out.append(op)
+        elif type(op) == s_note:
+            autoenv=s_autoenv[s_ctx]
+            if autoenv:
+                o=(op.note>>4)&0xf
+                n=op.note&0xf
+                notefreq = int(freqs[o-1][n])
+                num, den = autoenv
+                period = ((125000//notefreq)*den//num)//16
+                # only generate a s_env opcode if the last
+                # note played on this channel differred
+                if s_period[s_ctx] != period:
+                    s_period[s_ctx] = period
+                    fine, coarse = period&0xff, (period>>8)&0xff
+                    out.append(s_env(fine, coarse))
+            s_ctx+=1
+            out.append(op)
+        elif type(op) == s_stop:
+            s_ctx+=1
+            out.append(op)
+        else:
+            out.append(op)
+    return out
+
+
 def remove_unreferenced_labels(nss):
     if isinstance(nss[-1], nss_loop):
         order = nss[-1].pat
@@ -689,6 +746,8 @@ def main():
     dbg("Loading Furnace module %s"%arguments.FILE)
     bs = load_module(arguments.FILE)
     m = read_module(bs)
+    smp = read_samples(m.samples, bs)
+    ins = read_instruments(m.instruments, smp, bs)
     p = read_all_patterns(m, bs)
     
     dbg("Convert Furnace patterns to unoptimized sequence of NSS opcodes")
@@ -706,6 +765,9 @@ def main():
 
     dbg(" - remove CTX opcodes if they keep the current context unchanged")
     nss = compact_ctx(nss)
+
+    dbg(" - look for SSG autoenv macros and insert opcodes to simulate them")
+    nss = simulate_ssg_autoenv(nss, ins)
 
     dbg(" - compute label offset when LOOP opcode is used")
     nss = compute_loop_offset(nss)

@@ -806,3 +806,28 @@ _on_post_s1:
         ld      a, #1
         ret
 
+
+;;; SSG_ENV_PERIOD
+;;; Set the period of the SSG envelope generator
+;;; ------
+;;; [ hl ]: fine envelope period
+;;; [hl+1]: coarse envelope period
+ssg_env_period::
+        push    bc
+
+        ld      b, #REG_SSG_ENV_FINE_TUNE
+        ld      a, (hl)
+        inc     hl
+        ld      c, a
+        call    ym2610_write_port_a
+
+        inc     b
+        ld      a, (hl)
+        inc     hl
+        ld      c, a
+        call    ym2610_write_port_a
+
+        pop     bc
+
+        ld      a, #1
+        ret
