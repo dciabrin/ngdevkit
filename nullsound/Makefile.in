@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2023 Damien Ciabrini
+# Copyright (c) 2018-2024 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-all: nullsound.lib
+all: nullsound.lib linkcheck.map
 
 -include ../Makefile.config
 
@@ -23,6 +23,13 @@ OBJS=entrypoint bios-commands adpcm ym2610 stream timer nss-fm nss-adpcm nss-ssg
 LIB=nullsound.lib
 
 VERSION=@version@
+
+# nullsound assumes that various data blocks are linked in RAM
+# within a 16bits address range that has constant MSB, to speed up
+# 8-bit pointer addition. This target ensure bounds are valid
+linkcheck.map: $(LIB)
+	$(NGSDLD) -n -b DATA=0xf800 $@ $(LIB) -g cmd_jmptable=0 -i -w -m && \
+	$(PYTHON) check-bounds.py $@
 
 # NOTE: it's unclear whether a real ar lib can be passed as a .rel
 # argument to the linker, at least it sometimes fail to parse on MSYS2
@@ -46,6 +53,6 @@ install-include: $(INCLUDE_FILES:%=%.inc)
 
 
 clean:
-	rm -f *.lib *.rel *.lst *.rst *~
+	rm -f *.lib *.rel *.lst *.rst *.sym *.map *~
 
 .PHONY: clean
