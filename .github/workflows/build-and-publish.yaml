@@ -14,7 +14,7 @@ jobs:
       PY3PATH: ""
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -43,7 +43,7 @@ jobs:
         shell: msys2 {0}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -74,7 +74,7 @@ jobs:
       PY3PATH: "/usr/local/opt/python3/bin"
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Dependencies
         run: |
@@ -97,7 +97,7 @@ jobs:
     needs: [linux, macos, win]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: "Launchpad: trigger nightly deb rebuild"
         run: .ci/trigger-launchpad-build.sh --slug="~dciabrin/ngdevkit/+git/ngdevkit" --name="Travis%20Deploy"
@@ -111,7 +111,7 @@ jobs:
     needs: [linux, macos, win]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -135,7 +135,7 @@ jobs:
     needs: [linux, macos, win]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -155,7 +155,7 @@ jobs:
     needs: [linux, macos, win]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -175,7 +175,7 @@ jobs:
     needs: [deploy_deb, deploy_rpm, deploy_brew, deploy_msys2]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: "Cleanup old nightly tags"
         run: .ci/gc-nightly-tags.sh --user=dciabrin --repo=ngdevkit --tag-regex='^refs/tags/nightly-[0-9]*'
