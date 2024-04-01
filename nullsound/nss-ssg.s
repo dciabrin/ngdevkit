@@ -321,6 +321,55 @@ _mix_set:
         ret
 
 
+;;; Configure the SSG channel based on a macro's data
+;;; ------
+;;; IN:
+;;;   de: start offset in mirrored state data
+;;; OUT
+;;;   de: start offset for the current channel
+;;; de, c modified
+mirrored_ssg_for_channel:
+        ;; c: current channel
+        ld      a, (state_ssg_channel)
+        ld      c, a
+        ;; a: offset in bytes for current mirrored state
+        xor     a
+        bit     1, c
+        jp      z, _m_post_double
+        ld      a, #SSG_STATE_SIZE
+        add     a
+_m_post_double:
+        bit     0, c
+        jp      z, _m_post_plus
+        add     #SSG_STATE_SIZE
+_m_post_plus:
+        ;; de + a (8bit add)
+        add     a, e
+        ld      e, a
+        ret
+
+
+;;; Set the right waveform value for the current SSG channel
+;;; ------
+;;; IN:
+;;;   c: waveform
+;;; OUT
+;;;   c: shifted waveform for the current channel
+;;; c modified
+waveform_for_channel:
+        ld      a, (state_ssg_channel)
+        bit     0, a
+        jp      z, _w_post_s0
+        rlc     c
+_w_post_s0:
+        bit     1, a
+        jp      z, _w_post_s1
+        rlc     c
+        rlc     c
+_w_post_s1:
+        ret
+
+
 ;;;  Reset SSG playback state.
 ;;;  Called before waiting for the next tick
 ;;; ------
@@ -433,27 +482,9 @@ ssg_macro::
         inc     hl
         ld      (hl), d
 
-        ;; de: mirrored state's properties for current channel
+        ;; bc: mirrored state's properties for current channel
         ld      de, #state_mirrored_ssg_props
-        ;; c: current channel
-        ld      a, (state_ssg_channel)
-        ld      c, a
-        ;; a: offset in bytes for current mirrored state
-        xor     a
-        bit     1, c
-        jp      z, _m_on_post_double
-        ld      a, #SSG_STATE_SIZE
-        add     a
-_m_on_post_double:
-        bit     0, c
-        jp      z, _m_on_post_plus
-        add     #SSG_STATE_SIZE
-_m_on_post_plus:
-        ;; de + a (8bit add)
-        add     a, e
-        ld      e, a
-
-        ;; bc: mirrored_state's properties (de+a)
+        call    mirrored_ssg_for_channel
         ld      b, d
         ld      c, e
 
@@ -494,23 +525,7 @@ ssg_note_off::
         
         ;; de: mirrored state for current channel
         ld      de, #state_mirrored_ssg
-        ;; c: current channel
-        ld      a, (state_ssg_channel)
-        ld      c, a
-        ;; a: offset in bytes for current mirrored state
-        xor     a
-        bit     1, c
-        jp      z, _off_post_double
-        ld      a, #SSG_STATE_SIZE
-        add     a
-_off_post_double:
-        bit     0, c
-        jp      z, _off_post_plus
-        add     #SSG_STATE_SIZE
-_off_post_plus:
-        ;; de + a (8bit add)
-        add     a, e
-        ld      e, a
+        call    mirrored_ssg_for_channel
         
         ;; de: mirrored waveform (8bit add)
         ld      a, #WAVEFORM_OFFSET
@@ -522,16 +537,7 @@ _off_post_plus:
         ld      b, #0xff
         xor     b
         ld      c, a
-        ld      a, (state_ssg_channel)
-        bit     0, a
-        jp      z, _off_post_s0
-        rlc     c
-_off_post_s0:
-        bit     1, a
-        jp      z, _off_post_s1
-        rlc     c
-        rlc     c
-_off_post_s1:
+        call    waveform_for_channel
         
         ;; stop channel
         ld      a, (state_mirrored_enabled)
@@ -646,23 +652,7 @@ ssg_note_on::
         
         ;; de: mirrored state for current channel
         ld      de, #state_mirrored_ssg
-        ;; c: current channel
-        ld      a, (state_ssg_channel)
-        ld      c, a
-        ;; a: offset in bytes for current mirrored state
-        xor     a
-        bit     1, c
-        jp      z, _on_post_double
-        ld      a, #SSG_STATE_SIZE
-        add     a
-_on_post_double:
-        bit     0, c
-        jp      z, _on_post_plus
-        add     #SSG_STATE_SIZE
-_on_post_plus:
-        ;; de + a (8bit add)
-        add     a, e
-        ld      e, a
+        call    mirrored_ssg_for_channel
 
         ;; l: note
         ld      l, b
@@ -729,21 +719,13 @@ _on_ret:
         add     a, l
         ld      l, a
 
-        ;; b: waveform (shifted for channel)
-        ld      b, (hl)
-        ld      a, (state_ssg_channel)
-        bit     0, a
-        jp      z, _on_post_s0
-        rlc     b
-_on_post_s0:
-        bit     1, a
-        jp      z, _on_post_s1
-        rlc     b
-        rlc     b
-_on_post_s1:
+        ;; c: waveform (shifted for channel)
+        ld      c, (hl)
+        call    waveform_for_channel
+
         ;; start note
         ld      a, (state_mirrored_enabled)
-        and     b
+        and     c
         ld      (state_mirrored_enabled), a
         ld      b, #REG_SSG_ENABLE
         ld      c, a
