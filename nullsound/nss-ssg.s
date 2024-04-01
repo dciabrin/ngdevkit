@@ -148,9 +148,6 @@ _upd_macro:
         ;; de: next offset in mirrored state (8bit add)
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
         ;; (de): (hl)
         ldi
         ld      a, (hl)
@@ -305,9 +302,6 @@ ssg_mix_volume::
         ld      a, b
         add     a, l
         ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
 
         ;; l: current note volume for channel
         ld      l, (hl)
@@ -392,9 +386,6 @@ ssg_macro::
         ;; hl + a (8bit add)
         add     a, l
         ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
 
         ;; hl: macro definition in (hl)
         ld      e, (hl)
@@ -422,9 +413,6 @@ ssg_macro::
         ;; bc + a (8bit add)
         add     a, c
         ld      c, a
-        adc     a, b
-        sub     c
-        ld      b, a
 
         push    bc              ; save address of current macro's data
         ld      a, l
@@ -440,9 +428,6 @@ ssg_macro::
         ;; hl + a (8bit add)
         add     a, l
         ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
         ;; set push function
         ld      (hl), e
         inc     hl
@@ -467,9 +452,6 @@ _m_on_post_plus:
         ;; de + a (8bit add)
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
 
         ;; bc: mirrored_state's properties (de+a)
         ld      b, d
@@ -529,17 +511,11 @@ _off_post_plus:
         ;; de + a (8bit add)
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
         
         ;; de: mirrored waveform (8bit add)
         ld      a, #WAVEFORM_OFFSET
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
 
         ;; c: disable mask (shifted for channel)
         ld      a, (de)
@@ -578,9 +554,6 @@ _off_post_s1:
         sla     a
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
 
         ;; remove current macro program
         xor     a
@@ -613,9 +586,6 @@ ssg_vol::
         ld      a, (state_ssg_channel)
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
 
         ;; a: volume
         ld      a, (hl)
@@ -656,9 +626,6 @@ ssg_note_on::
         sla     a
         add     a, l
         ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
 
         ;; de: macro ptr for current channel (8bit add)
         ;; +save ssg_macro
@@ -667,9 +634,6 @@ ssg_note_on::
         sla     a
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
         push    de
         
         ;; (de): start of macro program, from (hl)
@@ -699,9 +663,6 @@ _on_post_plus:
         ;; de + a (8bit add)
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
 
         ;; l: note
         ld      l, b
@@ -749,9 +710,6 @@ _on_post_plus:
         sla     a
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
         ;; call macro
         ld      bc, #_on_ret
         push    bc
@@ -770,9 +728,6 @@ _on_ret:
         ld      a, #(WAVEFORM_OFFSET-PROPS_OFFSET)
         add     a, l
         ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
 
         ;; b: waveform (shifted for channel)
         ld      b, (hl)

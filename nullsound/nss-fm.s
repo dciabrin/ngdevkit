@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2023 Damien Ciabrini
+;;; Copyright (c) 2024 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -245,9 +245,6 @@ _ops_channel12:
         ld      a, #INSTR_TL_OFFSET
         add     a, l
         ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
 
 _ops_loop:
         ;; check whether current OP is an output
@@ -299,9 +296,6 @@ fm_vol::
         ld      a, (state_fm_channel)
         add     a, e
         ld      e, a
-        adc     a, d
-        sub     e
-        ld      d, a
 
         ;; a: volume (difference from max volume)
         ld      a, #127
