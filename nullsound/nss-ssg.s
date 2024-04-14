@@ -435,6 +435,9 @@ ssg_macro::
         ;; hl + a (8bit add)
         add     a, l
         ld      l, a
+        adc     a, h
+        sub     l
+        ld      h, a
 
         ;; hl: macro definition in (hl)
         ld      e, (hl)
