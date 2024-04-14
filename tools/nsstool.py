@@ -245,6 +245,7 @@ def register_nss_ops():
         ("s_vol"   , ["volume"]),
         ("fm_vol"  , ["volume"]),
         ("s_env"   , ["fine", "coarse"]),
+        ("s_vibrato", ["speed_depth"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -324,6 +325,11 @@ def convert_s_row(row, channel, opcodes):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x04:  # vibrato
+                # fxval == -1 means disable vibrato
+                fxval = max(fxval, 0)
+                opcodes.append(s_vibrato(fxval))
+
         # note
         if row.note != -1:
             if row.note == 180:

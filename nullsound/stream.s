@@ -75,8 +75,8 @@ update_stream_state_tracker::
         ld      b, a
         ld      a, (state_timer_int_b_count)
         cp      b
-        ;; if we can't, check whether we have macro state to process
-        jp      c, _check_update_stream_macros
+        ;; if we can't, check whether we have macros or effects to process
+        jp      c, _check_update_macros_and_effects
         sub     b
         ld      (state_timer_int_b_count), a
 process_opcodes::
@@ -94,11 +94,11 @@ _no_more_processing:
         pop     bc
         pop     hl
         ret
-_check_update_stream_macros:
+_check_update_macros_and_effects:
         ld      a, (state_timer_int_b_reached)
         cp      a, #1
         jp      nz, _no_macro_update
-        call    update_ssg_macros
+        call    update_ssg_macros_and_effects
         ld      a, #0
         ld      (state_timer_int_b_reached), a
 _no_macro_update:
@@ -201,6 +201,7 @@ nss_opcodes:
         .dw     ssg_vol
         .dw     fm_vol
         .dw     ssg_env_period
+        .dw     ssg_vibrato
 
 
 

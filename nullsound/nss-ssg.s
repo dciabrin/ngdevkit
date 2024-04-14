@@ -25,10 +25,13 @@
 
         
         .equ    NOTE_OFFSET,(state_mirrored_ssg_note-state_mirrored_ssg)
+        .equ    NOTE_SEMITONE_OFFSET,(state_mirrored_ssg_note_semitone-state_mirrored_ssg)
         .equ    PROPS_OFFSET,(state_mirrored_ssg_props-state_mirrored_ssg)
         .equ    ENVELOPE_OFFSET,(state_mirrored_ssg_envelope-state_mirrored_ssg)
         .equ    WAVEFORM_OFFSET,(state_mirrored_ssg_waveform-state_mirrored_ssg)
         .equ    SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg)
+        .equ    SSG_FX,(state_fx-state_mirrored_ssg)
+        .equ    SSG_VIBRATO,(state_vibrato-state_mirrored_ssg)
 
         ;; this is to use IY as two IYH and IYL 8bits registers
         .macro dec_iyl
@@ -66,6 +69,21 @@ state_mirrored_enabled:
 ;;; ssg mirrored state
 state_mirrored_ssg:
         ;;; SSG A
+state_fx:
+        .db     0               ; must be the first field on the ssg state
+state_vibrato:
+state_vibrato_speed:
+        .db     0               ; vibrato_speed
+state_vibrato_depth:
+        .db     0               ; vibrato_depth
+state_vibrato_pos:
+        .db     0               ; vibrato_pos
+state_vibrato_prev:
+        .dw     0               ; vibrato_prev
+state_vibrato_next:
+        .dw     0               ; vibrato_next
+state_mirrored_ssg_note_semitone:
+        .db     0               ; note (octave+semitone)
 state_mirrored_ssg_note:
         .dw     0               ; note (fine+coarse)
 state_mirrored_ssg_props:
@@ -108,7 +126,7 @@ init_nss_ssg_state_tracker::
         ld      bc, #macro_noop_load
         ld      (state_macro_load_func), bc
         ld      (state_macro_load_func+2), bc
-        ld      (state_macro_load_func+4), bc        
+        ld      (state_macro_load_func+4), bc
         ret
 
 
@@ -184,10 +202,13 @@ _end_macro:
         ret        
 
         
-;;; update_ssg_macros
-;;; run a single round of macro steps configured for
-;;; all the SSG channels. Meant to run once per tick
-update_ssg_macros::
+;;; update_ssg_macros_and_effects
+;;; ------
+;;; For all ssg channels:
+;;;  - run a single round of macro steps configured
+;;;  - update the state of all enabled effects
+;;; Meant to run once per tick
+update_ssg_macros_and_effects::
         push    de
         ;; TODO should we consider IX and IY scratch registers?
         push    iy
@@ -243,14 +264,30 @@ _ld_call:
         ld      a, (state_mirrored_enabled)
         xor     #0xff
         and     d
-        jp      z, _post_call_load_func
+        jp      z, _post_effects
         ;; call the load_func (address: bc, args: hl)
         ld      de, #_post_call_load_func
         push    de
         push    bc
         ret
 _post_call_load_func:
+        ;; TODO: check whether effect should run before or after
+        ;; macros. Also, the load function should be generic to
+        ;; load note and volume even if only one of the macro or
+        ;; the effect was in use.
+        ;; hl: start of mirrored_ssg
+        pop     hl              ; state_mirrored
+        push    hl              ; state_mirrored
+        ld      a, l
+        sub     #PROPS_OFFSET
+        ld      l, a
 
+        ld      a, (hl)
+        bit     0, a
+        jr      z, _post_effects
+        call    eval_ssg_vibrato_step
+
+_post_effects:
         ;; prepare to update the next channel
         ;; de: next state_mirrored
         pop     hl              ; state_mirrored
@@ -378,6 +415,13 @@ ssg_ctx_reset::
         ld      a, #0
         ld      (state_ssg_channel), a
         ret
+
+
+;;; SSG effects
+;;; Implemented in separate files, for clarity
+;;; ------
+        .include "ssg-vibrato.s"
+
 
 
 ;;; SSG NSS opcodes
@@ -529,6 +573,10 @@ ssg_note_off::
         ;; de: mirrored state for current channel
         ld      de, #state_mirrored_ssg
         call    mirrored_ssg_for_channel
+
+        ;; stop effects
+        ld      a, #0
+        ld      (de), a
         
         ;; de: mirrored waveform (8bit add)
         ld      a, #WAVEFORM_OFFSET
@@ -652,17 +700,41 @@ ssg_note_on::
         ld      b, a
         
         ;; load ssg mirrored state
-        
-        ;; de: mirrored state for current channel
-        ld      de, #state_mirrored_ssg
-        call    mirrored_ssg_for_channel
 
         ;; l: note
         ld      l, b
-        
-        ;; bc: mirrored_state (de+a)
+
+        ;; ;; de: mirrored note for current channel
+        ld      de, #state_mirrored_ssg
+        call    mirrored_ssg_for_channel
+
+        ;; bc: mirrored_note_semitone, from mirrored_ssg (de)
         ld      b, d
         ld      c, e
+        ld      a, #NOTE_SEMITONE_OFFSET
+        add     c
+        ld      c, a
+        ;; store current octave/semitone
+        ld      a, l
+        ld      (bc), a
+
+        ;; bc: mirrored_note (expected: from semitone)
+        inc     c
+
+        ;; check active effects
+        ld      a, (de)
+        ;; vibrato
+        bit     0, a
+        jr      z, _on_post_fx
+        ;; reconfigure increments for current semitone
+        push    de
+        pop     ix
+        call    ssg_vibrato_setup_increments
+_on_post_fx:
+
+        ;; de: ssg_note
+        ld      d, b
+        ld      e, c
         
         ;; mirrored: note frequency
         ld      a, l
@@ -675,25 +747,28 @@ ssg_note_on::
         inc     bc
 
         ;; mirrored: update mirrored state with macro's properties
+        ;; TODO: check the offset of eval macro and w.r.t generated macro
         pop     hl              ; ssg_macro
-        push    bc              ; mirrored_state
+        push    bc              ; mirrored_note
         call    eval_macro_step
         
         ;; load mirrored state into the YM2610
 
         ;; YM2610: load note
-        pop     hl              ; mirrored_state
+        pop     hl              ; mirrored_note
         ld      a, (state_ssg_channel)
         sla     a
         add     #REG_SSG_A_FINE_TUNE
         ld      b, a
         ld      c, (hl)
-        inc     hl
         call    ym2610_write_port_a
+        inc     hl
         inc     b
         ld      c, (hl)
-        inc     hl
         call    ym2610_write_port_a
+
+        ;; hl: go to ssg_props (expected: from ssg_note)
+        inc     hl
 
         ;; YM2610: load properties (except waveform)
         push    hl              ; mirrored_props
@@ -768,6 +843,85 @@ ssg_env_period::
         call    ym2610_write_port_a
 
         pop     bc
+
+        ld      a, #1
+        ret
+
+
+;;; SSG_VIBRATO
+;;; Enable vibrato for the current SSG channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+ssg_vibrato::
+        push    bc
+        push    de
+
+        ;; de: fx for channel (expect: from mirrored_ssg)
+        ld      de, #state_fx
+        call    mirrored_ssg_for_channel
+
+        ;; hl == 0 means disable vibrato
+        ld      a, (hl)
+        cp      #0
+        jr      nz, _setup_vibrato
+        push    hl              ; save NSS stream pos
+        ;; disable vibrato fx
+        ld      a, (de)
+        res     0, a
+        ld      (de), a
+        ;; hl: address of original note frequency (8bit add)
+        ld      h, d
+        ld      a, #NOTE_OFFSET
+        add     e
+        ld      l, a
+        ;; reconfigure the note into the YM2610
+        ld      a, (state_ssg_channel)
+        sla     a
+        add     #REG_SSG_A_FINE_TUNE
+        ld      b, a
+        ld      c, (hl)
+        call    ym2610_write_port_a
+        inc     hl
+        inc     b
+        ld      c, (hl)
+        call    ym2610_write_port_a
+        pop     hl              ; NSS stream pos
+        jr      _post_setup
+
+_setup_vibrato:
+        ;; ix: ssg state for channel
+        push    de
+        pop     ix
+
+        ;; vibrato fx on
+        ld      a, SSG_FX(ix)
+        set     0, a
+        ld      SSG_FX(ix), a
+
+        ;; speed
+        ld      a, (hl)
+        rra
+        rra
+        rra
+        rra
+        and     #0xf
+        ld      VIBRATO_SPEED(ix), a
+
+        ;; depth, clamped to [1..16]
+        ld      a, (hl)
+        and     #0xf
+        inc     a
+        ld      VIBRATO_DEPTH(ix), a
+
+        ;; increments for last configured note
+        call    ssg_vibrato_setup_increments
+
+_post_setup:
+        inc     hl
+
+        pop     de
+        pop     bc
+
 
         ld      a, #1
         ret
