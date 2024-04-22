@@ -489,8 +489,8 @@ def raw_nss(m, p, bs, channels):
             # stop processing further rows if a JMP fx was used
             if jmp_to_order != -1:
                 break
-            
-        if 0 <= jmp_to_order < 256:
+
+        if 0 <= jmp_to_order and jmp_to_order != 256:
             order = jmp_to_order
         else:
             order += 1
