@@ -202,6 +202,8 @@ nss_opcodes:
         .dw     fm_vol
         .dw     ssg_env_period
         .dw     ssg_vibrato
+        .dw     ssg_slide_up
+        .dw     ssg_slide_down
 
 
 

@@ -246,6 +246,8 @@ def register_nss_ops():
         ("fm_vol"  , ["volume"]),
         ("s_env"   , ["fine", "coarse"]),
         ("s_vibrato", ["speed_depth"]),
+        ("s_slide_u", ["speed_depth"]),
+        ("s_slide_d", ["speed_depth"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -329,6 +331,12 @@ def convert_s_row(row, channel, opcodes):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(s_vibrato(fxval))
+            elif fx == 0xe1:  # slide up
+                assert fxval != -1
+                opcodes.append(s_slide_u(fxval))
+            elif fx == 0xe2:  # slide down
+                assert fxval != -1
+                opcodes.append(s_slide_d(fxval))
 
         # note
         if row.note != -1:

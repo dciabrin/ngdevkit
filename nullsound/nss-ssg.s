@@ -71,6 +71,14 @@ state_mirrored_ssg:
         ;;; SSG A
 state_fx:
         .db     0               ; must be the first field on the ssg state
+;;; FX: slide
+state_slide:
+state_slide_speed: .db 0        ; number of increments per tick
+state_slide_depth: .db 0        ; distance in semitones
+state_slide_inc16: .dw 0        ; 1/8 semitone increment * speed
+state_slide_pos16: .dw 0        ; slide pos
+state_slide_end:   .db 0        ; end note (octave/semitone)
+;;; FX: vibrato
 state_vibrato:
 state_vibrato_speed:
         .db     0               ; vibrato_speed
@@ -278,15 +286,23 @@ _post_call_load_func:
         ;; hl: start of mirrored_ssg
         pop     hl              ; state_mirrored
         push    hl              ; state_mirrored
+
+        ;; start of mirrored_ssg
         ld      a, l
         sub     #PROPS_OFFSET
         ld      l, a
 
+        ;; configure
         ld      a, (hl)
+_ssg_chk_fx_vibrato:
         bit     0, a
-        jr      z, _post_effects
+        jr      z, _ssg_chk_fx_slide
         call    eval_ssg_vibrato_step
-
+        jr      _post_effects
+_ssg_chk_fx_slide:
+        bit     1, a
+        jr      z, _post_effects
+        call    eval_ssg_slide_step
 _post_effects:
         ;; prepare to update the next channel
         ;; de: next state_mirrored
@@ -421,7 +437,7 @@ ssg_ctx_reset::
 ;;; Implemented in separate files, for clarity
 ;;; ------
         .include "ssg-vibrato.s"
-
+        .include "ssg-slide.s"
 
 
 ;;; SSG NSS opcodes
@@ -721,15 +737,21 @@ ssg_note_on::
         ;; bc: mirrored_note (expected: from semitone)
         inc     c
 
-        ;; check active effects
-        ld      a, (de)
-        ;; vibrato
-        bit     0, a
-        jr      z, _on_post_fx
-        ;; reconfigure increments for current semitone
         push    de
         pop     ix
+
+        ;; check active effects
+        ld      a, (de)
+_on_check_vibrato:
+        bit     0, a
+        jr      z, _on_check_slide
+        ;; reconfigure increments for current semitone
         call    ssg_vibrato_setup_increments
+_on_check_slide:
+        bit     1, a
+        jr      z, _on_post_fx
+        ;; reconfigure increments for current semitone
+        call    ssg_slide_setup_increments
 _on_post_fx:
 
         ;; de: ssg_note
@@ -922,6 +944,32 @@ _post_setup:
         pop     de
         pop     bc
 
+        ;; de: fx for channel (expect: from mirrored_ssg)
+        ld      de, #state_fx
+        call    mirrored_ssg_for_channel
 
+
+        ld      a, #1
+        ret
+
+
+;;; SSG_SLIDE_UP
+;;; Enable slide up effect for the current SSG channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+ssg_slide_up::
+        ld      a, #0
+        call    ssg_slide_common
+        ld      a, #1
+        ret
+
+
+;;; SSG_SLIDE_DOWN
+;;; Enable slide down effect for the current SSG channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+ssg_slide_down::
+        ld      a, #1
+        call    ssg_slide_common
         ld      a, #1
         ret
