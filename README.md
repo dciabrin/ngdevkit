@@ -81,7 +81,7 @@ packages, available in the ngdevkit tap:
     brew install ngdevkit ngdevkit-gngeo
     # make sure you use brew's python3 in your shell
     export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
-    pip3 install pygame
+    pip3 install pygame --break-system-packages
     # the remaining packages are only required for the examples
     brew install pkg-config autoconf automake zip imagemagick sox
 

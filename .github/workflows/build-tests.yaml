@@ -80,7 +80,7 @@ jobs:
         run: |
           brew tap dciabrin/ngdevkit
           brew install automake ngdevkit-toolchain python3 zip pkg-config
-          $PY3PATH/pip3 install pygame
+          $PY3PATH/pip3 install pygame --break-system-packages
 
       - name: Build
         run: ./.github/scripts/build.sh

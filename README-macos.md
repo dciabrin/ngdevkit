@@ -49,7 +49,7 @@ Then, ngdevkit's dependencies are installed as follows:
     # make sure you use brew's python3 to install pygame
     # if not, update your path like e.g.
     # export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
-    pip3 install pygame
+    pip3 install pygame --break-system-packages
     brew deps gcc | xargs brew install
     brew deps sdcc | xargs brew install
     # dependencies for the example ROMs
