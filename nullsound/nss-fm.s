@@ -38,6 +38,10 @@
 ;;; FM playback state tracker
 ;;; ------
 
+;;; write to the ym2610 port that matches the current context
+ym2610_write_func:
+        .blkb   3               ; space for `jp 0x....`
+
 ;;; context: current fm channel for opcode actions
 _state_fm_start:
 state_fm_channel::
@@ -82,6 +86,11 @@ init_nss_fm_state_tracker::
         ld      (hl), #0
         ld      bc, #_state_fm_end-_state_fm_start
         ldir
+        ;; init ym2610 function pointer
+        ld      a, #0xc3        ; jp 0x....
+        ld      (ym2610_write_func), a
+        call    fm_ctx_reset
+
         ret
 
 
@@ -91,7 +100,29 @@ init_nss_fm_state_tracker::
 ;;; [a modified - other registers saved]
 fm_ctx_reset::
         ld      a, #0
+        call    fm_ctx_set_current
+        ret
+
+
+;;; Set the current FM track and YM2610 load function for this track
+;;; ------
+;;;   a : FM channel
+fm_ctx_set_current::
+        ;; set FM context
         ld      (state_fm_channel), a
+        ;; target the right YM2610 port (ch0,ch1: A, ch2,ch3: B)
+        cp     #2
+        jr      c, _fm_ctx_12
+        ld      a, #<ym2610_write_port_b
+        ld      (ym2610_write_func+1), a
+        ld      a, #>ym2610_write_port_b
+        ld      (ym2610_write_func+2), a
+        ret
+_fm_ctx_12:
+        ld      a, #<ym2610_write_port_a
+        ld      (ym2610_write_func+1), a
+        ld      a, #>ym2610_write_port_a
+        ld      (ym2610_write_func+2), a
         ret
 
 
@@ -102,9 +133,8 @@ fm_ctx_reset::
 ;;; Set the current FM track to be FM1 for the next FM opcode processing
 ;;; ------
 fm_ctx_1::
-        ;; set new current FM channel
         ld      a, #0
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
         ld      a, #1
         ret
 
@@ -113,9 +143,8 @@ fm_ctx_1::
 ;;; Set the current FM track to be FM2 for the next FM opcode processing
 ;;; ------
 fm_ctx_2::
-        ;; set new current FM channel
         ld      a, #1
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
         ld      a, #1
         ret
 
@@ -124,9 +153,8 @@ fm_ctx_2::
 ;;; Set the current FM track to be FM3 for the next FM opcode processing
 ;;; ------
 fm_ctx_3::
-        ;; set new current FM channel
         ld      a, #2
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
         ld      a, #1
         ret
 
@@ -135,9 +163,8 @@ fm_ctx_3::
 ;;; Set the current FM track to be FM4 for the next FM opcode processing
 ;;; ------
 fm_ctx_4::
-        ;; set new current FM channel
         ld      a, #3
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
         ld      a, #1
         ret
 
@@ -150,7 +177,7 @@ fm_ctx_4::
 fm_instrument_ext::
         ;; set new current FM channel
         ld      a, (hl)
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
         inc     hl
         jp      fm_instrument
 
@@ -229,12 +256,6 @@ fm_set_ops_level::
         add     hl, bc
         ld      e, (hl)
 
-        ;; e7: bit to target the right ym2610 port for channel
-        ld      a, (state_fm_channel)
-        cp      #2
-        jr      c, _ops_channel12
-        set     7, e
-_ops_channel12:
         ;; b: OP1 start register in YM2610 for current channel
         res     1, a
         add     a, #REG_FM1_OP1_TOTAL_LEVEL
@@ -260,12 +281,7 @@ _ops_loop:
 _ops_post_clamp:
         and     #0x7f
         ld      c, a
-        bit     7, e
-        jr      z, _ops_port_a
-        call    ym2610_write_port_b
-        jr      _ops_next_op
-_ops_port_a:
-        call    ym2610_write_port_a
+        call    ym2610_write_func
 _ops_next_op:
         ;; next OP in instrument data
         inc     hl
@@ -355,25 +371,18 @@ fm_instrument::
         ld      a, (state_fm_channel)
         ld      b, a
 
-        ;;  configure writes to port a/b based on channel
-        ld      a,b
-        cp      #2
-        jp      c, _fm_port_a
-        jp      _fm_port_b
-
-_fm_port_a:
         ;; a: start register in YM2610 for FM channel
         ld      a, #REG_FM1_OP1_DETUNE_MULTIPLY
         res     1, b
         add     b
-_fm_port_a_loop:
+_fm_port_loop:
         ld      b, a
         ld      c, (hl)
-        call    ym2610_write_port_a
+        call    ym2610_write_func
         add     a, #NSS_FM_NEXT_REGISTER
         inc     hl
         dec     d
-        jp      nz, _fm_port_a_loop
+        jp      nz, _fm_port_loop
         ;;
         ld      d, #NSS_FM_END_OF_REGISTERS
         cp      d
@@ -381,30 +390,7 @@ _fm_port_a_loop:
         ;; two additional properties a couples of regs away
         add     a, #NSS_FM_NEXT_REGISTER_GAP
         ld      d, #2
-        jp      _fm_port_a_loop
-        jp      _fm_end
-
-_fm_port_b:
-        ;; a: start register in ym2610 from FM channel
-        ld      a, #REG_FM1_OP1_DETUNE_MULTIPLY
-        res     1, b
-        add     b
-_fm_port_b_loop:
-        ld      b, a
-        ld      c, (hl)
-        call    ym2610_write_port_b
-        add     a, #NSS_FM_NEXT_REGISTER
-        inc     hl
-        dec     d
-        jp      nz, _fm_port_b_loop
-        ;;
-        ld      d, #NSS_FM_END_OF_REGISTERS
-        cp      d
-        jp      nc, _fm_end
-        ;; two additional properties a couples of regs away
-        add     a, #NSS_FM_NEXT_REGISTER_GAP
-        ld      d, #2
-        jp      _fm_port_b_loop
+        jp      _fm_port_loop
 
 _fm_end:
         ;; set the output OPs for this instrument
@@ -521,7 +507,7 @@ _detune_positive:
 fm_note_on_ext::
         ;; set new current FM channel
         ld      a, (hl)
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
         inc     hl
         jp      fm_note_on
 
@@ -590,32 +576,14 @@ _fm_no_2_stop:
         add     d
         ;; b: f_num2 register for the FM channel
         ld      b, a
-        ld      a, e
-        ;; TODO MACRO: write_port_a_or_b
-        cp      #2
-        jp      c, _fm_fnum_2_port_a
-        call    ym2610_write_port_b
-        jp      _fm_post_fnum_2
-_fm_fnum_2_port_a:
-        call    ym2610_write_port_a
-_fm_post_fnum_2:
-        ;; END MACRO
+        call    ym2610_write_func
         ;; configure REG_FMx_FNUM_1
         ld      a, b
         sub     #4
         ld      b, a
         ;; c: f_num LSB
         ld      c, l
-        ld      a, e
-        ;; TODO MACRO: write_port_a_or_b
-        cp      #2
-        jp      c, _fm_fnum_1_port_a
-        call    ym2610_write_port_b
-        jp      _fm_post_fnum_1
-_fm_fnum_1_port_a:
-        call    ym2610_write_port_a
-_fm_post_fnum_1:
-        ;; END MACRO
+        call    ym2610_write_func
 
         ;; start FM channel
         ;; a: FM channel (YM2610 encoding)
@@ -638,7 +606,7 @@ _fm_no_2_start:
         ;; fm context will now target the next channel
         ld      a, (state_fm_channel)
         inc     a
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
 
         ld      a, #1
         ret
@@ -652,7 +620,7 @@ _fm_no_2_start:
 fm_note_off_ext::
         ;; set new current FM channel
         ld      a, (hl)
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
         inc     hl
         jp      fm_note_off
 
@@ -685,7 +653,7 @@ _fm_off_no_2:
         ;; FM context will now target the next channel
         ld      a, (state_fm_channel)
         inc     a
-        ld      (state_fm_channel), a
+        call    fm_ctx_set_current
 
         ld      a, #1
         ret
@@ -710,17 +678,7 @@ opx_set_common::
         jp      z, _no_adj
         inc     b
 _no_adj:
-
-        ;; TODO MACRO: write_port_a_or_b
-        ld      a, e
-        cp      #2
-        jp      c, _opx_common_port_a
-        call    ym2610_write_port_b
-        jp      _opx_post_common
-_opx_common_port_a:
-        call    ym2610_write_port_a
-_opx_post_common:
-        ;; END MACRO
+        call    ym2610_write_func
 
         pop     de
         pop     bc
