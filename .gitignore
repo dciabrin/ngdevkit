@@ -6,6 +6,8 @@
 *.lst
 *.rst
 *.lib
+*.map
+*.sym
 
 # Libraries
 *.a

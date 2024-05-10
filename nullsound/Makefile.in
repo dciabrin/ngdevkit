@@ -19,7 +19,7 @@ all: nullsound.lib linkcheck.map
 -include ../Makefile.config
 
 INCLUDE_FILES=helpers ports ym2610
-OBJS=entrypoint bios-commands adpcm ym2610 stream timer nss-fm nss-adpcm nss-ssg
+OBJS=entrypoint bios-commands adpcm ym2610 stream timer nss-fm nss-adpcm nss-ssg fx-vibrato
 LIB=nullsound.lib
 
 VERSION=@version@
@@ -39,7 +39,7 @@ $(LIB): $(OBJS:%=%.rel)
 	cat $^ > $@
 
 %.rel: %.s
-	$(NGSDAS) -g -l -p -u -o $@ $<
+	$(NGSDAS) -a -g -l -p -s -u -o $@ $<
 
 install: install-nullsound install-include
 

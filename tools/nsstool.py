@@ -248,6 +248,8 @@ def register_nss_ops():
         ("s_vibrato", ["speed_depth"]),
         ("s_slide_u", ["speed_depth"]),
         ("s_slide_d", ["speed_depth"]),
+        # 0x30
+        ("fm_vibrato", ["speed_depth"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -286,6 +288,10 @@ def convert_fm_row(row, channel, opcodes):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x04:  # vibrato
+                # fxval == -1 means disable vibrato
+                fxval = max(fxval, 0)
+                opcodes.append(fm_vibrato(fxval))
             elif fx == 0x12:  # OP1 level
                 opcodes.append(op1_lvl(fxval))
             elif fx == 0x13:  # OP2 level
@@ -296,6 +302,7 @@ def convert_fm_row(row, channel, opcodes):
                 opcodes.append(op4_lvl(fxval))
             elif fx == 0xe5:  # pitch
                 opcodes.append(fm_pitch((fxval-0x80)//3))
+
         # note
         if row.note != -1:
             if row.note == 180:

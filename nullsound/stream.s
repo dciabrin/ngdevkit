@@ -98,6 +98,7 @@ _check_update_macros_and_effects:
         ld      a, (state_timer_int_b_reached)
         cp      a, #1
         jp      nz, _no_macro_update
+        call    update_fm_effects
         call    update_ssg_macros_and_effects
         ld      a, #0
         ld      (state_timer_int_b_reached), a
@@ -204,6 +205,7 @@ nss_opcodes:
         .dw     ssg_vibrato
         .dw     ssg_slide_up
         .dw     ssg_slide_down
+        .dw     fm_vibrato
 
 
 

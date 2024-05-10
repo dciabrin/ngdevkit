@@ -22,6 +22,7 @@
         .module nullsound
 
         .include "ym2610.inc"
+        .include "struct-fx.inc"
 
         
         .equ    NOTE_OFFSET,(state_mirrored_ssg_note-state_mirrored_ssg)
@@ -31,7 +32,6 @@
         .equ    WAVEFORM_OFFSET,(state_mirrored_ssg_waveform-state_mirrored_ssg)
         .equ    SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg)
         .equ    SSG_FX,(state_fx-state_mirrored_ssg)
-        .equ    SSG_VIBRATO,(state_vibrato-state_mirrored_ssg)
 
         ;; this is to use IY as two IYH and IYL 8bits registers
         .macro dec_iyl
@@ -42,6 +42,10 @@
 
 ;;; SSG playback state tracker
 ;;; ------
+        ;; This padding ensures the entire _state_ssg data sticks into
+        ;; a single 256 byte boundary to make 16bit arithmetic faster
+        .blkb   90
+
 _state_ssg_start:
 
 ;;; context: current SSG channel for opcode actions
@@ -436,7 +440,6 @@ ssg_ctx_reset::
 ;;; SSG effects
 ;;; Implemented in separate files, for clarity
 ;;; ------
-        .include "ssg-vibrato.s"
         .include "ssg-slide.s"
 
 
@@ -575,6 +578,71 @@ _on_post_load:
         pop     de
 
         ld      a, #1
+        ret
+
+
+;;; Update the vibrato for the current FM channel and update the YM2610
+;;; ------
+;;; hl: mirrored state of the current fm channel
+eval_ssg_vibrato_step::
+        push    hl
+        push    de
+        push    bc
+
+        ;; ix: state fx for current channel
+        push    hl
+        pop     ix
+
+        call    vibrato_eval_step
+
+        ;; ;; configure FM channel with new frequency
+        ;; YM2610: load note
+        ld      a, (state_ssg_channel)
+        sla     a
+        add     #REG_SSG_A_FINE_TUNE
+        ld      b, a
+        ld      c, l
+        call    ym2610_write_port_a
+        inc     b
+        ld      c, h
+        call    ym2610_write_port_a
+
+        pop     bc
+        pop     de
+        pop     hl
+
+        ret
+
+
+;;; Setup SSG vibrato: position and increments
+;;; ------
+;;; ix : ssg state for channel
+;;;      the note semitone must be already configured
+ssg_vibrato_setup_increments::
+        push    bc
+        push    hl
+        push    de
+
+        ld      hl, #ssg_semitone_distance
+        ld      l, NOTE_SEMITONE_OFFSET(ix)
+        call    vibrato_setup_increments
+
+        ;; de: vibrato prev increment, fixed point
+        ld      VIBRATO_PREV(ix), e
+        ld      VIBRATO_PREV+1(ix), d
+        ;; hl: vibrato next increment, fixed point (negate)
+        xor     a
+        sub     l
+        ld      l, a
+        sbc     a, a
+        sub     h
+        ld      h, a
+        ld      VIBRATO_NEXT(ix), l
+        ld      VIBRATO_NEXT+1(ix), h
+
+        pop     de
+        pop     hl
+        pop     bc
         ret
 
         
@@ -917,6 +985,12 @@ _setup_vibrato:
 
         ;; vibrato fx on
         ld      a, SSG_FX(ix)
+        ;; if vibrato was in use, keep the current vibrato pos
+        bit     0, a
+        jp      nz, _post_ssg_vibrato_pos
+        ;; reset vibrato sine pos
+        ld      VIBRATO_POS(ix), #0
+_post_ssg_vibrato_pos:
         set     0, a
         ld      SSG_FX(ix), a
 
