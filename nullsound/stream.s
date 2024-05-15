@@ -206,7 +206,8 @@ nss_opcodes:
         .dw     ssg_slide_up
         .dw     ssg_slide_down
         .dw     fm_vibrato
-
+        .dw     fm_slide_up
+        .dw     fm_slide_down
 
 
 ;;; Process a single NSS opcode

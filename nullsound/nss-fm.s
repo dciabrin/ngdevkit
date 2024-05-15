@@ -136,7 +136,6 @@ init_nss_fm_state_tracker::
         ld      a, #0xc3        ; jp 0x....
         ld      (ym2610_write_func), a
         call    fm_ctx_reset
-
         ret
 
 
@@ -421,7 +420,9 @@ _fm_chk_fx_vibrato:
         call    eval_fm_vibrato_step
         jr      _fm_post_effects
 _fm_chk_fx_slide:
-        ;; TODO
+        bit     1, a
+        jr      z, _fm_post_effects
+        call    eval_fm_slide_step
 _fm_post_effects:
         ;; prepare to update the next channel
         ;; de: next state_mirrored
@@ -748,6 +749,126 @@ fm_vibrato_setup_increments::
         ret
 
 
+;;; Setup slide effect for the current FM channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+;;;    a  : slide direction: 0 == up, 1 == down
+fm_slide_common::
+        push    bc
+        push    de
+
+        ;; de: FX for channel
+        ld      b, a
+        ld      de, #state_fm_fx
+        call    fm_state_for_channel
+        ld      a, b
+
+        ;; ix: FM state for channel
+        push    de
+        pop     ix
+
+        call    slide_init
+        ld      e, NOTE_SEMITONE(ix)
+        call    slide_setup_increments
+
+        pop     de
+        pop     bc
+
+        ret
+
+
+;;; Update the slide for the current channel
+;;; Slide moves up or down by 1/8 of semitone increments * slide depth.
+;;; ------
+;;; hl: state for the current channel
+eval_fm_slide_step::
+        push    hl
+        push    de
+        push    bc
+        push    ix
+
+        ;; update internal state for the next slide step
+        call    eval_slide_step
+
+        ;; effect still in progress?
+        cp      a, #0
+        jp      nz, _fm_slide_add_intermediate
+        ;; otherwise reset note state and load into YM2610
+        ld      NOTE_SEMITONE(ix), d
+        ;; a: semitone
+        ld      a, d
+        and     #0xf
+        ;; hl: base f-num for current semitone (8bit-add)
+        ld      hl, #fm_note_f_num
+        sla     a
+        add     a, l
+        ld      l, a
+        adc     a, h
+        sub     l
+        ld      h, a
+        ;; restore detune at the end of the effect if there was any
+        call    fm_get_f_num
+        ld      NOTE_FNUM(ix), l
+        ld      NOTE_FNUM+1(ix), h
+        ld      a, d
+        jr      _fm_slide_load_fnum
+
+_fm_slide_add_intermediate:
+        ;; a: current semitone
+        ld      a, SLIDE_POS16+1(ix)
+        and     #0xf
+        ;; b: next semitone distance from current note
+        ld      hl, #fm_semitone_distance
+        add     l
+        inc     a
+        ld      l, a
+        ld      b, (hl)
+        ;; c: FM: intermediate frequency is positive
+        ld      c, #0
+        ;; e: intermediate semitone position (fractional part)
+        ld      e, SLIDE_POS16(ix)
+        ;; de: current intermediate frequency f_dist
+        call    slide_intermediate_freq
+
+        ;; a: semitone
+        ld      a, SLIDE_POS16+1(ix)
+        and     #0xf
+        ;; hl: base f-num for current semitone (8bit-add)
+        ld      hl, #fm_note_f_num
+        sla     a
+        add     a, l
+        ld      l, a
+        adc     a, h
+        sub     l
+        ld      h, a
+        ld      b, (hl)
+        inc     hl
+        ld      c, (hl)
+        ld      h, b
+        ld      l, c
+
+        ;; load new frequency into the YM2610
+        ;; hl: semitone frequency + f_dist
+        add     hl, de
+
+        ;; a: block
+        ld      a, SLIDE_POS16+1(ix)
+
+_fm_slide_load_fnum:
+        and     #0xf0
+        sra     a
+        ld      NOTE_BLOCK(ix), a
+        ld      c, a
+        call    fm_set_fnum_registers
+
+        pop     ix
+        pop     bc
+        pop     de
+        pop     hl
+
+        ret
+
+
 ;;; FM_NOTE_ON_EXT
 ;;; Emit a specific note (frequency) on an FM channel
 ;;; ------
@@ -796,7 +917,11 @@ _fm_on_check_vibrato:
         ;; reconfigure increments for current semitone
         call    fm_vibrato_setup_increments
 _fm_on_check_slide:
-        ;; TODO
+        bit     1, a
+        jr      z, _fm_on_post_fx
+        ;; reconfigure increments for current semitone
+        ld      e, NOTE_SEMITONE(ix)
+        call    slide_setup_increments
 _fm_on_post_fx:
 
         ;; d: block (octave)
@@ -1035,5 +1160,27 @@ _post_fm_vibrato_setup:
         pop     de
         pop     bc
 
+        ld      a, #1
+        ret
+
+
+;;; FM_SLIDE_UP
+;;; Enable slide up effect for the current FM channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+fm_slide_up::
+        ld      a, #0
+        call    fm_slide_common
+        ld      a, #1
+        ret
+
+
+;;; FM_SLIDE_DOWN
+;;; Enable slide down effect for the current FM channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+fm_slide_down::
+        ld      a, #1
+        call    fm_slide_common
         ld      a, #1
         ret

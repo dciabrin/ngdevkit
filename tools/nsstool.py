@@ -250,6 +250,8 @@ def register_nss_ops():
         ("s_slide_d", ["speed_depth"]),
         # 0x30
         ("fm_vibrato", ["speed_depth"]),
+        ("fm_slide_u", ["speed_depth"]),
+        ("fm_slide_d", ["speed_depth"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -302,6 +304,12 @@ def convert_fm_row(row, channel, opcodes):
                 opcodes.append(op4_lvl(fxval))
             elif fx == 0xe5:  # pitch
                 opcodes.append(fm_pitch((fxval-0x80)//3))
+            elif fx == 0xe1:  # slide up
+                assert fxval != -1
+                opcodes.append(fm_slide_u(fxval))
+            elif fx == 0xe2:  # slide down
+                assert fxval != -1
+                opcodes.append(fm_slide_d(fxval))
 
         # note
         if row.note != -1:

@@ -52,6 +52,14 @@ _vibrato_size:
         ;; FX getter for a channel's state
         ;; The offset assumes that that the FX structure are located
         ;; sequentially from the start of the channel's state
+        .lclequ FX,             (fx_fx - fx_fx)
+        .lclequ SLIDE,          (fx_slide - fx_fx)
+        .lclequ SLIDE_SPEED,    (_slide_speed - fx_fx)
+        .lclequ SLIDE_DEPTH,    (_slide_depth - fx_fx)
+        .lclequ SLIDE_INC16,    (_slide_inc16 - fx_fx)
+        .lclequ SLIDE_POS16,    (_slide_pos16 - fx_fx)
+        .lclequ SLIDE_END,      (_slide_end - fx_fx)
+        .lclequ SLIDE_SIZE,     (_vibrato_size - fx_slide)
         .lclequ VIBRATO,        (fx_vibrato - fx_fx)
         .lclequ VIBRATO_SPEED,  (_vibrato_speed - fx_fx)
         .lclequ VIBRATO_DEPTH,  (_vibrato_depth - fx_fx)

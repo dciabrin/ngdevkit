@@ -437,10 +437,6 @@ ssg_ctx_reset::
         ret
 
 
-;;; SSG effects
-;;; Implemented in separate files, for clarity
-;;; ------
-        .include "ssg-slide.s"
 
 
 ;;; SSG NSS opcodes
@@ -645,6 +641,116 @@ ssg_vibrato_setup_increments::
         pop     bc
         ret
 
+
+;;; Setup slide effect for the current FM channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+;;;    a  : slide direction: 0 == up, 1 == down
+ssg_slide_common::
+        push    bc
+        push    de
+
+        ;; de: FX for channel
+        ld      b, a
+        ld      de, #state_fx
+        call    mirrored_ssg_for_channel
+        ld      a, b
+
+        ;; ix: SSG state for channel
+        push    de
+        pop     ix
+
+        call    slide_init
+        ld      e, NOTE_SEMITONE_OFFSET(ix)
+        call    slide_setup_increments
+
+        pop     de
+        pop     bc
+
+        ret
+
+
+
+;;; Update the slide for the current channel
+;;; Slide moves up or down by 1/8 of semitone increments * slide depth.
+;;; ------
+;;; hl: state for the current channel
+eval_ssg_slide_step::
+        push    hl
+        push    de
+        push    bc
+        push    ix
+
+        ;; update internal state for the next slide step
+        call    eval_slide_step
+
+        ;; effect still in progress?
+        cp      a, #0
+        jp      nz, _ssg_slide_add_intermediate
+        ;; otherwise reset note state and load into YM2610
+        ld      NOTE_SEMITONE_OFFSET(ix), d
+        ;; hl: base note period for current semitone
+        ld      hl, #ssg_tune
+        ld      a, d
+        sla     a
+        ld      l, a
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
+        ld      h, b
+        ld      l, c
+        ;; save new current note frequency
+        ld      NOTE_OFFSET(ix), l
+        ld      NOTE_OFFSET+1(ix), h
+        jr      _ssg_slide_load_note
+
+_ssg_slide_add_intermediate:
+        ;; a: current semitone
+        ld      a, SLIDE_POS16+1(ix)
+        ;; b: next semitone distance from current note
+        ld      hl, #ssg_semitone_distance
+        ld      l, a
+        ld      b, (hl)
+        ;; c: SSG: intermediate frequency is negative
+        ld      c, #1
+        ;; e: intermediate semitone position (fractional part)
+        ld      e, SLIDE_POS16(ix)
+        ;; de: current intermediate frequency f_dist
+        call    slide_intermediate_freq
+
+        ;; hl: base note period for current semitone
+        ld      hl, #ssg_tune
+        ld      a, SLIDE_POS16+1(ix)
+        sla     a
+        ld      l, a
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
+        ld      h, b
+        ld      l, c
+
+        ;; load new frequency into the YM2610
+        ;; hl: semitone frequency + f_dist
+        add     hl, de
+
+_ssg_slide_load_note:
+        ;; configure SSG channel with new note
+        ld      a, (state_ssg_channel)
+        sla     a
+        ld      b, a
+        ld      c, l
+        call    ym2610_write_port_a
+        inc     b
+        ld      c, h
+        call    ym2610_write_port_a
+
+        pop     ix
+        pop     bc
+        pop     de
+        pop     hl
+
+        ret
+
         
 ;;; SSG_NOTE_OFF
 ;;; Release (stop) the note on the current SSG channel.
@@ -819,7 +925,8 @@ _on_check_slide:
         bit     1, a
         jr      z, _on_post_fx
         ;; reconfigure increments for current semitone
-        call    ssg_slide_setup_increments
+        ld      e, NOTE_SEMITONE_OFFSET(ix)
+        call    slide_setup_increments
 _on_post_fx:
 
         ;; de: ssg_note
