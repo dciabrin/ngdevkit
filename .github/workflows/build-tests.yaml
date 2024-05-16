@@ -68,7 +68,7 @@ jobs:
 
   macos:
     name: "macOS build"
-    runs-on: macos-latest
+    runs-on: macos-13
     env:
       PREFIX: "/usr/local"
       PY3PATH: "/usr/local/opt/python3/bin"
@@ -80,7 +80,7 @@ jobs:
         run: |
           brew tap dciabrin/ngdevkit
           brew install automake ngdevkit-toolchain python3 zip pkg-config
-          $PY3PATH/pip3 install pygame --break-system-packages
+          $(brew --prefix python)/libexec/bin/pip install pygame --break-system-packages
 
       - name: Build
         run: ./.github/scripts/build.sh
