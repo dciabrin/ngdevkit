@@ -696,6 +696,7 @@ eval_fm_vibrato_step::
         push    hl
         push    de
         push    bc
+        push    ix
 
         ;; ix: state fx for current channel
         push    hl
@@ -707,6 +708,7 @@ eval_fm_vibrato_step::
         ld      c, NOTE_BLOCK(ix)
         call    fm_set_fnum_registers
 
+        pop     ix
         pop     bc
         pop     de
         pop     hl

@@ -584,6 +584,7 @@ eval_ssg_vibrato_step::
         push    hl
         push    de
         push    bc
+        push    ix
 
         ;; ix: state fx for current channel
         push    hl
@@ -603,6 +604,7 @@ eval_ssg_vibrato_step::
         ld      c, h
         call    ym2610_write_port_a
 
+        pop     ix
         pop     bc
         pop     de
         pop     hl
