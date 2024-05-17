@@ -242,8 +242,8 @@ class sprite_converter(converter):
         if self.size:
             padding=self.size-self.fd1.tell();
             if padding>0:
-                self.fd1.write('\0'*padding)
-                self.fd2.write('\0'*padding)
+                self.fd1.write(bytes.fromhex("00")*padding)
+                self.fd2.write(bytes.fromhex("00")*padding)
         self.fd1.close()
         self.fd2.close()
 
