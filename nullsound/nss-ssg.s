@@ -44,7 +44,7 @@
 ;;; ------
         ;; This padding ensures the entire _state_ssg data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   90
+        ;; .blkb   90
 
 _state_ssg_start:
 

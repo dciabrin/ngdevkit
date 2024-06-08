@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2023 Damien Ciabrini
+;;; Copyright (c) 2023-2024 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -33,40 +33,33 @@
 ;;;
         .area  DATA
 
-state_timer_int_a_count::
+state_timer_tick_reached::
         .db     0
 
-state_timer_int_a_wait::
+state_timer_ticks_count::
         .db     0
 
-state_timer_int_b_count::
+state_timer_ticks_per_row::
         .db     0
 
-state_timer_int_b_wait::
-        .db     0
-
-state_timer_int_b_reached::
-        .db     0
 
         .area  CODE
 
 init_timer_state_tracker::
         ld      a, #0
-        ld      (state_timer_int_a_count), a
-        ld      (state_timer_int_a_wait), a
-        ld      (state_timer_int_b_count), a
-        ld      (state_timer_int_b_wait), a
-        ld      (state_timer_int_b_reached), a
+        ld      (state_timer_tick_reached), a
+        ld      (state_timer_ticks_count), a
+        ld      (state_timer_ticks_per_row), a
         ret
 
 
 update_timer_state_tracker::
         ld      a, #1
-        ld      (state_timer_int_b_reached), a
+        ld      (state_timer_tick_reached), a
         ;; keep track of the new interrupt
-        ld      a, (state_timer_int_b_count)
+        ld      a, (state_timer_ticks_count)
         inc     a
-        ld      (state_timer_int_b_count), a
+        ld      (state_timer_ticks_count), a
 
         ;; update the YM2610 here to reset the interrupt flags
         ;; and rearm the interrupt timer
@@ -89,4 +82,52 @@ update_timer_state_tracker::
         ;; interrupt handler
         call    ym2610_restore_context_port_a
 
+        ret
+
+
+;;;
+;;; NSS opcodes
+;;;
+
+;;; TIMER_TEMPO
+;;; configure YM2610's timer B for a specific tempo and start it
+;;; ------
+;;; [hl]: Timer B counter
+timer_tempo::
+        ;; reset all timers
+        ld      b, #REG_TIMER_FLAGS
+        ld      c, #0x30
+        call    ym2610_write_port_a
+        ;; configure timer B
+        ld      b, #REG_TIMER_B_COUNTER
+        ld      c, (hl)
+        inc     hl
+        call    ym2610_write_port_a
+        ;; deconfigure timer A (TODO remove it)
+        ld      b, #REG_TIMER_A_COUNTER_LSB
+        ld      c, #0x0
+        call    ym2610_write_port_a
+        ld      b, #REG_TIMER_A_COUNTER_MSB
+        ld      c, #0x0
+        call    ym2610_write_port_a
+        ;; start timer right away
+        ld      a, #0
+        ld      (state_timer_ticks_count), a
+        ld      b, #REG_TIMER_FLAGS
+        ld      c, #0x3A
+        call    ym2610_write_port_a
+        ei
+        ld      a, #1
+        ret
+
+
+;;; ROW_SPEED
+;;; number of ticks to wait before processing the next row in the streams
+;;; ------
+;;; [hl]: ticks
+row_speed::
+        ld      a, (hl)
+        inc     hl
+        ld      (state_timer_ticks_per_row), a
+        ld      a, #1
         ret
