@@ -67,8 +67,26 @@ update_timer_state_tracker::
         ld      a, (state_timer_int_b_count)
         inc     a
         ld      (state_timer_int_b_count), a
-        ;; reset and rearm the ym2610 timer
+
+        ;; update the YM2610 here to reset the interrupt flags
+        ;; and rearm the interrupt timer
+        ;; NOTE: in doing so we might actually be stealing the
+        ;; ym2610 register context from a ongoing ym2610_write_port_a.
+        ;; so we have to update the YM2610 with care
+
+        ;; step1: wait before reading/writing anything, so that
+        ;; if we interrupted a ym2610_write_port_a, it gets a chance to
+        ;; update the YM2610 properly
+        call    ym2610_wait_available
+
+        ;; reset interrupt timer B
         ld      b, #REG_TIMER_FLAGS
-        ld      c, #0x3a
+        ld      c, #0x2a
         call    ym2610_write_port_a
+
+        ;; step2: at this stage, if we interrupted a ym2610_write_port_a,
+        ;; restore the YM2610 register context before returning from the
+        ;; interrupt handler
+        call    ym2610_restore_context_port_a
+
         ret

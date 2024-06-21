@@ -21,6 +21,17 @@
         .include "ports.inc"
         .include "ym2610.inc"
 
+
+        .area DATA
+
+
+;;; current YM2610 context when a write to port A is ongoing, 0xff otherwise
+;;; (the interrupt handler currently writes to the YM2610 on port A,
+;;; so ym2610_write_port_a must be reentrant, hence this context)
+state_ym2610_context_port_a::
+        .db     0
+
+
         .area CODE
 
 
@@ -32,6 +43,9 @@
 ;;; (all registers are preserved)
 ym2610_write_port_a::
         push    af
+        ;; reentrant: save register context
+        ld      a, b
+        ld      (state_ym2610_context_port_a), a
         ;; select register address
         ld      a, b
         out     (PORT_YM2610_A_ADDR), a
@@ -40,6 +54,9 @@ ym2610_write_port_a::
         ld      a, c
         out     (PORT_YM2610_A_VALUE), a
         call    _ym2610_wait_data_write
+        ;; reentrant: clear register context
+        ld      a, #0xff
+        ld      (state_ym2610_context_port_a), a
         pop     af
         ret
 
@@ -79,16 +96,34 @@ _ym2610_wait_data_write:
         pop     bc
         push    bc
         pop     bc
-        ;; FIXME: When a lot of activity is happening on
-        ;; the YM2610, sometimes the next IRQ seems to
-        ;; fail to trigger. Somehow probing the timer/busy
-        ;; often seems to mitigate the issue...
-        ;; TODO: check why this happens and whether this
-        ;; reproduces on real hardware
-        in      a, (PORT_YM2610_STATUS)
         ret
 
 
+;;; ym2610_wait_available
+;;; ---------------------
+;;; Wait before writing anything on the address or data port
+;;; One could check the busy state of the chip, but it is not clear
+;;; it is sufficient for real hardware. So instead, wait as much
+;;; time as necessary to guarantee that both the previous data are
+;;; integrated and the next writes will be successful
+;;; (all registers are preserved)
+ym2610_wait_available::
+        call    _ym2610_wait_address_write
+        call    _ym2610_wait_data_write
+        ret
+
+
+;;; ym2610_restore_context_port_a
+;;; -----------------------------
+;;; If an interrupt was triggered while the YM2610 was being
+;;; written to by the sound driver, restore the register context
+;;; before exiting from the interrupt handler.
+;;; (all registers are preserved)
+ym2610_restore_context_port_a::
+        ld      a, (state_ym2610_context_port_a)
+        out     (PORT_YM2610_A_ADDR), a
+        call    _ym2610_wait_address_write
+        ret
 
 
 ;;; Reset YM2610
