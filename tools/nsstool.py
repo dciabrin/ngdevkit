@@ -74,6 +74,12 @@ def to_nss_note(furnace_note):
     nss_note = (octave << 4) + note
     return nss_note
 
+def to_nss_b_note(furnace_note):
+    octave = (furnace_note // 12) - 6
+    note = furnace_note % 12
+    nss_note = (octave << 4) + note
+    return nss_note
+
 def make_ssg_note(furnace_note):
     octave = (furnace_note // 12) - 5
     note = furnace_note % 12
@@ -413,7 +419,7 @@ def convert_b_row(row, channel, opcodes):
             if row.note == 180:
                 opcodes.append(b_stop())
             else:
-                opcodes.append(b_note(to_nss_note(row.note)))
+                opcodes.append(b_note(to_nss_b_note(row.note)))
     return jmp_to_order
 
 

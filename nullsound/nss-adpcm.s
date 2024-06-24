@@ -40,6 +40,9 @@
 state_adpcm_a_channel::
         .db     0
 
+;;; current ADPCM-B instrumment play command (with loop)
+state_adpcm_b_start_cmd::
+        .db     0
 
 
         .area  CODE
@@ -51,6 +54,8 @@ state_adpcm_a_channel::
 init_nss_adpcm_state_tracker::
         ld      a, #0
         ld      (state_adpcm_a_channel), a
+        ld      a, #0x80       ; start flag
+        ld      (state_adpcm_b_start_cmd), a
         ret
 
 ;;;  Reset ADPCM-A playback state.
@@ -354,6 +359,14 @@ _adpcm_b_loop:
         dec     d
         jp      nz, _adpcm_b_loop
 
+        ;; play command, with/without loop bit
+        ld      a, #0x80
+        bit     0, (hl)
+        jr      z, _adpcm_b_post_loop_chk
+        set     4, a
+_adpcm_b_post_loop_chk:
+        ld      (state_adpcm_b_start_cmd), a
+
         pop     de
         pop     hl
         pop     bc
@@ -463,7 +476,9 @@ _no_delta_shift:
 
         ;; start the ADPCM-B channel
         ld      b, #REG_ADPCM_B_START_STOP
-        ld      c, #0x80       ; start flag
+        ;; start command (with loop when configured)
+        ld      a, (state_adpcm_b_start_cmd)
+        ld      c, a
         call    ym2610_write_port_a
 
         pop     hl

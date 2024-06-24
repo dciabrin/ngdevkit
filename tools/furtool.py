@@ -81,6 +81,11 @@ class binstream(object):
         self.pos += 4
         return res
 
+    def s4(self):
+        res = unpack_from("<i", self.data, self.pos)[0]
+        self.pos += 4
+        return res
+
     def ustr(self):
         res = []
         b = self.u1()
@@ -208,6 +213,7 @@ class adpcm_b_sample:
 class pcm_sample:
     name: str = ""
     data: bytearray = field(default=b"", repr=False)
+    loop: bool = False
 
 
 @dataclass
@@ -239,6 +245,7 @@ class adpcm_a_instrument:
 class adpcm_b_instrument:
     name: str = ""
     sample: adpcm_b_sample = None
+    loop: bool = False
 
 
 def read_fm_instrument(bs):
@@ -418,6 +425,9 @@ def read_instrument(nth, bs, smp):
     if itype in [37, 38]:
         ins = {37: adpcm_a_instrument,
                38: adpcm_b_instrument}[itype]()
+        # ADPCM-B loop information
+        if itype == 38:
+            ins.loop = smp[sample].loop
         if isinstance(smp[sample],pcm_sample):
             # the sample is encoded in PCM, so it has to be converted
             # to be played back on the hardware.
@@ -469,9 +479,9 @@ def read_sample(bs):
     else:
         error("sample '%s' is of unsupported type: %d"%(str(name), stype))
     # assert c4_freq == {5: 18500, 6: 44100}[stype]
-    bs.u1()  # unused play direction
+    bs.u1()  # unused loop direction
     bs.u2()  # unused flags
-    bs.read(8)  # unused looping info
+    loop_start, loop_end = bs.s4(), bs.s4()
     bs.read(16)  # unused rom allocation
     data = bs.read(data_bytes) + bytearray(data_padding)
     # generate a ASM name for the instrument
@@ -479,6 +489,7 @@ def read_sample(bs):
     ins = {5: adpcm_a_sample,
            6: adpcm_b_sample,
            16: pcm_sample}[stype](insname, data)
+    ins.loop = loop_start != -1 and loop_end != -1
     return ins
 
 
@@ -501,6 +512,12 @@ def read_samples(ptrs, bs):
         smp.append(read_sample(bs))
     return smp
 
+def check_for_unused_samples(smp, bs):
+    # module might have unused samples, leave them in the output
+    # if these are pcm_samples, convert them to adpcm_a to avoid errors
+    for i,s in enumerate(smp):
+        if isinstance(s, pcm_sample):
+            smp[i] = convert_sample(s, 37)
 
 def asm_fm_instrument(ins, fd):
     dtmul = tuple(ebit(ins.ops[i].detune, 6, 4) | ebit(ins.ops[i].multiply, 3, 0) for i in range(4))
@@ -597,6 +614,8 @@ def asm_adpcm_instrument(ins, fd):
     print("%s:" % ins.name, file=fd)
     print("        .db     %s_START_LSB, %s_START_MSB  ; start >> 8" % (name, name), file=fd)
     print("        .db     %s_STOP_LSB,  %s_STOP_MSB   ; stop  >> 8" % (name, name), file=fd)
+    if isinstance(ins, adpcm_b_instrument):
+        print("        .db     0x%02x  ; loop" % (ins.loop,), file=fd)
     print("", file=fd)
 
 
@@ -683,11 +702,7 @@ def main():
     m = read_module(bs)
     smp = read_samples(m.samples, bs)
     ins = read_instruments(m.instruments, smp, bs)
-    # module might have unused samples, leave them in the output
-    # if these are pcm_samples, convert them to adpcm_a to avoid errors
-    for i,s in enumerate(smp):
-        if isinstance(s, pcm_sample):
-            smp[i] = convert_sample(s, 37)
+    check_for_unused_samples(smp, bs)
 
     if arguments.output:
         outfd = open(arguments.output, "w")
