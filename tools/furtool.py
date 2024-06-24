@@ -322,7 +322,7 @@ def read_ssg_macro(length, bs):
         # NOTE: only read a single waveform as we don't allow
         # sequence on this register right now
         wav=blocks[4][0]
-        env, noise, tone = ubits(wav+1,[2,2],[1,1],[0,0]) # +1 to convert to bitfield
+        env, noise, tone = ubits(wav,[2,2],[1,1],[0,0]) # latest furnace version
         # pass: store envelope bit as mode for volume register
         if 3 in blocks:
             new_vols=[env<<4|v for v in blocks[3]]
