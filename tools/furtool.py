@@ -668,6 +668,15 @@ def load_module(modname):
         return binstream(furbin)
 
 
+def samples_from_module(modname):
+    bs = load_module(modname)
+    m = read_module(bs)
+    smp = read_samples(m.samples, bs)
+    ins = read_instruments(m.instruments, smp, bs)
+    check_for_unused_samples(smp, bs)
+    return smp
+
+
 def main():
     global VERBOSE
     parser = argparse.ArgumentParser(

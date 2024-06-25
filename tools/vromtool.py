@@ -22,6 +22,7 @@ import base64
 import os
 import sys
 from dataclasses import dataclass
+from furtool import samples_from_module
 
 import yaml
 
@@ -38,10 +39,14 @@ def dbg(s):
 
 
 @dataclass
-class adpcm_a:
+class furnace:
     name: str = ""
     uri: str = ""
 
+@dataclass
+class adpcm_a:
+    name: str = ""
+    uri: str = ""
 
 @dataclass
 class adpcm_b:
@@ -54,7 +59,7 @@ class adpcm_b:
 def validate(s):
     assert isinstance(s, dict)
     assert len(s.keys()) == 1
-    assert list(s.keys())[0].lower() in ["adpcm_a", "adpcm_b"]
+    assert list(s.keys())[0].lower() in ['furnace', 'adpcm_a', 'adpcm_b']
     val = s[list(s.keys())[0]]
     assert isinstance(val, dict)
     assert all([x in val and isinstance(val[x], str) for x in ["name", "uri"]])
@@ -132,29 +137,41 @@ def load_sample_map_file(filenames):
         for b in yamlblocks:
             ysamples.extend(b)
         all_ysamples.extend([filename, y] for y in ysamples)
-    dbg("Found %d samples in file(s): %s" % (len(all_ysamples), ", ".join(filenames)))
+    dbg("Found %d entries in file(s): %s" % (len(all_ysamples), ", ".join(filenames)))
 
     # Create adpcm objects from input map and load sample data
     samples = []
-    mkmap = {"adpcm_a": adpcm_a, "adpcm_b": adpcm_b}
+    mkmap = {"adpcm_a_sample": adpcm_a,
+             "adpcm_b_sample": adpcm_b,
+             "adpcm_a": adpcm_a,
+             "adpcm_b": adpcm_b}
     for mapfile, y in all_ysamples:
         validate(y)
         stype = list(y.keys())[0]
-        # make a sample object from the input
-        sample = mkmap[stype](y[stype]["name"], y[stype]["uri"])
-        # load sample's data
-        if sample.uri.startswith("file://"):
-            samplepath = sample.uri[7:]
-            with open(samplepath, "rb") as f:
-                dbg("  %s: loaded from '%s'" % (sample.name, samplepath))
-                sample.data = f.read()
-        elif sample.uri.startswith("data:;base64,"):
-            dbg("  %s: encoded in '%s'" % (sample.name, mapfile))
-            sample.data = base64.b64decode(sample.uri[13:])
+        if stype == 'furnace':
+            # extract all sample object from the furnace module
+            modfile=y['furnace']['uri'][7:]
+            smp = samples_from_module(modfile)
+            for s in smp:
+                dbg("  %s: loaded from furnace module '%s'" % (s.name, modfile))
+                vs = mkmap[s.__class__.__name__](s.name)
+                vs.data = s.data
+                samples.append(vs)
         else:
-            error("unknown URI for sample '%s'"%sample.name)
-
-        samples.append(sample)
+            # make a sample object from the input
+            sample = mkmap[stype](y[stype]["name"], y[stype]["uri"])
+            # load sample's data
+            if sample.uri.startswith("file://"):
+                samplepath = sample.uri[7:]
+                with open(samplepath, "rb") as f:
+                    dbg("  %s: loaded from '%s'" % (sample.name, samplepath))
+                    sample.data = f.read()
+            elif sample.uri.startswith("data:;base64,"):
+                dbg("  %s: encoded in '%s'" % (sample.name, mapfile))
+                sample.data = base64.b64decode(sample.uri[13:])
+            else:
+                error("unknown URI for sample '%s'"%sample.name)
+            samples.append(sample)
 
     return samples
 

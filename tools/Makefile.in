@@ -18,7 +18,7 @@ all:
 
 -include ../Makefile.config
 
-TOOLS=paltool.py tiletool.py adpcmtool.py vromtool.py furtool.py nsstool.py
+TOOLS=paltool.py tiletool.py adpcmtool.py vromtool.py furtool.py nsstool.py soundtool.py
 
 install: $(TOOLS)
 	$(INSTALL) -d $(DESTDIR)$(prefix)/bin && \
