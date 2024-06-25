@@ -208,6 +208,8 @@ nss_opcodes:
         .dw     fm_vibrato
         .dw     fm_slide_up
         .dw     fm_slide_down
+        .dw     adpcm_b_vol
+        .dw     adpcm_a_vol
 
 
 ;;; Process a single NSS opcode

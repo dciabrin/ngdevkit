@@ -258,6 +258,8 @@ def register_nss_ops():
         ("fm_vibrato", ["speed_depth"]),
         ("fm_slide_u", ["speed_depth"]),
         ("fm_slide_d", ["speed_depth"]),
+        ("b_vol"   , ["volume"]),
+        ("a_vol"   , ["volume"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -377,7 +379,9 @@ def convert_a_row(row, channel, opcodes):
         # instrument
         if row.ins != -1:
             opcodes.append(a_instr(row.ins))
-        # TODO volume
+        # volume
+        if row.vol != -1:
+            opcodes.append(a_vol(row.vol))
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
@@ -403,7 +407,9 @@ def convert_b_row(row, channel, opcodes):
         # instrument
         if row.ins != -1:
             opcodes.append(b_instr(row.ins))
-        # TODO volume
+        # volume
+        if row.vol != -1:
+            opcodes.append(b_vol(row.vol))
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx

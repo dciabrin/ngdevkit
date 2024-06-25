@@ -35,6 +35,7 @@
 
 ;;; ADPCM playback state tracker
 ;;; ------
+_state_adpcm_start:
 
 ;;; context: current adpcm channel for opcode actions
 state_adpcm_a_channel::
@@ -44,6 +45,12 @@ state_adpcm_a_channel::
 state_adpcm_b_start_cmd::
         .db     0
 
+;;; current volumes for ADPCM-A channels
+state_adpcm_a_vol::     .blkb   6
+;;; current volumes for ADPCM-B channel
+state_adpcm_b_vol::     .blkb   1
+
+_state_adpcm_end:
 
         .area  CODE
 
@@ -56,6 +63,16 @@ init_nss_adpcm_state_tracker::
         ld      (state_adpcm_a_channel), a
         ld      a, #0x80       ; start flag
         ld      (state_adpcm_b_start_cmd), a
+        ;; default volumes
+        ld      a, #0x1f
+        ld      (state_adpcm_a_vol), a
+        ld      (state_adpcm_a_vol+1), a
+        ld      (state_adpcm_a_vol+2), a
+        ld      (state_adpcm_a_vol+3), a
+        ld      (state_adpcm_a_vol+4), a
+        ld      (state_adpcm_a_vol+5), a
+        ld      a, #0xff
+        ld      (state_adpcm_b_vol), a
         ret
 
 ;;;  Reset ADPCM-A playback state.
@@ -203,6 +220,26 @@ _adpcm_a_loop:
         dec     d
         jp      nz, _adpcm_a_loop
 
+        ;; d: ADPCM-A channel
+        ld      a, (state_adpcm_a_channel)
+        ld      d, a
+
+        ;; b: volume register for this channel
+        ld      a, #REG_ADPCM_A1_PAN_VOLUME
+        add     d
+        ld      b, a
+
+        ;; c: current channel volume (8bit add)
+        ld      hl, #state_adpcm_a_vol
+        ld      a, l
+        add     d
+        ld      l, a
+        ld      a, (hl)
+        or      #0xc0           ; default pan (L+R)
+        ld      c, a
+
+        call    ym2610_write_port_b
+
         pop     de
         pop     hl
         pop     bc
@@ -232,15 +269,6 @@ adpcm_a_on::
         ;; d: ADPCM-A channel
         ld      a, (state_adpcm_a_channel)
         ld      d, a
-
-        ;; TODO remove this default pan+volume
-        ld      a, #REG_ADPCM_A1_PAN_VOLUME
-        add     d
-        ld      b, a
-        ld      a, #0x1d        ; default vol
-        or      #0xc0           ; default pan (L+R)
-        ld      c, a
-        call    ym2610_write_port_b
 
         ;; a: bitwise channel
         ld      a, #0
@@ -317,6 +345,46 @@ _off_bit:
         ret
 
 
+;;; ADPCM_A_VOL
+;;; Set playback volume of the current ADPCM-A channel
+;;; ------
+adpcm_a_vol::
+        push    bc
+
+        ;; c: volume
+        ld      c, (hl)
+        inc     hl
+
+        push    hl
+
+        ;; hl: current volume for channel (bit add)
+        ld      hl, #state_adpcm_a_vol
+        ld      a, (state_adpcm_a_channel)
+        add     l
+        ld      l, a
+        ;; update current volume for channel
+        ld      a, c
+        ld      (hl), a
+
+        ;; b: ADPCM-A channel
+        ld      a, (state_adpcm_a_channel)
+        add     a, #REG_ADPCM_A1_PAN_VOLUME
+        ld      b, a
+
+        ;; c: volume + default pan (L/R)
+        ld      a, c
+        or      #0xc0
+        ld      c, a
+
+        ;; set volume for channel in the YM2610
+        call    ym2610_write_port_b
+
+        pop     hl
+        pop     bc
+        ld      a, #1
+        ret
+
+
 ;;; ADPCM_B_INSTRUMENT
 ;;; Configure the ADPCM-B channel based on an instrument's data
 ;;; ------
@@ -367,6 +435,17 @@ _adpcm_b_loop:
 _adpcm_b_post_loop_chk:
         ld      (state_adpcm_b_start_cmd), a
 
+        ;; set a default pan
+        ld      b, #REG_ADPCM_B_PAN
+        ld      c, #0xc0        ; default pan (L+R)
+        call    ym2610_write_port_a
+
+        ;;  current volume
+        ld      b, #REG_ADPCM_B_VOLUME
+        ld      a, (state_adpcm_b_vol)
+        ld      c, a
+        call    ym2610_write_port_a
+
         pop     de
         pop     hl
         pop     bc
@@ -413,16 +492,6 @@ adpcm_b_note_on::
         ;; stop the ADPCM-B channel
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #1           ; reset flag (clears start and repeat in YM2610)
-        call    ym2610_write_port_a
-
-        ;; TODO remove this default pan
-        ld      b, #REG_ADPCM_B_PAN
-        ld      c, #0xc0        ; default pan (L+R)
-        call    ym2610_write_port_a
-
-        ;; TODO remove this default volume
-        ld      b, #REG_ADPCM_B_VOLUME
-        ld      c, #0xff        ; default vol
         call    ym2610_write_port_a
 
         ;; a: semitone
@@ -497,6 +566,29 @@ adpcm_b_note_off::
         ;; stop the ADPCM-B channel
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #1           ; reset flag (clears start and repeat in YM2610)
+        call    ym2610_write_port_a
+
+        pop     bc
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_B_VOL
+;;; Set playback volume of the ADPCM-B channel
+;;; ------
+adpcm_b_vol::
+        push    bc
+
+        ;; a: volume
+        ld      a, (hl)
+        inc     hl
+
+        ;; new configured volume for ADPCM-B
+        ld      (state_adpcm_b_vol), a
+
+        ;; set volume in the YM2610
+        ld      b, #REG_ADPCM_B_VOLUME
+        ld      c, a
         call    ym2610_write_port_a
 
         pop     bc
