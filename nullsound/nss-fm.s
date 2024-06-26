@@ -270,14 +270,14 @@ fm_instrument_ext::
 ;;;  7   6   5   4   3   2   1   0
 ;;; ___ ___ ___ ___ OP4 OP3 OP2 OP1
 fm_out_ops_table:
-        .db     0x8             ; algo 0: OP4
-        .db     0x8             ; algo 1: OP4
-        .db     0x8             ; algo 2: OP4
-        .db     0x8             ; algo 3: OP4
-        .db     0xa             ; algo 4: OP2, OP4
-        .db     0xe             ; algo 5: OP2, OP3, OP4
-        .db     0xe             ; algo 6: OP2, OP3, OP4
-        .db     0xf             ; algo 7: OP1, OP2, OP3, OP4
+        .db     0x8             ; algo 0: [1000] OP4
+        .db     0x8             ; algo 1: [1000] OP4
+        .db     0x8             ; algo 2: [1000] OP4
+        .db     0x8             ; algo 3: [1000] OP4
+        .db     0xc             ; algo 4: [1100] OP2, OP4
+        .db     0xe             ; algo 5: [1110] OP2, OP3, OP4
+        .db     0xe             ; algo 6: [1110] OP2, OP3, OP4
+        .db     0xf             ; algo 7: [1111] OP1, OP2, OP3, OP4
 
 
 ;;; fm_set_out_ops_bitfield
@@ -350,6 +350,9 @@ fm_set_ops_level::
         ld      a, #INSTR_TL_OFFSET
         add     a, l
         ld      l, a
+        adc     a, h
+        sub     l
+        ld      h, a
 
 _ops_loop:
         ;; check whether current OP is an output
