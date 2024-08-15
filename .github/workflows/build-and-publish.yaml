@@ -79,7 +79,8 @@ jobs:
       - name: Dependencies
         run: |
           brew tap dciabrin/ngdevkit
-          brew install automake ngdevkit-toolchain python3 zip pkg-config
+          brew install python3 --overwrite
+          brew install automake ngdevkit-toolchain zip pkg-config
           $(brew --prefix python)/libexec/bin/pip install pygame --break-system-packages
 
       - name: Build
