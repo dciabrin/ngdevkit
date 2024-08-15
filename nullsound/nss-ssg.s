@@ -690,7 +690,7 @@ eval_ssg_slide_step::
         cp      a, #0
         jp      nz, _ssg_slide_add_intermediate
         ;; otherwise reset note state and load into YM2610
-        ld      NOTE_SEMITONE_OFFSET(ix), d
+        ;; ld      NOTE_SEMITONE_OFFSET(ix), d
         ;; hl: base note period for current semitone
         ld      hl, #ssg_tune
         ld      a, d
