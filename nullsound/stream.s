@@ -446,6 +446,7 @@ nss_opcodes:
         .dw     fm_slide_down
         .dw     adpcm_b_vol
         .dw     adpcm_a_vol
+        .dw     fm_pan
 
 
 ;;; Process a single NSS opcode

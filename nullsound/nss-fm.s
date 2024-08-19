@@ -32,6 +32,8 @@
         .equ    INSTR_TL_OFFSET,                30
         .equ    INSTR_FB_ALGO_OFFSET,           28
         .equ    INSTR_ALGO_MASK,                7
+        .equ    L_R_MASK,                       0xc0
+        .equ    AMS_PMS_MASK,                   0x37
 
         .equ    FM_STATE_SIZE,(state_fm_end-state_fm)
         .equ    FM_FX,(state_fm_fx-state_fm)
@@ -121,6 +123,13 @@ state_fm_instr::
         .db     0
         .db     0
 
+;;; current pan (and instrument's AMS PMS) per FM channel
+state_pan_ams_pms::
+        .db     0
+        .db     0
+        .db     0
+        .db     0
+
 _state_fm_end:
 
 
@@ -138,10 +147,14 @@ init_nss_fm_state_tracker::
         inc     de
         ;; zero state up to instr, which has a different init state
         ld      (hl), #0
-        ld      bc, #state_fm_instr-_state_fm_start
+        ld      bc, #state_pan_ams_pms-_state_fm_start
         ldir
         ;; init instr to a non-existing instr (0xff)
         ld      (hl), #0xff
+        ld      bc, #4
+        ldir
+        ;; pan has L and R enabled by default (0xc0)
+        ld      (hl), #0xc0
         ld      bc, #3
         ldir
 
@@ -632,10 +645,12 @@ _fm_port_loop:
         jp      nc, _fm_end
         ;; two additional properties a couples of regs away
         add     a, #NSS_FM_NEXT_REGISTER_GAP
-        ld      d, #2
+        ld      d, #1
         jp      _fm_port_loop
 
 _fm_end:
+        ;; set the pan, AMS and PMS settings for this instrument
+        call    fm_set_pan_ams_pms
         ;; set the output OPs for this instrument
         pop     hl
         call    fm_set_out_ops_bitfield
@@ -649,6 +664,38 @@ _fm_instr_end:
         pop     hl
         pop     bc
         ld      a, #1
+        ret
+
+;;; fm_set_pan_ams_pms
+;;; set the AMS and PMS settings for this instrument,
+;;; augmented with the current pan config for the channel
+;;; ------
+;;;    a  : value for the AMS/PMS register
+;;; [ hl ]: AMS/PMS instrument data
+fm_set_pan_ams_pms::
+        ;; b: ams/pms register
+        ld      b, a
+
+        ;; [de]: pan for channel (8bit add)
+        ld      de, #state_pan_ams_pms
+        ld      a, (state_fm_channel)
+        add     a, e
+        ld      e, a
+
+        ;; update state's pan AMS/PMS for channel
+        ld      a, (de)
+        and     #L_R_MASK
+        ld      c, a
+        ld      a, (hl)
+        and     #AMS_PMS_MASK
+        add     c
+        ld      (de), a
+
+        ;; update YM2610's pan AMS/PMS for channel
+        ld      c, a
+        ld      a, b
+        call    ym2610_write_func
+
         ret
 
 
@@ -1282,5 +1329,46 @@ fm_slide_up::
 fm_slide_down::
         ld      a, #1
         call    fm_slide_common
+        ld      a, #1
+        ret
+
+
+;;; FM_PAN
+;;; Enable left/right output for the current FM channel
+;;; ------
+;;; [ hl ]: pan mask (0x01: left, 0x10: right)
+fm_pan::
+        push    de
+        push    bc
+
+        ;; c: pan mask
+        ld      c, (hl)
+        inc     hl
+
+        ;; b: current channel
+        ld      a, (state_fm_channel)
+        ld      b, a
+
+        ;; de: pan AMS/PMS for channel (8bit add)
+        ld      de, #state_pan_ams_pms
+        add     a, e
+        ld      e, a
+
+        ;; update state's pan AMS/PMS for channel
+        ld      a, (de)
+        and     #AMS_PMS_MASK
+        add     c
+        ld      (de), a
+
+        ;; update YM2610's pan AMS/PMS for channel
+        ld      c, a
+        ld      a, #REG_FM1_L_R_AMSENSE_PMSENSE
+        res     1, b
+        add     b
+        ld      b, a
+        call    ym2610_write_func
+
+        pop     bc
+        pop     de
         ld      a, #1
         ret

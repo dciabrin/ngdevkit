@@ -260,6 +260,7 @@ def register_nss_ops():
         ("fm_slide_d", ["speed_depth"]),
         ("b_vol"   , ["volume"]),
         ("a_vol"   , ["volume"]),
+        ("fm_pan"  , ["pan_mask"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -286,6 +287,16 @@ def convert_fm_row(row, channel):
         # volume (must be in the NSS stream before instrument)
         if row.vol != -1:
             opcodes.append(fm_vol(row.vol))
+        # pre-instrument effects
+        for fx, fxval in row.fx:
+            if fx == 0x08:  # pan
+                pan_l = 0x80 if (fxval & 0xf0) else 0
+                pan_r = 0x40 if (fxval & 0x0f) else 0
+                opcodes.append(fm_pan(pan_l|pan_r))
+            if fx == 0x80:  # old pan
+                pan_l = 0x80 if fxval in [0x00, 0x80] else 0
+                pan_r = 0x40 if fxval in [0x80, 0xff] else 0
+                opcodes.append(fm_pan(pan_l|pan_r))
         # instrument
         if row.ins != -1:
             opcodes.append(fm_instr(row.ins))
