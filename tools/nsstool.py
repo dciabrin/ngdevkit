@@ -626,6 +626,10 @@ def compact_instr(nss):
         nonlocal a_is
         nonlocal b_i
         if type(op) == nss_label:
+            fm_is = [-1, -1, -1, -1]
+            s_is = [-1, -1, -1]
+            a_is = [-1, -1, -1, -1, -1, -1]
+            b_i = -1
             out.append(op)
         elif type(op) == fm_instr:
             if fm_is[fm_ctx] != op.inst:

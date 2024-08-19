@@ -28,8 +28,8 @@
         .equ    NSS_FM_INSTRUMENT_PROPS,        28
         .equ    NSS_FM_NEXT_REGISTER,           4
         .equ    NSS_FM_NEXT_REGISTER_GAP,       16
-        .equ    NSS_FM_END_OF_REGISTERS,        0xb7
-        .equ    INSTR_TL_OFFSET,                4
+        .equ    NSS_FM_END_OF_REGISTERS,        0xb3
+        .equ    INSTR_TL_OFFSET,                30
         .equ    INSTR_FB_ALGO_OFFSET,           28
         .equ    INSTR_ALGO_MASK,                7
 
@@ -114,6 +114,13 @@ state_fm_out_ops::
         .db     0
         .db     0
 
+;;; current instrument per FM channel
+state_fm_instr::
+        .db     0
+        .db     0
+        .db     0
+        .db     0
+
 _state_fm_end:
 
 
@@ -129,9 +136,15 @@ init_nss_fm_state_tracker::
         ld      d, h
         ld      e, l
         inc     de
+        ;; zero state up to instr, which has a different init state
         ld      (hl), #0
-        ld      bc, #_state_fm_end-_state_fm_start
+        ld      bc, #state_fm_instr-_state_fm_start
         ldir
+        ;; init instr to a non-existing instr (0xff)
+        ld      (hl), #0xff
+        ld      bc, #3
+        ldir
+
         ;; init ym2610 function pointer
         ld      a, #0xc3        ; jp 0x....
         ld      (ym2610_write_func), a
@@ -319,7 +332,8 @@ fm_set_out_ops_bitfield::
 
 
 ;;; fm_set_ops_level
-;;; Configure the operators of an FM channel based on an instrument's data
+;;; Configure the operator levels for the current FM channel
+;;; based on an instrument's data
 ;;; ------
 ;;; hl: instrument address
 fm_set_ops_level::
@@ -330,9 +344,11 @@ fm_set_ops_level::
         ld      c, a
         ld      b, #0
 
-        ;; d: note volumes for current channel
+        ;; clear pending volume change flag for current channel
         ld      hl, #state_fm_vol
         add     hl, bc
+        res     7, (hl)
+        ;; d: note volume for current channel
         ld      d, (hl)
 
         ;; e: bitfields for the output OPs
@@ -357,7 +373,9 @@ fm_set_ops_level::
 _ops_loop:
         ;; check whether current OP is an output
         bit     0, e
-        jr      z, _ops_next_op
+        jr      z, _ops_no_out
+_ops_out:
+        ;; configure OP from instrument TL faded with current volume
         ;; current OP's total level per instrument
         ld      a, (hl)
         ;; mix with note volume and clamp
@@ -368,8 +386,12 @@ _ops_loop:
 _ops_post_clamp:
         and     #0x7f
         ld      c, a
+        jr      _ops_set_and_next
+_ops_no_out:
+        ;; OP not an output, configure it from instrument TL only
+        ld      c, (hl)
+_ops_set_and_next:
         call    ym2610_write_func
-_ops_next_op:
         ;; next OP in instrument data
         inc     hl
         ;; next OP in YM2610
@@ -384,6 +406,48 @@ _ops_next_op:
         jr      nz, _ops_loop
 _ops_end_loop:
         ret
+
+
+;;; fm_check_set_ops_level
+;;; Check whether we need to reconfigure operators levels for the current FM channel
+;;; ------
+;;; modified: bc, de, hl
+fm_check_set_ops_level:
+        ;; hl: volume setting for current channel
+        ld      hl, #state_fm_vol
+        ld      a, (state_fm_channel)
+        ld      c, a
+        ld      b, #0
+        add     hl, bc
+
+        ;; check pending volume change flag and update if necessary
+        bit     7, (hl)
+        jr      nz, _prep_set_ops_level
+        ret
+_prep_set_ops_level:
+        ;; hl: instrument for channel (8bit add)
+        ld      hl, #state_fm_instr
+        ld      a, (state_fm_channel)
+        add     a, l
+        ld      l, a
+        ld      a, (hl)
+
+        ;; hl: instrument address in ROM
+        sla     a
+        ld      c, a
+        ;; ld      a, b
+        ld      b, #0
+        ld      hl, (state_stream_instruments)
+        add     hl, bc
+        ;; ld      b, a
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        push    de
+        pop     hl
+
+        jp      fm_set_ops_level
 
 
 ;;; update_fm_effects
@@ -453,8 +517,9 @@ _fm_post_effects:
 
 
 ;;; FM_VOL
-;;; Set the note volume for the current FM channel
-;;; Note: FM_INSTRUMENT must have run before this opcode
+;;; Register a pending volume change for the current FM channel
+;;; The next note to be played or instrument change will pick
+;;; up this volume configuration change
 ;;; ------
 ;;; [ hl ]: volume [0-127]
 fm_vol::
@@ -471,10 +536,11 @@ fm_vol::
         sub     (hl)
         inc     hl
 
+        ;; register pending volume configuration for channel
+        set     7, a
         ld      (de), a
 
         pop     de
-
         ld      a, #1
         ret
 
@@ -492,11 +558,35 @@ fm_instrument::
         push    hl
         push    de
 
-        ;; b: fm channel
+        ;; hl: instrument for channel (8bit add)
+        push    af
+        ld      hl, #state_fm_instr
+        ld      a, (state_fm_channel)
+        add     a, l
+        ld      l, a
+        pop     af
+
+        ;; if the current instrument for channel is not updated, bail out
+        ld      b, (hl)
+        cp      b
+        jp      z, _fm_instr_end
+
+        ;; else recall new instrument for channel
+        ld      (hl), a
+
+        ;; stop current FM channel (disable all OPs)
+        push    af
+
+        ld      a, (state_fm_ym2610_channel)
         ld      c, a
+        ld      b, #REG_FM_KEY_ON_OFF_OPS
+        call    ym2610_write_port_a
+
+        ;; b: fm channel
         ld      a, (state_fm_channel)
         ld      b, a
-        ld      a, c
+
+        pop     af
 
         ;; hl: instrument address in ROM
         sla     a
@@ -554,6 +644,7 @@ _fm_end:
         pop     hl
         call    fm_set_ops_level
 
+_fm_instr_end:
         pop     de
         pop     hl
         pop     bc
@@ -621,7 +712,7 @@ fm_semitone_distance::
 
 ;;; Get the effective F-num from the current FM channel
 ;;; ------
-;;; [ hl ]: F-Num position in the semitone frequency table
+;;;   hl  : F-Num position in the semitone frequency table
 ;;; OUT:
 ;;;   hl  : detuned F-num based on current detune context
 fm_get_f_num:
@@ -952,6 +1043,10 @@ _fm_on_post_fx:
         ;; c: block
         ld      c, d
         call    fm_set_fnum_registers
+
+        ;; update volume if a change was requested prior
+        ;; to playing this new note.
+        call    fm_check_set_ops_level
 
         ;; start current FM channel (enable all OPs)
         ld      a, (state_fm_ym2610_channel)
