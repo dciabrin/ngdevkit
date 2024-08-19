@@ -861,6 +861,18 @@ def resolve_jmp_and_call_opcodes(nss):
     return nss
 
 
+def remove_empty_streams(channels, streams):
+    def control_flow(op):
+        return type(op) in [jmp, call, nss_ret, nss_label, nss_end, wait]
+    def stream_effective_length(s):
+        return len([op for op in s if not control_flow(op)])
+    # print(channels)
+    # print(streams[4])
+    streams_lengths = [(c, s, stream_effective_length(s)) for c, s in zip(channels, streams)]
+    non_empty = [(c, s) for c, s, l in streams_lengths if l > 0]
+    return [c for c, s in non_empty], [s for c, s in non_empty]
+
+
 def stream_size(stream):
     def op_size(op):
         if isinstance(op, nss_label):
@@ -1018,6 +1030,7 @@ def main():
 
     if arguments.compact:
         streams = [generate_nss_stream(m, p, bs, ins, [c], i) for i, c in enumerate(channels)]
+        channels, streams = remove_empty_streams(channels, streams)
         # NSS compact header (number of streams, streams types, stream pointers)
         size = 1 + (2 * len(streams))
         # all streams sizes
