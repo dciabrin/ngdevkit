@@ -72,7 +72,8 @@ state_mirrored_enabled:
         
 ;;; ssg mirrored state
 state_mirrored_ssg:
-        ;;; SSG A
+;;; SSG A
+state_mirrored_ssg_a:
 state_fx:
         .db     0               ; must be the first field on the ssg state
 ;;; FX: slide
@@ -107,14 +108,19 @@ state_mirrored_ssg_envelope:
 state_mirrored_ssg_waveform:
         .db     0               ; noise+tone (shifted per channel)
 state_mirrored_ssg_end:
-        ;;; SSG B
+;;; SSG B
+state_mirrored_ssg_b:
         .blkb   SSG_STATE_SIZE
-        ;;; SSG C
+;;; SSG C
+state_mirrored_ssg_c:
         .blkb   SSG_STATE_SIZE
 
 ;;; note volume, to be substracted from instrument/macro volume
 state_note_vol:
         .blkb   3
+
+;;; Global volume attenuation for all SSG channels
+state_ssg_volume_attenuation::       .blkb   1
 
 _state_ssg_end:
 
@@ -131,8 +137,9 @@ init_nss_ssg_state_tracker::
         ld      e, l
         inc     de
         ld      (hl), #0
-        ld      bc, #_state_ssg_end-_state_ssg_start
+        ld      bc, #_state_ssg_end-1-_state_ssg_start
         ldir
+        ;; global SSG volume is initialized in the volume state tracker
         ld      a, #0xff
         ld      (state_mirrored_enabled), a
         ld      bc, #macro_noop_load
@@ -352,6 +359,7 @@ macro_noop_load:
 ;;; ------
 ;;; b : channel
 ;;; c : requested volume
+;;; [a, bc, hl modified]
 ssg_mix_volume::
         push    hl
         ld      hl, #state_note_vol
@@ -363,12 +371,24 @@ ssg_mix_volume::
         ;; l: current note volume for channel
         ld      l, (hl)
 
-        ;; mix volumes, min to 0
+        ;; attenuate instrument volume with note volume, clamp to 0
         ld      a, c
         sub     l
         jr      nc, _mix_set
         ld      a, #0
 _mix_set:
+        ;; last attenuation to match the configured SSG output level
+        ;; NOTE: YM2610's SSG output level ramp follows an exponential curve,
+        ;; so we implement this output level attenuation via a basic
+        ;; substraction, clamped to 0.
+        ld      c, a
+        ld      a, (state_ssg_volume_attenuation)
+        neg
+        add     c
+        bit     7, a
+        jr      z, _ssg_post_level_clamp
+        ld      a, #0
+_ssg_post_level_clamp:
         ld      c, a
         ld      a, b
         add     #REG_SSG_A_VOLUME

@@ -23,6 +23,7 @@
 
         .include "ym2610.inc"
         .include "ports.inc"
+        .include "timer.inc"
 
 
 ;;;
@@ -54,7 +55,7 @@ init_timer_state_tracker::
 
 
 update_timer_state_tracker::
-        ld      a, #1
+        ld      a, #TIMER_CONSUMER_ALL
         ld      (state_timer_tick_reached), a
         ;; keep track of the new interrupt
         ld      a, (state_timer_ticks_count)

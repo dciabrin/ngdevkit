@@ -19,7 +19,7 @@ all: nullsound.lib linkcheck.map
 -include ../Makefile.config
 
 INCLUDE_FILES=helpers ports ym2610
-OBJS=entrypoint bios-commands adpcm ym2610 stream timer nss-fm nss-adpcm nss-ssg fx-vibrato fx-slide
+OBJS=entrypoint bios-commands adpcm ym2610 stream timer nss-fm nss-adpcm nss-ssg fx-vibrato fx-slide volume
 LIB=nullsound.lib
 
 VERSION=@version@

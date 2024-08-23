@@ -50,6 +50,12 @@ state_adpcm_a_vol::     .blkb   6
 ;;; current volumes for ADPCM-B channel
 state_adpcm_b_vol::     .blkb   1
 
+;;; Global volume attenuation for all ADPCM-A channels
+state_adpcm_a_volume_attenuation::   .blkb   1
+;;; Global volume attenuation for ADPCM-B channel
+state_adpcm_b_volume_attenuation::   .blkb   1
+
+
 _state_adpcm_end:
 
         .area  CODE
@@ -73,6 +79,7 @@ init_nss_adpcm_state_tracker::
         ld      (state_adpcm_a_vol+5), a
         ld      a, #0xff
         ld      (state_adpcm_b_vol), a
+        ;; global ADPCM volumes are initialized in the volume state tracker
         ret
 
 ;;;  Reset ADPCM-A playback state.
@@ -224,20 +231,26 @@ _adpcm_a_loop:
         ld      a, (state_adpcm_a_channel)
         ld      d, a
 
-        ;; b: volume register for this channel
-        ld      a, #REG_ADPCM_A1_PAN_VOLUME
-        add     d
-        ld      b, a
-
-        ;; c: current channel volume (8bit add)
+        ;; a: current channel volume (8bit add)
         ld      hl, #state_adpcm_a_vol
         ld      a, l
         add     d
         ld      l, a
         ld      a, (hl)
-        or      #0xc0           ; default pan (L+R)
+
+        ;; a: volume + default pan (L/R)
+        ;; ld      a, c
+        or      #0xc0
+
+        ;; c: attenuation to match the configured ADPCM-A output level
+        call    adpcm_a_scale_output
         ld      c, a
 
+        ;; set volume for channel in the YM2610
+        ;; b: volume register for this channel
+        ld      a, #REG_ADPCM_A1_PAN_VOLUME
+        add     d
+        ld      b, a
         call    ym2610_write_port_b
 
         pop     de
@@ -345,6 +358,117 @@ _off_bit:
         ret
 
 
+;;; adpcm_a_scale_output
+;;; adjust a channel volume to match configured ADPCM-A output level
+;;; the YM2610's ADPCM-A output level ramp follows an exponential
+;;; curve, so we implement this output level attenuation via a basic
+;;; substraction, clamped to 0.
+;;; ------
+;;; a: input level [0x00..0x1f]
+;;; modified: bc
+adpcm_a_scale_output::
+        ;; b: pan info
+        ld      c, a
+        and     #0xc0
+        ld      b, a
+
+        ;; c: volume info
+        ld      a, c
+        and     #0x1f
+        ld      c, a
+
+        ;; attenuation to match the configured ADPCM-A output level
+        ld      a, (state_adpcm_a_volume_attenuation)
+        neg
+        add     c
+        bit     7, a
+        jr      nz, _adpcm_a_clamp_level
+        ;; restore pan info
+        add     b
+        ret
+_adpcm_a_clamp_level:
+        ;; NOTE: ADPCM-A oddity: it seems that channels with volume set to 0
+        ;; still outputs something? For now, reset the pan to force mute
+        ld      a, #0
+        ret
+
+
+;;; adpcm_b_scale_output
+;;; adjust ADPCM-B volume to match configured ADPCM-B output level
+;;; output volume = [0..1] * input volume, where the scale factor
+;;; is the currently configured ADPCM-B output level [0x00..0xff]
+;;; ------
+;;; a: input level [0x00..0x1f]
+;;; modified: bc
+adpcm_b_scale_output::
+        push    hl
+
+        ;; bc: note volume fraction 000000fff fffff00
+        ld      l, a
+        ld      h, #0
+        add     hl, hl
+        add     hl, hl
+        ld      c, l
+        ld      b, h
+
+        ;; init result
+        ld      hl, #0
+
+        ;; e: attenuation factor -> volume factor
+        ld      a, (state_adpcm_b_volume_attenuation)
+        neg
+        add     #64
+        ld      e, a
+
+_b_level_bit0:
+        bit     0, e
+        jr      z, _b_level_bit1
+        ;; add this bit's value to the result
+        add     hl, bc
+_b_level_bit1:
+        ;; bc: bc * 2
+        sla     c
+        rl      b
+        bit     1, e
+        jr      z, _b_level_bit2
+        add     hl, bc
+_b_level_bit2:
+        sla     c
+        rl      b
+        bit     2, e
+        jr      z, _b_level_bit3
+        add     hl, bc
+_b_level_bit3:
+        sla     c
+        rl      b
+        bit     3, e
+        jr      z, _b_level_bit4
+        add     hl, bc
+_b_level_bit4:
+        sla     c
+        rl      b
+        bit     4, e
+        jr      z, _b_level_bit5
+        add     hl, bc
+_b_level_bit5:
+        sla     c
+        rl      b
+        bit     5, e
+        jr      z, _b_level_bit6
+        add     hl, bc
+_b_level_bit6:
+        sla     c
+        rl      b
+        bit     6, e
+        jr      z, _b_level_post
+        add     hl, bc
+_b_level_post:
+        ;; keep the 8 MSB from hl, this is the scaled volume
+        ld      a, h
+        pop     hl
+        ret
+
+
 ;;; ADPCM_A_VOL
 ;;; Set playback volume of the current ADPCM-A channel
 ;;; ------
@@ -366,17 +490,19 @@ adpcm_a_vol::
         ld      a, c
         ld      (hl), a
 
+        ;; c: volume + default pan (L/R)
+        ld      a, c
+        or      #0xc0
+
+        ;; c: last attenuation to match the configured ADPCM-A output level
+        call    adpcm_a_scale_output
+        ld      c, a
+
+        ;; set volume for channel in the YM2610
         ;; b: ADPCM-A channel
         ld      a, (state_adpcm_a_channel)
         add     a, #REG_ADPCM_A1_PAN_VOLUME
         ld      b, a
-
-        ;; c: volume + default pan (L/R)
-        ld      a, c
-        or      #0xc0
-        ld      c, a
-
-        ;; set volume for channel in the YM2610
         call    ym2610_write_port_b
 
         pop     hl
@@ -443,6 +569,7 @@ _adpcm_b_post_loop_chk:
         ;;  current volume
         ld      b, #REG_ADPCM_B_VOLUME
         ld      a, (state_adpcm_b_vol)
+        call    adpcm_b_scale_output
         ld      c, a
         call    ym2610_write_port_a
 
@@ -585,6 +712,7 @@ adpcm_b_vol::
 
         ;; new configured volume for ADPCM-B
         ld      (state_adpcm_b_vol), a
+        call    adpcm_b_scale_output
 
         ;; set volume in the YM2610
         ld      b, #REG_ADPCM_B_VOLUME
