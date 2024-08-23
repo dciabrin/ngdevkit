@@ -1,6 +1,6 @@
 /*
  * BIOS state variables in memory
- * Copyright (c) 2020 Damien Ciabrini
+ * Copyright (c) 2020-2024 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -20,6 +20,8 @@
 #ifndef __NGDEVKIT_BIOS_RAM_H__
 #define __NGDEVKIT_BIOS_RAM_H__
 
+#include <ngdevkit/types.h>
+
 // BIOS checks
 extern u8 bios_z80rom_check;
 extern u8 bios_slot_check;
@@ -31,6 +33,13 @@ extern u8 bios_sysret_status;
 // Running hardware
 extern u8 bios_mvs_flag;
 extern u8 bios_country_code;
+
+#define BIOS_TYPE_AES 0
+#define BIOS_TYPE_MVS 1
+
+#define BIOS_COUNTRY_JP 0
+#define BIOS_COUNTRY_US 1
+#define BIOS_COUNTRY_EU 2
 
 // Game DIP switches
 extern u8 bios_game_dip[16];

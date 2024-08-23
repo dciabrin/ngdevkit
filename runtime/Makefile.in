@@ -34,6 +34,7 @@ SYSCALL_OBJS=\
   unlink \
   write
 NGDEVKIT_OBJS=\
+  soft-dip \
   soft-dip-jp \
   soft-dip-us \
   soft-dip-eu \
