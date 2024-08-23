@@ -271,6 +271,7 @@ def read_fm_instrument(bs):
         op.sustain_level, op.release_rate = ubits(bs.u1(), [7, 4], [3, 0])
         (op.ssg_eg,) = ubits(bs.u1(), [3, 0])
         bs.u1()  # unused
+
         ifm.ops.append(op)
     return ifm
 
@@ -532,7 +533,7 @@ def asm_fm_instrument(ins, fd):
     print("%s:" % ins.name, file=fd)
     print("        ;;       OP1 - OP3 - OP2 - OP4", file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; DT | MUL" % dtmul, file=fd)
-    print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; TL" % tl, file=fd)
+    print("        .db     0xff, 0xff, 0xff, 0xff   ; empty", file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; KS | AR" % ksar, file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; AM | DR" % amdr, file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; SR" % sr, file=fd)
@@ -540,6 +541,7 @@ def asm_fm_instrument(ins, fd):
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; SSG" % ssgeg, file=fd)
     print("        .db     0x%02x                     ; FB | ALGO" % fbalgo, file=fd)
     print("        .db     0x%02x                     ; LR | AMS | FMS" % amsfms, file=fd)
+    print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; TL" % tl, file=fd)
     print("", file=fd)
 
 

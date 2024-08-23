@@ -42,6 +42,11 @@
         .equ    NOTE_FNUM,(state_fm_note_fnum-state_fm)
         .equ    NOTE_BLOCK,(state_fm_note_block-state_fm)
 
+        .equ    OP1_BIT, 1
+        .equ    OP2_BIT, 4
+        .equ    OP3_BIT, 2
+        .equ    OP4_BIT, 8
+
         ;; this is to use IY as two IYH and IYL 8bits registers
         .macro dec_iyl
         .db     0xfd, 0x2d
@@ -130,6 +135,9 @@ state_pan_ams_pms::
         .db     0
         .db     0
 
+;;; Global volume attenuation for all FM channels
+state_fm_volume_attenuation::        .blkb   1
+
 _state_fm_end:
 
 
@@ -147,7 +155,7 @@ init_nss_fm_state_tracker::
         inc     de
         ;; zero state up to instr, which has a different init state
         ld      (hl), #0
-        ld      bc, #state_pan_ams_pms-_state_fm_start
+        ld      bc, #state_fm_instr-_state_fm_start
         ldir
         ;; init instr to a non-existing instr (0xff)
         ld      (hl), #0xff
@@ -157,7 +165,7 @@ init_nss_fm_state_tracker::
         ld      (hl), #0xc0
         ld      bc, #3
         ldir
-
+        ;; global FM volume is initialized in the volume state tracker
         ;; init ym2610 function pointer
         ld      a, #0xc3        ; jp 0x....
         ld      (ym2610_write_func), a
@@ -294,16 +302,16 @@ fm_instrument_ext::
 
 ;;; output OPs based on the layout of each FM algorithm of the YM2610
 ;;;  7   6   5   4   3   2   1   0
-;;; ___ ___ ___ ___ OP4 OP3 OP2 OP1
+;;; ___ ___ ___ ___ OP4 OP2 OP3 OP1
 fm_out_ops_table:
         .db     0x8             ; algo 0: [1000] OP4
         .db     0x8             ; algo 1: [1000] OP4
         .db     0x8             ; algo 2: [1000] OP4
         .db     0x8             ; algo 3: [1000] OP4
-        .db     0xc             ; algo 4: [1100] OP2, OP4
-        .db     0xe             ; algo 5: [1110] OP2, OP3, OP4
-        .db     0xe             ; algo 6: [1110] OP2, OP3, OP4
-        .db     0xf             ; algo 7: [1111] OP1, OP2, OP3, OP4
+        .db     0xc             ; algo 4: [1100] OP4, OP2
+        .db     0xe             ; algo 5: [1110] OP4, OP2, OP3
+        .db     0xe             ; algo 6: [1110] OP4, OP2, OP3
+        .db     0xf             ; algo 7: [1111] OP4, OP2, OP3, OP1
 
 
 ;;; fm_set_out_ops_bitfield
@@ -388,7 +396,7 @@ _ops_loop:
         bit     0, e
         jr      z, _ops_no_out
 _ops_out:
-        ;; configure OP from instrument TL faded with current volume
+        ;; configure OP from instrument's TL faded with current volume
         ;; current OP's total level per instrument
         ld      a, (hl)
         ;; mix with note volume and clamp
@@ -397,7 +405,19 @@ _ops_out:
         jr      z, _ops_post_clamp
         ld      a, #127
 _ops_post_clamp:
+        ;;  CHECK aren't we always below 128 here?
         and     #0x7f
+        ;; last attenuation to match the configured FM output level
+        ;; NOTE: YM2610's FM output level ramp follows an exponential curve,
+        ;; so we implement this output level attenuation via a basic
+        ;; addition, clamped to 127 (max attenuation).
+        ld      c, a
+        ld      a, (state_fm_volume_attenuation)
+        add     c
+        bit     7, a
+        jr      z, _ops_post_level_clamp
+        ld      a, #127
+_ops_post_level_clamp:
         ld      c, a
         jr      _ops_set_and_next
 _ops_no_out:
@@ -435,9 +455,9 @@ fm_check_set_ops_level:
 
         ;; check pending volume change flag and update if necessary
         bit     7, (hl)
-        jr      nz, _prep_set_ops_level
+        jr      nz, fm_set_ops_level_for_instr
         ret
-_prep_set_ops_level:
+fm_set_ops_level_for_instr:
         ;; hl: instrument for channel (8bit add)
         ld      hl, #state_fm_instr
         ld      a, (state_fm_channel)
@@ -1178,16 +1198,53 @@ _no_adj:
         ret
 
 
+;;; Scale the volume of an operator based on the global FM
+;;; attenuation, if this OP is configured as an output OP
+;;; for the current channel
+;;; ------
+;;; b: OP bit
+;;; c: volume
+;;; [a, bc, de modified]
+opx_level_scale::
+        ;; a: output OPs for the current FM channel
+        ld      de, #state_fm_out_ops
+        ld      a, (state_fm_channel)
+        add     e
+        ld      e, a
+        ld      a, (de)
+
+        ;; if the volume updates an output OP, scale it to
+        ;; match the currently configured FM output level
+        and     b
+        jr      z, _post_opx_level_scale
+        ;; NOTE: YM2610's FM output level ramp follows an exponential curve,
+        ;; so we implement this output level attenuation via a basic
+        ;; addition, clamped to 127 (max attenuation).
+        ld      a, (state_fm_volume_attenuation)
+        add     c
+        bit     7, a
+        jr      z, _opx_post_level_clamp
+        ld      a, #127
+_opx_post_level_clamp:
+        ld      c, a
+_post_opx_level_scale:
+        ret
+
+
 ;;; OP1_LVL
 ;;; Set the volume of OP1 for the current FM channel
 ;;; ------
 ;;; [ hl ]: volume level
 op1_lvl::
         push    bc
-        ld      b, #REG_FM1_OP1_TOTAL_LEVEL
+        push    de
         ld      c, (hl)
         inc     hl
+        ld      b, #OP1_BIT
+        call    opx_level_scale
+        ld      b, #REG_FM1_OP1_TOTAL_LEVEL
         call    opx_set_common
+        pop     de
         pop     bc
         ld      a, #1
         ret
@@ -1199,10 +1256,14 @@ op1_lvl::
 ;;; [ hl ]: volume level
 op2_lvl::
         push    bc
-        ld      b, #REG_FM1_OP2_TOTAL_LEVEL
+        push    de
         ld      c, (hl)
         inc     hl
+        ld      b, #OP2_BIT
+        call    opx_level_scale
+        ld      b, #REG_FM1_OP2_TOTAL_LEVEL
         call    opx_set_common
+        pop     de
         pop     bc
         ld      a, #1
         ret
@@ -1214,10 +1275,14 @@ op2_lvl::
 ;;; [ hl ]: volume level
 op3_lvl::
         push    bc
-        ld      b, #REG_FM1_OP3_TOTAL_LEVEL
+        push    de
         ld      c, (hl)
         inc     hl
+        ld      b, #OP3_BIT
+        call    opx_level_scale
+        ld      b, #REG_FM1_OP3_TOTAL_LEVEL
         call    opx_set_common
+        pop     de
         pop     bc
         ld      a, #1
         ret
@@ -1229,10 +1294,14 @@ op3_lvl::
 ;;; [ hl ]: volume level
 op4_lvl::
         push    bc
-        ld      b, #REG_FM1_OP4_TOTAL_LEVEL
+        push    de
         ld      c, (hl)
         inc     hl
+        ld      b, #OP4_BIT
+        call    opx_level_scale
+        ld      b, #REG_FM1_OP4_TOTAL_LEVEL
         call    opx_set_common
+        pop     de
         pop     bc
         ld      a, #1
         ret

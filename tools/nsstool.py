@@ -905,28 +905,23 @@ def stream_name(prefix, channel):
 
 
 def nss_compact_header(channels, streams, name, fd):
-    stream_type = ["FM1", "FM2", "FM3", "FM4", "SSG1", "SSG2", "SSG3",
-                   "ADPCM-A1", "ADPCM-A2", "ADPCM-A3", "ADPCM-A4", "ADPCM-A5", "ADPCM-A6", "ADPCM-B"]
-    ctx_opcodes = [fm_ctx_1, fm_ctx_2, fm_ctx_3, fm_ctx_4, s_ctx_1, s_ctx_2, s_ctx_3,
-                   a_ctx_1 , a_ctx_2 , a_ctx_3 , a_ctx_4 , a_ctx_5, a_ctx_6, nop]
+    bitfield, comment = channels_bitfield(channels)
     if name:
         print("%s::" % name, file=fd)
     print(("        .db     0x%02x"%len(streams)).ljust(40)+" ; number of streams", file=fd)
-    for i, c in enumerate(channels):
-        op = ctx_opcodes[c]
-        ch_name = stream_type[c]
-        comment = "stream %i: %s"%(i, ch_name)
-        print(("        .db     0x%02x"%op._opcode).ljust(40)+" ; "+comment, file=fd)
+    print(("        .dw     0x%04x"%bitfield).ljust(40)+" ; channels: %s"%comment, file=fd)
     for i, c in enumerate(channels):
         comment = "stream %i: NSS data"%i
         print(("        .dw     %s"%(stream_name(name,c))).ljust(40)+" ; "+comment, file=fd)
     print("", file=fd)
 
 
-def nss_inline_header(name, fd):
+def nss_inline_header(channels, name, fd):
+    bitfield, comment = channels_bitfield(channels)
     if name:
         print("%s::" % name, file=fd)
     print("        .db     0xff".ljust(40)+" ; inline NSS stream marker", file=fd)
+    print(("        .dw     0x%04x"%bitfield).ljust(40)+" ; channels: %s"%comment, file=fd)
 
 
 def nss_to_asm(nss, m, name, fd):
@@ -984,6 +979,20 @@ def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
     return nss
 
 
+def channels_bitfield(channels):
+    channels_names = ["F1", "F2", "F3", "F4", "S1", "S2", "S3", "__",
+                      "A1", "A2", "A3", "A4", "A5", "A6", "B", "__"]
+    # reorganise ADPCM bits in a dedicated byte
+    updpos = [x+1 if x>6 else x for x in channels]
+    bitword = sum([1<<x for x in updpos])
+
+    # create a description of used channels among the 14 available
+    used_channels = [channels_names[x] if bitword&(1<<x) else "" for x in range(15)]
+    comment = ",".join(list(filter(lambda x: x,used_channels)))
+
+    return bitword, comment
+
+
 def main():
     global VERBOSE
     parser = argparse.ArgumentParser(
@@ -1031,8 +1040,8 @@ def main():
     if arguments.compact:
         streams = [generate_nss_stream(m, p, bs, ins, [c], i) for i, c in enumerate(channels)]
         channels, streams = remove_empty_streams(channels, streams)
-        # NSS compact header (number of streams, streams types, stream pointers)
-        size = 1 + (2 * len(streams))
+        # NSS compact header (number of streams, channels bitfield, stream pointers)
+        size = 1 + 2 + (2 * len(streams))
         # all streams sizes
         size += sum([stream_size(s) for s in streams])
         asm_header(streams, m, name, size, outfd)
@@ -1041,10 +1050,10 @@ def main():
             nss_to_asm(stream, m, stream_name(name, ch), outfd)
     else:
         stream = generate_nss_stream(m, p, bs, ins, channels, -1)
-        # NSS inline marker + stream size
-        size = 1 + stream_size(stream)
+        # NSS inline marker + channels bitfield, stream size
+        size = 1 + 2 + stream_size(stream)
         asm_header(stream, m, name, size, outfd)
-        nss_inline_header(name, outfd)
+        nss_inline_header(channels, name, outfd)
         nss_to_asm(stream, m, False, outfd)
 
 

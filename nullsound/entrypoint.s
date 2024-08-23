@@ -135,6 +135,7 @@ snd_start_driver::
         call    init_timer_state_tracker
         call    init_adpcm_state_tracker
         call    init_stream_state_tracker
+        call    init_volume_state_tracker
 
         ;; reset the pending commands buffer
         xor     a
@@ -148,7 +149,7 @@ snd_mainloop:
         ;; Update the state trackers
         call    update_stream_state_tracker
         call    update_adpcm_state_tracker
-        ;; TODO: master volume state tracker
+        call    update_volume_state_tracker
         ;; TODO: CD state tracker
 
         jp      snd_mainloop

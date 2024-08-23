@@ -22,14 +22,18 @@
         .module nullsound
 
         .include "ym2610.inc"
+        .include "timer.inc"
 
         .equ    CH_STREAM_SAVED, (state_ch_stream_saved_pos-state_ch_stream)
         .equ    CH_STREAM_START, (state_ch_stream_start-state_ch_stream)
         .equ    CH_STREAM_POS, (state_ch_stream_pos-state_ch_stream)
         .equ    CH_STREAM_SIZE, (state_ch_stream_end-state_ch_stream)
         .equ    NB_YM2610_CHANNELS, 14
-        .equ    OPCODE_NSS_NOP, 8
 
+        .macro  .nss_op,op
+_op_offset_'op: .dw op
+        .equ    op_id_'op, ((_op_offset_'op - nss_opcodes) >> 1)
+        .endm
 
 ;;;
 ;;; Sound stream state tracker
@@ -48,7 +52,13 @@ state_stream_instruments::      .blkb   2
 
 ;;; number of streams to play
 state_streams::                 .blkb   1
-        
+
+;;; YM2610 channels used by this stream (1 bit per channel)
+;;; ---
+;;; This is used by the volume state tracker to distinguish between
+;;; channels used by the music and those used for SFX
+state_ch_bits::                 .blkw   1
+
 ;;; per-channel context switch function
 ;;; ---
 ;;; When multiple streams are used, each stream represents a unique
@@ -99,6 +109,8 @@ init_stream_state_tracker::
         ld      (state_stream_in_use), a
         ld      bc, #0
         ld      (state_stream_instruments), bc
+        ;; init nss subsystems that may get called prior to playing music
+        call    init_nss_fm_state_tracker
         ret
 
 ;;; substract one row from every stream's wait state
@@ -221,14 +233,14 @@ update_stream_state_tracker::
         jp      _reset_tick_reached
 _check_update_macros_and_effects:
         ld      a, (state_timer_tick_reached)
-        cp      a, #0
+        bit     TIMER_CONSUMER_STREAM_BIT, a
         jp      z, _end_update_stream
         call    update_fm_effects
         call    update_ssg_macros_and_effects
 _reset_tick_reached:
-        ;; reset the tick reached marker, next macro/effect processing
-        ;; will take place once a new tick is reached
-        ld      a, #0
+        ;; reset the 'tick reached' marker bit for this tracker, next
+        ;; macro/effect processing will take place once a new tick is reached
+        res     TIMER_CONSUMER_STREAM_BIT, a
         ld      (state_timer_tick_reached), a
 _end_update_stream:
         pop     bc
@@ -239,6 +251,7 @@ _end_update_stream:
 ;;; Initialize subsystems' state trackers and stream wait state
 ;;; ------
 snd_stream_reset_state::
+stream_reset_state::
         ;; reset state trackers
         call    init_nss_fm_state_tracker
         call    init_nss_ssg_state_tracker
@@ -271,14 +284,15 @@ _post_memset_wait_rows:
 ;;; de: nullsound stream (inline or compact format)
 ;;; [a modified - other registers saved]
 snd_stream_play::
+stream_play::
         ;; (de) = 0xff: inline NSS stream
         ;; (de) > 0: multi-stream NSS
         ld      a, (de)
         cp      #0xff
-        jp      nz, snd_multi_stream_play
+        jp      nz, stream_play_multi
 
         ;; prepare stream playback for a single stream
-        call    snd_stream_stop
+        call    stream_stop
 
         ;; setup current instruments
         ld      (state_stream_instruments), bc
@@ -287,10 +301,19 @@ snd_stream_play::
         ld      a, #1
         ld      (state_streams), a
 
+        ;; setup enabled channels bitfield for this music
+        inc     de
+        ld      a, (de)
+        ld      c, a
+        inc     de
+        ld      a, (de)
+        ld      b, a
+        ld      (state_ch_bits), bc
+
         ;; for single NSS stream, ctx switch table is not used (nop),
         ;; context opcodes are part of the stream itself
         ld      hl, #state_ch_ctx_switch
-        ld      a, #OPCODE_NSS_NOP
+        ld      a, #op_id_nss_nop
         ld      (hl), a
 
         ;; init stream state
@@ -299,12 +322,42 @@ snd_stream_play::
         ld      (state_ch_stream_pos), de
 
         ;; reset state trackers
-        call    snd_stream_reset_state
+        call    stream_reset_state
 
         ;; start stream playback, it will get preempted
         ;; as soon as a wait opcode shows up in the stream
         call    update_stream_state_tracker
         ret
+
+
+;;; Initialize the context table based on the number and type
+;;; of channels in use in the stream
+;;; ------
+;;; bc: stream usage bitfield
+;;; [a, bc, de, hl modified]
+snd_configure_stream_ctx_switches::
+        ld      hl, #stream_all_ctx_switch
+        ld      de, #state_ch_ctx_switch
+        ld      a, #15
+_stream_ctx_set:
+        bit     0, c
+        jr      z, _stream_ctx_cfg_next
+        ldi
+        dec     l
+_stream_ctx_cfg_next:
+        inc     l
+        srl     b
+        rr      c
+        dec     a
+        jr      nz, _stream_ctx_set
+        ret
+;;; Context switch action when switching to a new per-channel stream
+stream_all_ctx_switch::
+        .db     op_id_fm_ctx_1, op_id_fm_ctx_2, op_id_fm_ctx_3, op_id_fm_ctx_4
+        .db     op_id_ssg_ctx_1, op_id_ssg_ctx_2, op_id_ssg_ctx_3, op_id_nss_nop
+        .db     op_id_adpcm_a_ctx_1, op_id_adpcm_a_ctx_2, op_id_adpcm_a_ctx_3
+        .db     op_id_adpcm_a_ctx_4, op_id_adpcm_a_ctx_5, op_id_adpcm_a_ctx_6
+        .db     op_id_nss_nop
 
 
 ;;; Play music or sfx from a pre-compiled list of NSS opcodes,
@@ -313,8 +366,8 @@ snd_stream_play::
 ;;; bc: nullsound instruments
 ;;; de: NSS data (compact representation)
 ;;; [a modified - other registers saved]
-snd_multi_stream_play::
-        call    snd_stream_stop
+stream_play_multi::
+        call    stream_stop
         push    de
         pop     ix
 
@@ -325,17 +378,19 @@ snd_multi_stream_play::
         ld      a, (ix)
         ld      (state_streams), a
 
+        ;; setup enabled channels bitfield for this music and
         ;; configure every stream with the right channel ctx opcode
+        inc     ix
+        ld      c, (ix)
+        ld      b, 1(ix)
+        ld      (state_ch_bits), bc
+        call    snd_configure_stream_ctx_switches
+
         ;; hl: stream data from NSS
+        inc     ix
         inc     ix
         push    ix
         pop     hl
-        ;; de: stream contexts
-        ld      de, #state_ch_ctx_switch
-        ;; bc: number of streams
-        ld      b, #0
-        ld      c, a
-        ldir
 
         ;; init streams state
         ld      ix, #state_ch_stream
@@ -358,7 +413,8 @@ _stream_play_init_loop:
         jr      nz, _stream_play_init_loop
 
         ;; reset state trackers
-        call    snd_stream_reset_state
+        call    volume_reset_music_levels
+        call    stream_reset_state
 
         ;; start stream playback, it will get preempted
         ;; as soon as a wait opcode shows up in the stream
@@ -370,6 +426,7 @@ _stream_play_init_loop:
 ;;; ------
 ;;; [a modified - other registers saved]
 snd_stream_stop::
+stream_stop::
         ;; force-stop any active channels, disable timers
         call    ym2610_reset
         ;; clear playback state tracker
@@ -393,60 +450,60 @@ snd_stream_stop::
 ;;;
 ;;; [a and bc modified - other registers must be saved]
 nss_opcodes:
-        .dw     write_port_a
-        .dw     write_port_b
-        .dw     nss_jmp
-        .dw     nss_end
-        .dw     timer_tempo
-        .dw     wait_rows
-        .dw     nss_call
-        .dw     nss_ret
-        .dw     nss_nop
-        .dw     row_speed
-        .dw     adpcm_a_on_ext
-        .dw     adpcm_a_off_ext
-        .dw     adpcm_b_instrument
-        .dw     adpcm_b_note_on
-        .dw     adpcm_b_note_off
-        .dw     fm_ctx_1
-        .dw     fm_ctx_2
-        .dw     fm_ctx_3
-        .dw     fm_ctx_4
-        .dw     fm_instrument
-        .dw     fm_note_on
-        .dw     fm_note_off
-        .dw     adpcm_a_ctx_1
-        .dw     adpcm_a_ctx_2
-        .dw     adpcm_a_ctx_3
-        .dw     adpcm_a_ctx_4
-        .dw     adpcm_a_ctx_5
-        .dw     adpcm_a_ctx_6
-        .dw     adpcm_a_instrument
-        .dw     adpcm_a_on
-        .dw     adpcm_a_off
-        .dw     op1_lvl
-        .dw     op2_lvl
-        .dw     op3_lvl
-        .dw     op4_lvl
-        .dw     fm_pitch
-        .dw     ssg_ctx_1
-        .dw     ssg_ctx_2
-        .dw     ssg_ctx_3
-        .dw     ssg_macro
-        .dw     ssg_note_on
-        .dw     ssg_note_off
-        .dw     ssg_vol
-        .dw     fm_vol
-        .dw     ssg_env_period
-        .dw     ssg_vibrato
-        .dw     ssg_slide_up
-        .dw     ssg_slide_down
-        .dw     fm_vibrato
-        .dw     fm_slide_up
-        .dw     fm_slide_down
-        .dw     adpcm_b_vol
-        .dw     adpcm_a_vol
-        .dw     fm_pan
+        .nss_op write_port_a
+        .nss_op write_port_b
+        .nss_op nss_jmp
+        .nss_op nss_end
+        .nss_op timer_tempo
+        .nss_op wait_rows
+        .nss_op nss_call
+        .nss_op nss_ret
+        .nss_op nss_nop
+        .nss_op row_speed
+        .nss_op adpcm_a_on_ext
+        .nss_op adpcm_a_off_ext
+        .nss_op adpcm_b_instrument
+        .nss_op adpcm_b_note_on
+        .nss_op adpcm_b_note_off
+        .nss_op fm_ctx_1
+        .nss_op fm_ctx_2
+        .nss_op fm_ctx_3
+        .nss_op fm_ctx_4
+        .nss_op fm_instrument
+        .nss_op fm_note_on
+        .nss_op fm_note_off
+        .nss_op adpcm_a_ctx_1
+        .nss_op adpcm_a_ctx_2
+        .nss_op adpcm_a_ctx_3
+        .nss_op adpcm_a_ctx_4
+        .nss_op adpcm_a_ctx_5
+        .nss_op adpcm_a_ctx_6
+        .nss_op adpcm_a_instrument
+        .nss_op adpcm_a_on
+        .nss_op adpcm_a_off
+        .nss_op op1_lvl
+        .nss_op op2_lvl
+        .nss_op op3_lvl
+        .nss_op op4_lvl
+        .nss_op fm_pitch
+        .nss_op ssg_ctx_1
+        .nss_op ssg_ctx_2
+        .nss_op ssg_ctx_3
+        .nss_op ssg_macro
+        .nss_op ssg_note_on
+        .nss_op ssg_note_off
+        .nss_op ssg_vol
+        .nss_op fm_vol
+        .nss_op ssg_env_period
+        .nss_op ssg_vibrato
+        .nss_op ssg_slide_up
+        .nss_op ssg_slide_down
+        .nss_op fm_vibrato
+        .nss_op fm_slide_up
+        .nss_op fm_slide_down
+        .nss_op adpcm_b_vol
+        .nss_op adpcm_a_vol
+        .nss_op fm_pan
 
 
 ;;; Process a single NSS opcode
@@ -531,7 +588,7 @@ nss_jmp::
 ;;; signal the end of the NSS stream to the player
 ;;; ------
 nss_end::
-        call    snd_stream_stop
+        call    stream_stop
         ld      a, #0
         ret
 
