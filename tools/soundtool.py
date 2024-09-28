@@ -23,6 +23,7 @@ import sys
 import yaml
 import glob
 import os
+import wave
 
 VERBOSE = False
 
@@ -55,6 +56,17 @@ def generate_sound_desc(entries, header, desc, output):
         bdata = b[btype]
         return {atype: {**adata, **bdata}}
 
+    def detect_adpcm_type(f):
+        try:
+            w = wave.open(f, 'rb')
+            assert w.getnchannels() == 1, "Only mono WAV file is supported"
+            assert w.getsampwidth() == 2, "Only 16bits per sample is supported"
+            assert w.getcomptype() == 'NONE', "Only uncompressed WAV file is supported"
+            wavrate = w.getframerate()
+            return "adpcm_a" if wavrate == 18500 else "adpcm_b"
+        except Exception as e:
+            return ""
+
     existing_data = {}
     for i in desc:
         itemtype = list(i.keys())[0]
@@ -68,7 +80,7 @@ def generate_sound_desc(entries, header, desc, output):
         for f in glob.iglob(e, recursive=True):
             if not os.path.isfile(f):
                 continue
-            if os.path.splitext(f)[1] not in ('.fur', '.adpcma', '.adpcmb'):
+            if os.path.splitext(f)[1] not in ('.fur', '.adpcma', '.adpcmb', '.wav'):
                 continue
             if f.endswith('fur'):
                 # Furnace module
@@ -83,6 +95,10 @@ def generate_sound_desc(entries, header, desc, output):
                     sfxtype = 'adpcm_a'
                 elif '.adpcmb' in f.lower():
                     sfxtype = 'adpcm_b'
+                elif '.wav' in f.lower():
+                    sfxtype = detect_adpcm_type(f)
+                    if not sfxtype:
+                        error("could not autodetect a suitable ADPCM format for '%s'"%f)
                 uri='file://'+f
                 name=mkid(os.path.splitext(os.path.basename(f))[0])
                 sfx = {'name': name, 'uri': uri}
