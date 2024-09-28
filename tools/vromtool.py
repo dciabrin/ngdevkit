@@ -23,6 +23,9 @@ import os
 import sys
 from dataclasses import dataclass
 from furtool import samples_from_module
+from struct import pack, unpack, unpack_from
+import wave
+from adpcmtool import ym2610_adpcma, ym2610_adpcmb
 
 import yaml
 
@@ -126,6 +129,22 @@ def generate_asm_defines(smp, f):
         print("        .equ    %s_STOP_MSB, 0x%02x" % (s.name.upper(), s.stop_msb), file=f)
         print("", file=f)
 
+def convert_to_adpcm(sample, path):
+    codec = {"adpcm_a": ym2610_adpcma,
+             "adpcm_b": ym2610_adpcmb}[sample.__class__.__name__]()
+    try:
+        w = wave.open(path, 'rb')
+        assert w.getnchannels() == 1, "Only mono WAV file is supported"
+        assert w.getsampwidth() == 2, "Only 16bits per sample is supported"
+        assert w.getcomptype() == 'NONE', "Only uncompressed WAV file is supported"
+        nframes = w.getnframes()
+        data = w.readframes(nframes)
+    except Exception as e:
+        error("Could not convert sample '%s' to ADPCM: %s"%(path, e))
+    pcm16s = unpack('<%dh' % (len(data)>>1), data)
+    adpcms=codec.encode(pcm16s)
+    adpcms_packed = [(adpcms[i] << 4 | adpcms[i+1]) for i in range(0, len(adpcms), 2)]
+    return bytes(adpcms_packed)
 
 def load_sample_map_file(filenames):
     # Allow multiple documents in the yaml file
@@ -163,9 +182,11 @@ def load_sample_map_file(filenames):
             # load sample's data
             if sample.uri.startswith("file://"):
                 samplepath = sample.uri[7:]
-                with open(samplepath, "rb") as f:
-                    dbg("  %s: loaded from '%s'" % (sample.name, samplepath))
-                    sample.data = f.read()
+                if samplepath.endswith(".wav"):
+                    sample.data = convert_to_adpcm(sample, samplepath)
+                else:
+                    with open(samplepath, "rb") as f:
+                        sample.data = data
             elif sample.uri.startswith("data:;base64,"):
                 dbg("  %s: encoded in '%s'" % (sample.name, mapfile))
                 sample.data = base64.b64decode(sample.uri[13:])
