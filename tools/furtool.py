@@ -319,7 +319,10 @@ def read_ssg_macro(length, bs):
         header_end = bs.pos
         assert header_end - header_start == header_len
         data = [bs.u1() for i in range(length)]
-        blocks[code_map[code].offset]=data
+        if code not in code_map:
+            warning("macro element not supported yet: %02x"%code)
+        else:
+            blocks[code_map[code].offset]=data
     assert bs.pos == max_pos
     # pass: create a "empty" waveform property if it's not there
     # we need it to tell nullsound to not update the envelope SSG register
