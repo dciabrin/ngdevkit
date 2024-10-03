@@ -461,7 +461,7 @@ def read_instruments(ptrs, smp, bs):
     return ins
 
 
-def read_sample(bs):
+def read_sample(bs, sample_idx):
     assert bs.read(4) == b"SMP2"
     _ = bs.u4()  # endblock
     name = bs.ustr()
@@ -489,7 +489,7 @@ def read_sample(bs):
     bs.read(16)  # unused rom allocation
     data = bs.read(data_bytes) + bytearray(data_padding)
     # generate a ASM name for the instrument
-    insname = re.sub(r"\W|^(?=\d)", "_", name).lower()
+    insname = "s%02x_%s"%(sample_idx, re.sub(r"\W|^(?=\d)", "_", name).lower())
     ins = {5: adpcm_a_sample,
            6: adpcm_b_sample,
            16: pcm_sample}[stype](insname, data)
@@ -506,14 +506,15 @@ def convert_sample(pcm_sample, totype):
     # convert sample to the right class
     converted = {37: adpcm_a_sample,
                  38: adpcm_b_sample}[totype](pcm_sample.name, bytes(adpcms_packed))
+    converted.frequency = pcm_sample.frequency
     return converted
 
 
 def read_samples(ptrs, bs):
     smp = []
-    for p in ptrs:
+    for i, p in enumerate(ptrs):
         bs.seek(p)
-        smp.append(read_sample(bs))
+        smp.append(read_sample(bs, i))
     return smp
 
 def check_for_unused_samples(smp, bs):
