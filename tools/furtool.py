@@ -207,12 +207,14 @@ class adpcm_a_sample:
 class adpcm_b_sample:
     name: str = ""
     data: bytearray = field(default=b"", repr=False)
+    frequency: int = 0
 
 
 @dataclass
 class pcm_sample:
     name: str = ""
     data: bytearray = field(default=b"", repr=False)
+    frequency: int = 0
     loop: bool = False
 
 
@@ -245,6 +247,7 @@ class adpcm_a_instrument:
 class adpcm_b_instrument:
     name: str = ""
     sample: adpcm_b_sample = None
+    tuned: int = 0
     loop: bool = False
 
 
@@ -276,12 +279,52 @@ def read_fm_instrument(bs):
     return ifm
 
 
+def read_macro_data(length, bs):
+    macros={}
+    max_pos = bs.pos + length
+    header_len = bs.u2()
+    while bs.pos < max_pos:
+        header_start = bs.pos
+        # macro code (vol, arp, pitch...)
+        code = bs.u1()
+        if code == 255:
+            break
+        length = bs.u1()
+        # TODO unsupported. no loop
+        loop = bs.u1()
+        # TODO unsupported. last macro value stays
+        release = bs.u1()
+        # TODO meaning?
+        mode = bs.u1()
+        msize, mtype = ubits(bs.u1(), [7, 6], [2, 1])
+        assert msize == 0, "macro value should be of type '8-bit unsigned'"
+        assert mtype == 0, "macro should be of type 'sequence'. ADSR or LFO unsupported"
+        # TODO unsupported. no delay
+        delay = bs.u1()
+        # TODO unsupported. same speed as the module tick
+        speed = bs.u1()
+        header_end = bs.pos
+        assert header_end - header_start == header_len
+        data = [bs.u1() for i in range(length)]
+        macros[code]=data
+    assert bs.pos == max_pos
+    return macros
+
+
+def configure_b_macros(ins, macros):
+    # temporary workaround for instrument manually tuned with arpeggio macro
+    if 1 in macros and len(macros[1])==1:
+        ins.tuned = macros[1][0]
+    else:
+        error("unsupported use of macros in ADPCM-B instrument %s"%ins.name)
+
+
 @dataclass
 class ssg_prop:
     name: str = ""
     offset: int = 0
 
-    
+
 def read_ssg_macro(length, bs):
     # TODO -1 are unsupported in nullsound
     code_map = {0: ssg_prop("volume", 3),      # volume
@@ -291,39 +334,15 @@ def read_ssg_macro(length, bs):
                 8: ssg_prop("env_vol_den", 2)  # volume envelope denominator
                 }
 
-    blocks={}
     autoenv=False
-    init=bs.pos
-    max_pos = bs.pos + length
-    header_len = bs.u2()
-    # pass: read all macro blocks
-    while bs.pos < max_pos:
-        header_start = bs.pos
-        code = bs.u1()
-        if code == 255:
-            break
-        length = bs.u1()
-        # TODO unsupported. no loop
-        loop = bs.u1()
-        # TODO unsupported. last macro stays
-        release = bs.u1()
-        # TODO meaning?
-        mode = bs.u1()
-        msize, mtype = ubits(bs.u1(), [7, 6], [2, 1])
-        assert msize == 0, "macro value should be of type '8-bit unsigned'"
-        assert mtype == 0, "macro should be of type 'sequence'"
-        # TODO unsupported. no delay
-        delay = bs.u1()
-        # TODO unsupported. same speed as the module tick
-        speed = bs.u1()
-        header_end = bs.pos
-        assert header_end - header_start == header_len
-        data = [bs.u1() for i in range(length)]
+    blocks = {}
+    macros = read_macro_data(length, bs)
+    for code in macros:
         if code not in code_map:
             warning("macro element not supported yet: %02x"%code)
         else:
-            blocks[code_map[code].offset]=data
-    assert bs.pos == max_pos
+            blocks[code_map[code].offset] = macros[code]
+
     # pass: create a "empty" waveform property if it's not there
     # we need it to tell nullsound to not update the envelope SSG register
     if 0 not in blocks:
@@ -416,7 +435,11 @@ def read_instrument(nth, bs, smp):
             sample = bs.u2()
             bs.u2()  # unused flags and waveform
         elif feat == b"MA" and itype == 6:
+            # SSG macro is essentially the full SSG instrument
             mac = read_ssg_macro(length, bs)
+        elif feat == b"MA" and itype == 38:
+            # other macro types are currently not supported
+            mac = read_macro_data(length, bs)
         elif feat == b"NE":            
             # NES DPCM tag is present when the instrument
             # uses a PCM sample instead of ADPCM. Skip it
@@ -447,6 +470,8 @@ def read_instrument(nth, bs, smp):
         return mac
     else:
         ins.name = asm_ident("instr_%02x_%s"%(nth, name))
+        if itype == 38 and mac:
+            configure_b_macros(ins, mac)
         return ins
 
 
@@ -482,7 +507,6 @@ def read_sample(bs, sample_idx):
         data_padding = 0  # adpcmtool codecs automatically adds padding
     else:
         error("sample '%s' is of unsupported type: %d"%(str(name), stype))
-    # assert c4_freq == {5: 18500, 6: 44100}[stype]
     bs.u1()  # unused loop direction
     bs.u2()  # unused flags
     loop_start, loop_end = bs.s4(), bs.s4()
@@ -494,6 +518,7 @@ def read_sample(bs, sample_idx):
            6: adpcm_b_sample,
            16: pcm_sample}[stype](insname, data)
     ins.loop = loop_start != -1 and loop_end != -1
+    ins.frequency = c4_freq
     return ins
 
 

@@ -75,7 +75,7 @@ def to_nss_note(furnace_note):
     return nss_note
 
 def to_nss_b_note(furnace_note):
-    octave = (furnace_note // 12) - 6
+    octave = (furnace_note // 12) - 5
     note = furnace_note % 12
     nss_note = (octave << 4) + note
     return nss_note
@@ -682,6 +682,82 @@ def compact_instr(nss):
     return out
 
 
+def tune_adpcm_b_notes(nss, ins):
+    # idea: all b-notes in the b channels are seen as an offset from C-4
+    # the playback freq is also a an offset, but from the current instrument's sample freq
+    # for convenience, each playback freq of the B-channel is given a note notation
+    # we have to find the note `i_note` corresponding the the current intrument's sample freq
+    # and from there, each note played will be an offset from `i_note`.
+    # this is the note that must be effectively stored in the NSS bytecode for correct playback
+
+    semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
+    # lowest frequency playback for 12 semitones (can be seen as octave 0)
+    base_delta = [3255, 3448, 3653, 3871, 4101, 4345, 4603, 4877, 5167, 5474, 5800, 6144]
+    # all the frequencies for each supported octaves (up to 55Khz)
+    freqs = [[int(55555*x/65536)*(2**o) for x in base_delta] for o in range(5)]
+    # each octave's frequency bounds (with a 2.9% uncertainty/tolerance)
+    octaves_freqs = [(int(f[0]/1.029), int(f[-1]*1.029)) for f in freqs]
+
+    # all notes in the ADPCM-B channel are relative to C-4
+    c4 = (4*12)+0
+    # current instrument for ADPCM-B
+    current_inst = -1
+    # nullsound note from current sample's frequency
+    sample_note = c4
+
+    def to_direct_note(note):
+        semitone = note & 0xf
+        octave = (note>>4) & 0xf
+        return (octave*12)+semitone
+
+    def to_b_note(direct):
+        octave, semitone = direct // 12, direct % 12
+        return (octave<<4) | semitone
+
+    def note_str(note):
+        octave, semitone = note // 12, note % 12
+        return semitones[semitone].ljust(2, '-')+str(octave)
+
+    def tune_adpcm_b_pass(op, out):
+        nonlocal current_inst
+        nonlocal sample_note
+        nonlocal c4
+
+        if type(op) == nss_label:
+            current_inst = -1
+            out.append(op)
+        elif type(op) == b_instr:
+            if current_inst != op.inst:
+                current_inst = op.inst
+                sample_freq = ins[current_inst].sample.frequency
+                # determine nullsound note based on sample frequency
+                i_octave = next((i for i, f in enumerate(octaves_freqs) if f[0] < sample_freq < f[-1]), -1)
+                assert i_octave != -1
+                i_semitone = next((i for i, f in enumerate(freqs[i_octave]) if f/1.029 < sample_freq < f *1.029))
+                sample_note = (i_octave * 12) + i_semitone
+                # temporary workaround to support arpeggio tweak from macro
+                sample_note += ins[current_inst].tuned
+                out.append(op)
+        elif type(op) == b_note:
+            # get the semitone offset from c4
+            dnote = to_direct_note(op.note)
+            semitone_offset = dnote - c4
+            # the "tuned" note is the note to use in nullsound to configure the
+            # right frequency in the YM2610 (i.e. the semitone offset from the
+            # sample's base frequency)
+            tuned = to_b_note(sample_note + semitone_offset)
+            # fmt_off = "%s %2d"%("+" if semitone_offset>=0 else "-", abs(semitone_offset))
+            # print("B NOTE: %s (= C-4 %s)"%(note_str(dnote), fmt_off),
+            #       "-> TUNED: %s %s = %s"%(note_str(sample_note),
+            #       fmt_off, note_str(to_direct_note(tuned))))
+            out.append(b_note(tuned))
+        else:
+            out.append(op)
+
+    out = run_control_flow_pass(tune_adpcm_b_pass, nss)
+    return out
+
+
 def remove_ctx(nss):
     ctxs = [fm_ctx_1, fm_ctx_2, fm_ctx_3, fm_ctx_4,
             s_ctx_1, s_ctx_2, s_ctx_3,
@@ -970,6 +1046,9 @@ def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
 
     dbg(" - remove successive INSTR opcodes if they keep intrument unchanged")
     nss = compact_instr(nss)
+
+    dbg(" - tune ADPCM-B notes based on instrument's sample speed")
+    nss = tune_adpcm_b_notes(nss, ins)
 
     if compact:
         dbg(" - remove CTX opcodes for compact stream")
