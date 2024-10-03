@@ -310,6 +310,8 @@ def convert_fm_row(row, channel):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x0f:  # Speed
+                opcodes.append(speed(fxval))
             elif fx == 0x04:  # vibrato
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
@@ -363,6 +365,8 @@ def convert_s_row(row, channel):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x0f:  # Speed
+                opcodes.append(speed(fxval))
             elif fx == 0x04:  # vibrato
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
@@ -406,6 +410,8 @@ def convert_a_row(row, channel):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x0f:  # Speed
+                opcodes.append(speed(fxval))
         # note
         if row.note != -1:
             if row.note == 180:
@@ -435,6 +441,8 @@ def convert_b_row(row, channel):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x0f:  # Speed
+                opcodes.append(speed(fxval))
         # note
         if row.note != -1:
             if row.note == 180:
