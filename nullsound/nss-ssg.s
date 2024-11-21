@@ -24,19 +24,41 @@
         .include "ym2610.inc"
         .include "struct-fx.inc"
 
-        
-        .equ    NOTE_OFFSET,(state_mirrored_ssg_note-state_mirrored_ssg)
-        .equ    NOTE_SEMITONE_OFFSET,(state_mirrored_ssg_note_semitone-state_mirrored_ssg)
-        .equ    PROPS_OFFSET,(state_mirrored_ssg_props-state_mirrored_ssg)
-        .equ    ENVELOPE_OFFSET,(state_mirrored_ssg_envelope-state_mirrored_ssg)
-        .equ    WAVEFORM_OFFSET,(state_mirrored_ssg_waveform-state_mirrored_ssg)
-        .equ    SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg)
-        .equ    SSG_FX,(state_fx-state_mirrored_ssg)
 
-        ;; this is to use IY as two IYH and IYL 8bits registers
-        .macro dec_iyl
-        .db     0xfd, 0x2d
-        .endm
+        .lclequ SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg)
+        ;; .lclequ PIPELINE,(state_ssg_pipeline-state_mirrored_ssg)
+
+        ;; getters for SSG state
+        .lclequ NOTE,(state_ssg_note-state_mirrored_ssg)
+        .lclequ NOTE_POS16,(state_ssg_note_pos16-state_mirrored_ssg)
+        .lclequ NOTE_FINE_COARSE,(state_ssg_note_fine_coarse-state_mirrored_ssg)
+        .lclequ PROPS_OFFSET,(state_mirrored_ssg_props-state_mirrored_ssg)
+        .lclequ ENVELOPE_OFFSET,(state_mirrored_ssg_envelope-state_mirrored_ssg)
+        .lclequ WAVEFORM_OFFSET,(state_mirrored_ssg_waveform-state_mirrored_ssg)
+        .lclequ MACRO_DATA,(state_ssg_macro_data-state_mirrored_ssg)
+        .lclequ MACRO_POS,(state_ssg_macro_pos-state_mirrored_ssg)
+        .lclequ MACRO_LOAD,(state_ssg_macro_load-state_mirrored_ssg)
+        .lclequ REG_VOL, (state_ssg_reg_vol-state_mirrored_ssg)
+        .lclequ VOL, (state_ssg_vol-state_mirrored_ssg)
+        .lclequ OUT_VOL, (state_ssg_out_vol-state_mirrored_ssg)
+
+        ;; pipeline state for SSG channel
+        .lclequ STATE_PLAYING,          0x01
+        .lclequ STATE_EVAL_MACRO,       0x02
+        .lclequ STATE_LOAD_NOTE,        0x04
+        .lclequ STATE_LOAD_WAVEFORM,    0x08
+        .lclequ STATE_LOAD_VOL,         0x10
+        .lclequ STATE_LOAD_REGS,        0x20
+        .lclequ STATE_STOP_NOTE,        0x40
+        .lclequ BIT_PLAYING,            0
+        .lclequ BIT_EVAL_MACRO,         1
+        .lclequ BIT_LOAD_NOTE,          2
+        .lclequ BIT_LOAD_WAVEFORM,      3
+        .lclequ BIT_LOAD_VOL,           4
+        .lclequ BIT_LOAD_REGS,          5
+        .lclequ BIT_STOP_NOTE,          6
+
+
 
         .area  DATA
 
@@ -44,23 +66,13 @@
 ;;; ------
         ;; This padding ensures the entire _state_ssg data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        ;; .blkb   90
+        .blkb   117
 
 _state_ssg_start:
 
 ;;; context: current SSG channel for opcode actions
 state_ssg_channel::
         .db     0
-
-;;; address of the current instrument macro for all SSG channels
-state_macro:
-        .blkw   3
-        
-state_macro_pos:
-        .blkw   3
-
-state_macro_load_func:
-        .blkw   3
 
 ;;; YM2610 mirrored state
 ;;; ------
@@ -69,44 +81,33 @@ state_macro_load_func:
 ;;; merged waveforms of all SSG channels for REG_SSG_ENABLE
 state_mirrored_enabled:
         .db     0
-        
+
 ;;; ssg mirrored state
 state_mirrored_ssg:
 ;;; SSG A
 state_mirrored_ssg_a:
-state_fx:
-        .db     0               ; must be the first field on the ssg state
-;;; FX: slide
-state_slide:
-state_slide_speed: .db 0        ; number of increments per tick
-state_slide_depth: .db 0        ; distance in semitones
-state_slide_inc16: .dw 0        ; 1/8 semitone increment * speed
-state_slide_pos16: .dw 0        ; slide pos
-state_slide_end:   .db 0        ; end note (octave/semitone)
-;;; FX: vibrato
-state_vibrato:
-state_vibrato_speed:
-        .db     0               ; vibrato_speed
-state_vibrato_depth:
-        .db     0               ; vibrato_depth
-state_vibrato_pos:
-        .db     0               ; vibrato_pos
-state_vibrato_prev:
-        .dw     0               ; vibrato_prev
-state_vibrato_next:
-        .dw     0               ; vibrato_next
-state_mirrored_ssg_note_semitone:
-        .db     0               ; note (octave+semitone)
-state_mirrored_ssg_note:
-        .dw     0               ; note (fine+coarse)
+state_ssg_pipeline:             .blkb   1       ; actions to run at every tick (eval macro, load note, vol, other regs)
+state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
+;;; FX state trackers
+state_ssg_fx_vol_slide:         .blkb   VOL_SLIDE_SIZE
+state_ssg_fx_slide:             .blkb   SLIDE_SIZE
+state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
+;;; SSG-specific state
+;;; Note
+state_ssg_note_pos16:           .blkb   2       ; fixed-point note after the FX pipeline
+state_ssg_note:                 .blkb   1       ; NSS note to be played on the FM channel
+state_ssg_note_fine_coarse:     .blkb   2       ; YM2610 note factors (fine+coarse)
 state_mirrored_ssg_props:
-state_mirrored_ssg_envelope:
-        .db     0               ; envelope shape
-        .db     0               ; vol envelope fine
-        .db     0               ; vol envelope coarse
-        .db     0               ; mode+volume
-state_mirrored_ssg_waveform:
-        .db     0               ; noise+tone (shifted per channel)
+state_mirrored_ssg_envelope:    .blkb   1       ; envelope shape
+                                .blkb   1       ; vol envelope fine
+                                .blkb   1       ; vol envelope coarse
+state_ssg_reg_vol:              .blkb   1       ; mode+volume
+state_mirrored_ssg_waveform:    .blkb   1       ; noise+tone (shifted per channel)
+state_ssg_macro_data:           .blkb   2       ; adress of the start of the macro program
+state_ssg_macro_pos:            .blkb   2       ; address of the current position in the macro program
+state_ssg_macro_load:           .blkb   2       ; function to load the SSG registers modified by the macro program
+state_ssg_vol:                  .blkb   1       ; note volume (attenuation)
+state_ssg_out_vol:              .blkb   1       ; ym2610 volume for SSG channel after the FX pipeline
 state_mirrored_ssg_end:
 ;;; SSG B
 state_mirrored_ssg_b:
@@ -115,10 +116,6 @@ state_mirrored_ssg_b:
 state_mirrored_ssg_c:
         .blkb   SSG_STATE_SIZE
 
-;;; note volume, to be substracted from instrument/macro volume
-state_note_vol:
-        .blkb   3
-
 ;;; Global volume attenuation for all SSG channels
 state_ssg_volume_attenuation::       .blkb   1
 
@@ -126,7 +123,7 @@ _state_ssg_end:
 
         .area  CODE
 
-       
+
 ;;;  Reset SSG playback state.
 ;;;  Called before playing a stream
 ;;; ------
@@ -142,14 +139,10 @@ init_nss_ssg_state_tracker::
         ;; global SSG volume is initialized in the volume state tracker
         ld      a, #0xff
         ld      (state_mirrored_enabled), a
-        ld      bc, #macro_noop_load
-        ld      (state_macro_load_func), bc
-        ld      (state_macro_load_func+2), bc
-        ld      (state_macro_load_func+4), bc
         ret
 
 
-;;; 
+;;;
 ;;; Macro instrument - internal functions
 ;;;
 
@@ -157,25 +150,19 @@ init_nss_ssg_state_tracker::
 ;;; update the mirror state for a SSG channel based on
 ;;; the macro program configured for this channel
 ;;; ------
-;;; IN:
-;;; de: mirrored state of the current ssg channel
-;;; hl: pointer to macro location for the current ssg channel
-;;; OUT:
-;;; de: address of the next macro step
-;;;  a: 1: step updated the mirrored state
-;;;     0: end of macro (no update)
 ;;; bc, de, hl modified
 eval_macro_step::
-        push    hl              ; macro location ptr
-        ;; hl: (hl)
-        ld      a, (hl)
-        ld      c, a
-        inc     hl
-        ld      a, (hl)
-        ld      h, a
-        ld      l, c
-        or      c
-        jp      z, _end_macro
+        ;; de: state_mirrored_ssg_props (8bit add)
+        push    ix
+        pop     de
+        ld      a, e
+        add     #PROPS_OFFSET
+        ld      e, a
+
+        ;; hl: macro location ptr
+        ld      l, MACRO_POS(ix)
+        ld      h, MACRO_POS+1(ix)
+
         ;; update mirrored state with macro values
         ld      a, (hl)
         inc     hl
@@ -191,153 +178,216 @@ _upd_macro:
         inc     hl
         jp      _upd_macro
 _end_upd_macro:
-        ;; return the end address of the step
-        ld      d, h
-        ld      e, l
+        ;; update load flags for this macro step
+        ld      a, PIPELINE(ix)
+        or      (hl)
+        inc     hl
+        ld      PIPELINE(ix), a
+        ;; did we reached the end of macro
         ld      a, (hl)
         cp      a, #0xff
-        jp      nz, _end_macro
-        ;; end of macro, clear current macro (hl)
-        pop     hl              ; macro location ptr
-        xor     a
-        ld      (hl), a
+        jp      nz, _finish_macro_step
+        ;; end of macro, set loop/no-loop information
+        ;; the load bits have been set in the previous step
         inc     hl
-        ld      (hl), a
-        ;; a: macro cleared, but still load this step
-        ld      a, #1
+        ld      a, (hl)
+        ld      MACRO_POS(ix), a
+        inc     hl
+        ld      a, (hl)
+        ld      MACRO_POS+1(ix), a
         ret
-_end_macro:
-        push    hl
-        pop     bc
-        pop     hl              ; macro location ptr
-        ;; (hl): bc
-        ld      a, c
-        ld      (hl), a
-        inc     hl
-        ld      a, b
-        ld      (hl), a
-        ;; a: macro == 0, will drive the next load
-        or      c
-        ret        
+_finish_macro_step:
+        ;; keep track of the current location for the next call
+        ld      MACRO_POS(ix), l
+        ld      MACRO_POS+1(ix), h
+        ret
 
-        
-;;; update_ssg_macros_and_effects
+
+;;; Set the current SSG channel and SSG state context
 ;;; ------
-;;; For all ssg channels:
+;;;   a : SSG channel
+ssg_ctx_set_current::
+        ld      (state_ssg_channel), a
+        ld      ix, #state_mirrored_ssg
+        push    bc
+        bit     0, a
+        jr      z, _ssg_ctx_post_bit0
+        ld      bc, #SSG_STATE_SIZE
+        add     ix, bc
+_ssg_ctx_post_bit0:
+        bit     1, a
+        jr      z, _ssg_ctx_post_bit1
+        ld      bc, #SSG_STATE_SIZE*2
+        add     ix, bc
+_ssg_ctx_post_bit1:
+        pop     bc
+        ret
+
+
+;;; run_ssg_pipeline
+;;; ------
+;;; Run the entire SSG pipeline once. for each SSG channels:
 ;;;  - run a single round of macro steps configured
-;;;  - update the state of all enabled effects
+;;;  - update the state of all enabled FX
+;;;  - load specific parts of the state (note, vol...) into YM2610 registers
 ;;; Meant to run once per tick
-update_ssg_macros_and_effects::
+run_ssg_pipeline::
         push    de
         ;; TODO should we consider IX and IY scratch registers?
         push    iy
         push    ix
 
-        ;; macros expect the right ssg channel context,
-        ;; so save the current channel context and loop
-        ;; it artificially before calling the macro
+        ;; we loop though every channel during the execution,
+        ;; so save the current channel context
         ld      a, (state_ssg_channel)
         push    af
 
-        ;; update mirrored state of all SSG channels
-
-        ;; state:
-        ld      de, #state_mirrored_ssg_props ; ssg_a mirror state
-        ld      hl, #state_macro_pos          ; ssg_a macro pos
-        ld      ix, #state_macro_load_func    ; ssg_a load function
+        ;; update mirrored state of all SSG channels, starting from SSGA
         xor     a
-        ld      (state_ssg_channel), a        ; ssg ctx: ssg_a
-        
-        ld      iy, #3
+
 _update_loop:
-        push    hl              ; macro_pos
-        push    de              ; state_mirrored
-        push    de              ; state_mirrored
-        call    eval_macro_step
-        pop     hl              ; state_mirrored
+        call    ssg_ctx_set_current
 
-        ;; skip loading for this channel if macro is finished
+        ;; bail out if the current channel is not in use
+        ld      a, PIPELINE(ix)
+        or      a, FX(ix)
         cp      #0
-        jr      nz, _prepare_ld_call
-        inc     ix
-        inc     ix
-        jr      _post_call_load_func
-_prepare_ld_call:
-        ;; bc: load_func for this SSG channel
-        ld      a, (ix)
-        ld      c, a
-        inc     ix
-        ld      a, (ix)
-        ld      b, a
-        inc     ix
+        jp      z, _end_ssg_channel_pipeline
 
-        ;; a: bitfield representation of current channel
+        ;; Pipeline action: evaluate one macro step to update current state
+        bit     BIT_EVAL_MACRO, PIPELINE(ix)
+        jr      z, _ssg_pipeline_post_macro
+        res     BIT_EVAL_MACRO, PIPELINE(ix)
+
+        ;; the macro evaluation decides whether or not to load
+        ;; registers later in the pipeline, and if we must continue
+        ;; to evaluation the macro during the next pipeline run
+        call    eval_macro_step
+_ssg_pipeline_post_macro::
+
+
+        ;; Pipeline action: evaluate one FX step for each enabled FX
+
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _ssg_post_fx_vibrato
+        call    eval_ssg_vibrato_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_ssg_post_fx_vibrato:
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _ssg_post_fx_side
+        call    eval_ssg_slide_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_ssg_post_fx_side:
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _ssg_post_fx_vol_slide
+        call    eval_vol_slide_step
+        set     #BIT_LOAD_VOL, PIPELINE(ix)
+_ssg_post_fx_vol_slide:
+
+        ;; Pipeline action: make sure no load note takes place when not playing
+        bit     BIT_PLAYING, PIPELINE(ix)
+        jr      nz, _ssg_post_check_playing
+        res     BIT_LOAD_NOTE, PIPELINE(ix)
+_ssg_post_check_playing:
+
+        ;; Pipeline action: load note register when the note state is modified
+        bit     BIT_LOAD_NOTE, PIPELINE(ix)
+        jr      z, _post_load_ssg_note
+        res     BIT_LOAD_NOTE, PIPELINE(ix)
+
+        call    compute_ssg_fixed_point_note
+        call    compute_ym2610_ssg_note
+
+        ;; YM2610: load note
         ld      a, (state_ssg_channel)
         sla     a
-        jp      nz, _ld_call
-        inc     a
-_ld_call:
+        add     #REG_SSG_A_FINE_TUNE
+        ld      b, a
+        ld      c, NOTE_FINE_COARSE(ix)
+        call    ym2610_write_port_a
+        inc     b
+        ld      c, NOTE_FINE_COARSE+1(ix)
+        call    ym2610_write_port_a
+_post_load_ssg_note:
 
-        ;; check whether the current channel is playing a note
-        ld      d, a
-        ld      a, (state_mirrored_enabled)
-        xor     #0xff
-        and     d
-        jp      z, _post_effects
-        ;; call the load_func (address: bc, args: hl)
-        ld      de, #_post_call_load_func
+        ;; Pipeline action: load registers modified by macros
+        ;; (do not load if macro is finished)
+        bit     BIT_LOAD_REGS, PIPELINE(ix)
+        jr      z, _post_ssg_macro_load
+        res     BIT_LOAD_REGS, PIPELINE(ix)
+_prepare_ld_call:
+
+        ;; de: return address
+        ld      de, #_post_ssg_macro_load
         push    de
-        push    bc
-        ret
-_post_call_load_func:
-        ;; TODO: check whether effect should run before or after
-        ;; macros. Also, the load function should be generic to
-        ;; load note and volume even if only one of the macro or
-        ;; the effect was in use.
-        ;; hl: start of mirrored_ssg
-        pop     hl              ; state_mirrored
-        push    hl              ; state_mirrored
 
-        ;; start of mirrored_ssg
+        ;; bc: load_func for this SSG channel
+        ld      c, MACRO_LOAD(ix)
+        ld      b, MACRO_LOAD+1(ix)
+        push    bc
+
+        ;; call args: hl: state_mirrored_ssg_props (8bit aligned add)
+        push    ix
+        pop     hl
         ld      a, l
-        sub     #PROPS_OFFSET
+        add     #PROPS_OFFSET
         ld      l, a
 
-        ;; configure
-        ld      a, (hl)
-_ssg_chk_fx_vibrato:
-        bit     0, a
-        jr      z, _ssg_chk_fx_slide
-        call    eval_ssg_vibrato_step
-        jr      _post_effects
-_ssg_chk_fx_slide:
-        bit     1, a
-        jr      z, _post_effects
-        call    eval_ssg_slide_step
-_post_effects:
-        ;; prepare to update the next channel
-        ;; de: next state_mirrored
-        pop     hl              ; state_mirrored
-        ld      bc, #SSG_STATE_SIZE
-        add     hl, bc
-        ld      d, h
-        ld      e, l
-        ;; hl: next macro_pos
-        pop     hl              ; macro_pos
-        inc     hl
-        inc     hl
-        ;; ix: next load function is already set
+        ;; indirect call
+        ret
+
+_post_ssg_macro_load:
+
+        ;; Pipeline action: load volume registers when the volume state is modified
+        ;; Note: this is after macro load as currently, this step sets the VOL LOAD
+        ;; bit if the macro updated the volume register
+        bit     BIT_LOAD_VOL, PIPELINE(ix)
+        jr      z, _post_load_ssg_vol
+        res     BIT_LOAD_VOL, PIPELINE(ix)
+
+        call    compute_ym2610_ssg_vol
+
+        ;; load into ym2610
+        ld      c, OUT_VOL(ix)
+        ld      a, (state_ssg_channel)
+        add     #REG_SSG_A_VOLUME
+        ld      b, a
+        call    ym2610_write_port_a
+_post_load_ssg_vol:
+
+
+        ;; Pipeline action: configure waveform and start note playback
+
+        bit     BIT_LOAD_WAVEFORM, PIPELINE(ix)
+        jr      z, _post_load_waveform
+        res     BIT_LOAD_WAVEFORM, PIPELINE(ix)
+
+        ;; c: waveform (shifted for channel)
+        ld      c, WAVEFORM_OFFSET(ix)
+        call    waveform_for_channel
+
+        ;; start note
+        ld      a, (state_mirrored_enabled)
+        and     c
+        ld      (state_mirrored_enabled), a
+        ld      b, #REG_SSG_ENABLE
+        ld      c, a
+        call    ym2610_write_port_a
+_post_load_waveform:
+
+_end_ssg_channel_pipeline:
         ;; next ssg context
         ld      a, (state_ssg_channel)
         inc     a
-        ld      (state_ssg_channel), a
+        cp      #3
+        jr      nc, _ssg_end_macro
+        call    ssg_ctx_set_current
+        jp      _update_loop
 
-        dec_iyl
-        jp      nz, _update_loop
-
+_ssg_end_macro:
         ;; restore the real ssg channel context
         pop     af
-        ld      (state_ssg_channel), a
+        call    ssg_ctx_set_current
 
         pop     ix
         pop     iy
@@ -345,84 +395,112 @@ _post_effects:
         ret
 
 
-
-;;; macro_noop_load
-;;; no-op function when no macro is configured for a SSG channel
-;;; TODO is it still in use?
+;;; Update the current fixed-point position
 ;;; ------
-macro_noop_load:
+;;; current note (integer) + all the note effects (fixed point)
+compute_ssg_fixed_point_note::
+        ;; hl: from currently configured note (fixed point)
+        ld      a, #0
+        ld      l, a
+        ld      h, NOTE(ix)
+
+        ld      a, FX(ix)
+
+        ;; bc: add vibrato offset if the vibrato FX is enabled
+        bit     0, a
+        jr      z, _ssg_post_add_vibrato
+        ld      c, VIBRATO_POS16(ix)
+        ld      b, VIBRATO_POS16+1(ix)
+        add     hl, bc
+_ssg_post_add_vibrato::
+        ;; bc: add slide offset if the slide FX is enabled
+        bit     1, a
+        jr      z, _ssg_post_add_slide
+        ld      c, SLIDE_POS16(ix)
+        ld      b, SLIDE_POS16+1(ix)
+        add     hl, bc
+_ssg_post_add_slide::
+
+        ;; update computed fixed-point note position
+        ld      NOTE_POS16(ix), l
+        ld      NOTE_POS16+1(ix), h
+        ret
+
+compute_ym2610_ssg_note::
+        ;; b: current note (integer part)
+        ld      b, NOTE_POS16+1(ix)
+
+        ;; b: octave and semitone from note
+        ld      hl, #note_to_octave_semitone
+        ld      a, l
+        add     b
+        ld      l, a
+        ld      b, (hl)
+
+        ;; de: ym2610 base tune for note
+        ld      hl, #ssg_tune
+        ld      a, b
+        sla     a
+        ld      l, a
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        push    de              ; +base tune
+
+        ;; b: next semitone distance from current note
+        ld      hl, #ssg_semitone_distance
+        ld      l, b
+        ld      b, (hl)
+
+        ;; c: SSG: intermediate frequency is negative
+        ld      c, #1
+
+        ;; e: current position (fractional part)
+        ld      e, NOTE_POS16(ix)
+
+        ;; de: current intermediate frequency f_dist
+        call    slide_intermediate_freq
+
+        ;; hl: final ym2610 tune
+        pop     hl              ; -base tune
+        add     hl, de
+        ld      NOTE_FINE_COARSE(ix), l
+        ld      NOTE_FINE_COARSE+1(ix), h
         ret
 
 
- 
-;;; Mix requested volume with current note volume
+;;; Blend all volumes together to yield the volume for the ym2610 register
 ;;; ------
-;;; b : channel
-;;; c : requested volume
-;;; [a, bc, hl modified]
-ssg_mix_volume::
-        push    hl
-        ld      hl, #state_note_vol
-        ;; hl + channel (8bit add)
-        ld      a, b
-        add     a, l
-        ld      l, a
+;;; [b modified]
+compute_ym2610_ssg_vol::
+        ;; a: current note volume for channel
+        ld      a, REG_VOL(ix)
+        and     #0xf
 
-        ;; l: current note volume for channel
-        ld      l, (hl)
+        ;; substract slide down FX volume if used (attenuation)
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _post_ssg_sub_vol_slide
+        sub     VOL_SLIDE_POS16+1(ix)
+_post_ssg_sub_vol_slide:
 
-        ;; attenuate instrument volume with note volume, clamp to 0
-        ld      a, c
-        sub     l
-        jr      nc, _mix_set
-        ld      a, #0
-_mix_set:
-        ;; last attenuation to match the configured SSG output level
+        ;; substract configured volume (attenuation)
+        sub     VOL(ix)
+
+        ;; substract global volume attenuation
         ;; NOTE: YM2610's SSG output level ramp follows an exponential curve,
-        ;; so we implement this output level attenuation via a basic
-        ;; substraction, clamped to 0.
-        ld      c, a
+        ;; so we implement this output level attenuation via a basic substraction
+        ld      b, a
         ld      a, (state_ssg_volume_attenuation)
         neg
-        add     c
+        add     b
+
+        ;; clamp result volume
         bit     7, a
-        jr      z, _ssg_post_level_clamp
+        jr      z, _post_ssg_vol_clamp
         ld      a, #0
-_ssg_post_level_clamp:
-        ld      c, a
-        ld      a, b
-        add     #REG_SSG_A_VOLUME
-        ld      b, a
-        call    ym2610_write_port_a
-        pop     hl
-        ret
+_post_ssg_vol_clamp:
 
-
-;;; Configure the SSG channel based on a macro's data
-;;; ------
-;;; IN:
-;;;   de: start offset in mirrored state data
-;;; OUT
-;;;   de: start offset for the current channel
-;;; de, c modified
-mirrored_ssg_for_channel:
-        ;; c: current channel
-        ld      a, (state_ssg_channel)
-        ld      c, a
-        ;; a: offset in bytes for current mirrored state
-        xor     a
-        bit     1, c
-        jp      z, _m_post_double
-        ld      a, #SSG_STATE_SIZE
-        add     a
-_m_post_double:
-        bit     0, c
-        jp      z, _m_post_plus
-        add     #SSG_STATE_SIZE
-_m_post_plus:
-        ;; de + a (8bit add)
-        add     a, e
-        ld      e, a
+        ld      OUT_VOL(ix), a
         ret
 
 
@@ -432,7 +510,7 @@ _m_post_plus:
 ;;;   c: waveform
 ;;; OUT
 ;;;   c: shifted waveform for the current channel
-;;; c modified
+;;; [c modified]
 waveform_for_channel:
         ld      a, (state_ssg_channel)
         bit     0, a
@@ -453,7 +531,7 @@ _w_post_s1:
 ;;; [a modified - other registers saved]
 ssg_ctx_reset::
         ld      a, #0
-        ld      (state_ssg_channel), a
+        call    ssg_ctx_set_current
         ret
 
 
@@ -468,7 +546,7 @@ ssg_ctx_reset::
 ssg_ctx_1::
         ;; set new current SSG channel
         ld      a, #0
-        ld      (state_ssg_channel), a
+        call    ssg_ctx_set_current
         ld      a, #1
         ret
 
@@ -479,7 +557,7 @@ ssg_ctx_1::
 ssg_ctx_2::
         ;; set new current SSG channel
         ld      a, #1
-        ld      (state_ssg_channel), a
+        call    ssg_ctx_set_current
         ld      a, #1
         ret
 
@@ -490,7 +568,7 @@ ssg_ctx_2::
 ssg_ctx_3::
         ;; set new current SSG channel
         ld      a, #2
-        ld      (state_ssg_channel), a
+        call    ssg_ctx_set_current
         ld      a, #1
         ret
 
@@ -501,14 +579,14 @@ ssg_ctx_3::
 ;;; [ hl ]: macro number
 ssg_macro::
         push    de
-        
+
         ;; a: macro
         ld      a, (hl)
         inc     hl
 
         push    hl
 
-        ;; hl: macro address in ROM (hl:base + a:offset)
+        ;; hl: macro address from instruments
         ld      hl, (state_stream_instruments)
         sla     a
         ;; hl + a (8bit add)
@@ -524,71 +602,23 @@ ssg_macro::
         ld      d, (hl)
         ld      h, d
         ld      l, e
-        
-        ;; de: push function in ROM
-        ;; TODO should be replaced by list of memory offsets to
-        ;; load into ym2610 registers.
-        ;; NOTE: the destination registers would be offset:
-        ;;   - 0: for a SSG register shared across SSG channels
-        ;;   - n: for targeting the (base+n'th) register (CHECK)
-        ld      e, (hl)
-        inc     hl
-        ld      d, (hl)
-        inc     hl
-        ;; hl (at this point): macro data
 
-        ;; bc: address of current macro's data for current channel
-        ld      bc, #state_macro
-        ld      a, (state_ssg_channel)
-        sla     a
-        ;; bc + a (8bit add)
-        add     a, c
-        ld      c, a
-
-        push    bc              ; save address of current macro's data
-        ld      a, l
-        ld      (bc), a
-        inc     bc
-        ld      a, h
-        ld      (bc), a
-
-        ;; configure push function for this channel
-        ld      hl, #state_macro_load_func
-        ld      a, (state_ssg_channel)
-        sla     a
-        ;; hl + a (8bit add)
-        add     a, l
-        ld      l, a
-        ;; set push function
-        ld      (hl), e
-        inc     hl
-        ld      (hl), d
-
-        ;; bc: mirrored state's properties for current channel
-        ld      de, #state_mirrored_ssg_props
-        call    mirrored_ssg_for_channel
-        ld      b, d
-        ld      c, e
-
-        ;; mirrored: update mirrored state with macro's properties
-        pop     hl              ; (hl) = address of current macro's data
-        push    bc              ; save mirrored_state's properties
-        call    eval_macro_step
-        ;; after this call, de points to the next macro step,
-        ;; which is the part meant to be played for notes
-
-        ;; load the envelope shape into ym2610, if it's present
-        pop     hl              ; mirrored_state's properties
-        ;; ld      bc, #ENVELOPE_OFFSET
-        ;; add     hl, bc
-        ;; a: mirrored envelope shape
+        ;; initialize the state of the new macro
         ld      a, (hl)
-        bit     7, a
-        jr      nz, _on_post_load
-        ld      b, #REG_SSG_ENV_SHAPE
-        ld      c, a
-        call    ym2610_write_port_a
-_on_post_load:
+        ld      MACRO_LOAD(ix), a
+        inc     hl
+        ld      a, (hl)
+        ld      MACRO_LOAD+1(ix), a
+        inc     hl
+        ld      MACRO_DATA(ix), l
+        ld      MACRO_DATA+1(ix), h
+        ld      MACRO_POS(ix), l
+        ld      MACRO_POS+1(ix), h
+
+        ;; reconfigure pipeline to start evaluating macro
+        ld      a, PIPELINE(ix)
+        or      #STATE_EVAL_MACRO
+        ld      PIPELINE(ix), a
 
         pop     hl
         pop     de
@@ -597,211 +627,63 @@ _on_post_load:
         ret
 
 
-;;; Update the vibrato for the current FM channel and update the YM2610
+;;; Update the vibrato for the current SSG channel
 ;;; ------
-;;; hl: mirrored state of the current fm channel
+;;; ix: mirrored state of the current fm channel
 eval_ssg_vibrato_step::
         push    hl
         push    de
         push    bc
-        push    ix
-
-        ;; ix: state fx for current channel
-        push    hl
-        pop     ix
 
         call    vibrato_eval_step
 
-        ;; ;; configure FM channel with new frequency
-        ;; YM2610: load note
-        ld      a, (state_ssg_channel)
-        sla     a
-        add     #REG_SSG_A_FINE_TUNE
-        ld      b, a
-        ld      c, l
-        call    ym2610_write_port_a
-        inc     b
-        ld      c, h
-        call    ym2610_write_port_a
-
-        pop     ix
         pop     bc
         pop     de
         pop     hl
 
         ret
-
-
-;;; Setup SSG vibrato: position and increments
-;;; ------
-;;; ix : ssg state for channel
-;;;      the note semitone must be already configured
-ssg_vibrato_setup_increments::
-        push    bc
-        push    hl
-        push    de
-
-        ld      hl, #ssg_semitone_distance
-        ld      l, NOTE_SEMITONE_OFFSET(ix)
-        call    vibrato_setup_increments
-
-        ;; de: vibrato prev increment, fixed point
-        ld      VIBRATO_PREV(ix), e
-        ld      VIBRATO_PREV+1(ix), d
-        ;; hl: vibrato next increment, fixed point (negate)
-        xor     a
-        sub     l
-        ld      l, a
-        sbc     a, a
-        sub     h
-        ld      h, a
-        ld      VIBRATO_NEXT(ix), l
-        ld      VIBRATO_NEXT+1(ix), h
-
-        pop     de
-        pop     hl
-        pop     bc
-        ret
-
-
-;;; Setup slide effect for the current FM channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-;;;    a  : slide direction: 0 == up, 1 == down
-ssg_slide_common::
-        push    bc
-        push    de
-
-        ;; de: FX for channel
-        ld      b, a
-        ld      de, #state_fx
-        call    mirrored_ssg_for_channel
-        ld      a, b
-
-        ;; ix: SSG state for channel
-        push    de
-        pop     ix
-
-        call    slide_init
-        ld      e, NOTE_SEMITONE_OFFSET(ix)
-        call    slide_setup_increments
-
-        pop     de
-        pop     bc
-
-        ret
-
 
 
 ;;; Update the slide for the current channel
 ;;; Slide moves up or down by 1/8 of semitone increments * slide depth.
 ;;; ------
-;;; hl: state for the current channel
+;;; IN:
+;;;   hl: state for the current channel
+;;; OUT:
+;;;   bc:
 eval_ssg_slide_step::
-        push    hl
         push    de
-        push    bc
-        push    ix
 
         ;; update internal state for the next slide step
         call    eval_slide_step
 
         ;; effect still in progress?
         cp      a, #0
-        jp      nz, _ssg_slide_add_intermediate
-        ;; otherwise reset note state and load into YM2610
-        ;; ld      NOTE_SEMITONE_OFFSET(ix), d
-        ;; hl: base note period for current semitone
-        ld      hl, #ssg_tune
-        ld      a, d
-        sla     a
-        ld      l, a
-        ld      c, (hl)
-        inc     hl
-        ld      b, (hl)
-        ld      h, b
-        ld      l, c
-        ;; save new current note frequency
-        ld      NOTE_OFFSET(ix), l
-        ld      NOTE_OFFSET+1(ix), h
-        jr      _ssg_slide_load_note
+        jp      nz, _end_ssg_slide_step
+        ;; otherwise set the end note as the new base note
+        ld      a, NOTE(ix)
+        add     d
+        ld      NOTE(ix), a
+_end_ssg_slide_step:
 
-_ssg_slide_add_intermediate:
-        ;; a: current semitone
-        ld      a, SLIDE_POS16+1(ix)
-        ;; b: next semitone distance from current note
-        ld      hl, #ssg_semitone_distance
-        ld      l, a
-        ld      b, (hl)
-        ;; c: SSG: intermediate frequency is negative
-        ld      c, #1
-        ;; e: intermediate semitone position (fractional part)
-        ld      e, SLIDE_POS16(ix)
-        ;; de: current intermediate frequency f_dist
-        call    slide_intermediate_freq
-
-        ;; hl: base note period for current semitone
-        ld      hl, #ssg_tune
-        ld      a, SLIDE_POS16+1(ix)
-        sla     a
-        ld      l, a
-        ld      c, (hl)
-        inc     hl
-        ld      b, (hl)
-        ld      h, b
-        ld      l, c
-
-        ;; load new frequency into the YM2610
-        ;; hl: semitone frequency + f_dist
-        add     hl, de
-
-_ssg_slide_load_note:
-        ;; configure SSG channel with new note
-        ld      a, (state_ssg_channel)
-        sla     a
-        ld      b, a
-        ld      c, l
-        call    ym2610_write_port_a
-        inc     b
-        ld      c, h
-        call    ym2610_write_port_a
-
-        pop     ix
-        pop     bc
         pop     de
-        pop     hl
 
         ret
 
-        
+
 ;;; SSG_NOTE_OFF
 ;;; Release (stop) the note on the current SSG channel.
 ;;; ------
 ssg_note_off::
-        push    de
         push    bc
-        push    hl        
-        
-        ;; de: mirrored state for current channel
-        ld      de, #state_mirrored_ssg
-        call    mirrored_ssg_for_channel
-
-        ;; stop effects
-        ld      a, #0
-        ld      (de), a
-        
-        ;; de: mirrored waveform (8bit add)
-        ld      a, #WAVEFORM_OFFSET
-        add     a, e
-        ld      e, a
 
         ;; c: disable mask (shifted for channel)
-        ld      a, (de)
+        ld      a, WAVEFORM_OFFSET(ix)
         ld      b, #0xff
         xor     b
         ld      c, a
         call    waveform_for_channel
-        
+
         ;; stop channel
         ld      a, (state_mirrored_enabled)
         or      c
@@ -817,27 +699,16 @@ ssg_note_off::
         ld      c, #0
         call    ym2610_write_port_a
 
-        ;; de: macro ptr for current channel (8bit add)
-        ld      de, #state_macro_pos
-        ld      a, (state_ssg_channel)
-        sla     a
-        add     a, e
-        ld      e, a
+        pop     bc
 
-        ;; remove current macro program
-        xor     a
-        ld      (de), a
-        inc     de
-        ld      (de), a
-        
-        pop     hl
-        pop     bc        
-        pop     de
+        ;; disable playback in the pipeline, any note lod_note bit
+        ;; will get cleaned during the next pipeline run
+        res     BIT_PLAYING, PIPELINE(ix)
 
-        ;; ssg context will now target the next channel
+        ;; SSG context will now target the next channel
         ld      a, (state_ssg_channel)
         inc     a
-        ld      (state_ssg_channel), a
+        call    fm_ctx_set_current
 
         ld      a, #1
         ret
@@ -848,194 +719,48 @@ ssg_note_off::
 ;;; ------
 ;;; [ hl ]: volume level
 ssg_vol::
-        push    de
-
-        ;; de: note volume for current channel (8bit add)
-        ld      de, #state_note_vol
-        ld      a, (state_ssg_channel)
-        add     a, e
-        ld      e, a
-
         ;; a: volume
         ld      a, (hl)
         inc     hl
-        ld      b, a
 
         ;; (de): substracted mix volume (15-a)
         sub     a, #15
         neg
-        ld      (de), a
+        ld      VOL(ix), a
 
-        pop     de
+        ;; reload configured vol at the next pipeline run
+        set     BIT_LOAD_VOL, PIPELINE(ix)
 
         ld      a, #1
         ret
-        
-    
+
+
 ;;; SSG_NOTE_ON
 ;;; Emit a specific note (frequency) on a SSG channel
 ;;; ------
 ;;; [ hl ]: note (0xAB: A=octave B=semitone)
 ssg_note_on::
-        push    de
-        push    bc
-
         ;; b: note (0xAB: A=octave B=semitone)
         ld      a, (hl)
+        ld      NOTE(ix), a
         ld      b, a
         inc     hl
 
-        push    hl
+        ;; init macro position
+        ld      a, MACRO_DATA(ix)
+        ld      MACRO_POS(ix), a
+        ld      a, MACRO_DATA+1(ix)
+        ld      MACRO_POS+1(ix), a
 
-        ;; init current macro program
-
-        ;; hl: macro for current channel (8bit add)
-        ld      hl, #state_macro
-        ld      a, (state_ssg_channel)
-        sla     a
-        add     a, l
-        ld      l, a
-
-        ;; de: macro ptr for current channel (8bit add)
-        ;; +save ssg_macro
-        ld      de, #state_macro_pos
-        ld      a, (state_ssg_channel)
-        sla     a
-        add     a, e
-        ld      e, a
-        push    de
-        
-        ;; (de): start of macro program, from (hl)
-        ld      a, b
-        ld      bc, #2
-        ldir
-        ld      b, a
-        
-        ;; load ssg mirrored state
-
-        ;; l: note
-        ld      l, b
-
-        ;; ;; de: mirrored note for current channel
-        ld      de, #state_mirrored_ssg
-        call    mirrored_ssg_for_channel
-
-        ;; bc: mirrored_note_semitone, from mirrored_ssg (de)
-        ld      b, d
-        ld      c, e
-        ld      a, #NOTE_SEMITONE_OFFSET
-        add     c
-        ld      c, a
-        ;; store current octave/semitone
-        ld      a, l
-        ld      (bc), a
-
-        ;; bc: mirrored_note (expected: from semitone)
-        inc     c
-
-        push    de
-        pop     ix
-
-        ;; check active effects
-        ld      a, (de)
-_on_check_vibrato:
-        bit     0, a
-        jr      z, _on_check_slide
-        ;; reconfigure increments for current semitone
-        call    ssg_vibrato_setup_increments
-_on_check_slide:
-        bit     1, a
-        jr      z, _on_post_fx
-        ;; reconfigure increments for current semitone
-        ld      e, NOTE_SEMITONE_OFFSET(ix)
-        call    slide_setup_increments
-_on_post_fx:
-
-        ;; de: ssg_note
-        ld      d, b
-        ld      e, c
-        
-        ;; mirrored: note frequency
-        ld      a, l
-        ld      hl, #ssg_tune
-        sla     a
-        ld      l, a
-        ldi
-        inc     bc
-        ldi
-        inc     bc
-
-        ;; mirrored: update mirrored state with macro's properties
-        ;; TODO: check the offset of eval macro and w.r.t generated macro
-        pop     hl              ; ssg_macro
-        push    bc              ; mirrored_note
-        call    eval_macro_step
-        
-        ;; load mirrored state into the YM2610
-
-        ;; YM2610: load note
-        pop     hl              ; mirrored_note
-        ld      a, (state_ssg_channel)
-        sla     a
-        add     #REG_SSG_A_FINE_TUNE
-        ld      b, a
-        ld      c, (hl)
-        call    ym2610_write_port_a
-        inc     hl
-        inc     b
-        ld      c, (hl)
-        call    ym2610_write_port_a
-
-        ;; hl: go to ssg_props (expected: from ssg_note)
-        inc     hl
-
-        ;; YM2610: load properties (except waveform)
-        push    hl              ; mirrored_props
-        ;; de: pointer to push macro for current channel (8bit add)
-        ld      de, #state_macro_load_func
-        ld      a, (state_ssg_channel)
-        sla     a
-        add     a, e
-        ld      e, a
-        ;; call macro
-        ld      bc, #_on_ret
-        push    bc
-        ld      a, (de)
-        ld      c, a
-        inc     de
-        ld      a, (de)
-        ld      b, a
-        push    bc
-        ret
-_on_ret:
-
-        ;; YM2610: load waveform
-        pop     hl              ; mirrored_props
-        ;; hl: mirrored_waveform (8bit add)
-        ld      a, #(WAVEFORM_OFFSET-PROPS_OFFSET)
-        add     a, l
-        ld      l, a
-
-        ;; c: waveform (shifted for channel)
-        ld      c, (hl)
-        call    waveform_for_channel
-
-        ;; start note
-        ld      a, (state_mirrored_enabled)
-        and     c
-        ld      (state_mirrored_enabled), a
-        ld      b, #REG_SSG_ENABLE
-        ld      c, a
-        call    ym2610_write_port_a
-        
-        pop     hl
-        pop     bc
-        pop     de
+        ;; reload all registers at the next pipeline run
+        ld      a, PIPELINE(ix)
+        or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
+        ld      PIPELINE(ix), a
 
         ;; ssg context will now target the next channel
         ld      a, (state_ssg_channel)
         inc     a
-        ld      (state_ssg_channel), a
+        call    fm_ctx_set_current
 
         ld      a, #1
         ret
@@ -1072,85 +797,26 @@ ssg_env_period::
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 ssg_vibrato::
-        push    bc
-        push    de
-
-        ;; de: fx for channel (expect: from mirrored_ssg)
-        ld      de, #state_fx
-        call    mirrored_ssg_for_channel
+        ;; TODO: move this part to common vibrato_init
 
         ;; hl == 0 means disable vibrato
         ld      a, (hl)
         cp      #0
-        jr      nz, _setup_vibrato
-        push    hl              ; save NSS stream pos
-        ;; disable vibrato fx
-        ld      a, (de)
-        res     0, a
-        ld      (de), a
-        ;; hl: address of original note frequency (8bit add)
-        ld      h, d
-        ld      a, #NOTE_OFFSET
-        add     e
-        ld      l, a
-        ;; reconfigure the note into the YM2610
-        ld      a, (state_ssg_channel)
-        sla     a
-        add     #REG_SSG_A_FINE_TUNE
-        ld      b, a
-        ld      c, (hl)
-        call    ym2610_write_port_a
+        jr      nz, _setup_ssg_vibrato
+
+        ;; disable vibrato FX
+        res     BIT_FX_VIBRATO, FX(ix)
+
+        ;; reload configured note at the next pipeline run
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+
         inc     hl
-        inc     b
-        ld      c, (hl)
-        call    ym2610_write_port_a
-        pop     hl              ; NSS stream pos
-        jr      _post_setup
+        jr      _post_ssg_setup
 
-_setup_vibrato:
-        ;; ix: ssg state for channel
-        push    de
-        pop     ix
+_setup_ssg_vibrato:
+        call    vibrato_init
 
-        ;; vibrato fx on
-        ld      a, SSG_FX(ix)
-        ;; if vibrato was in use, keep the current vibrato pos
-        bit     0, a
-        jp      nz, _post_ssg_vibrato_pos
-        ;; reset vibrato sine pos
-        ld      VIBRATO_POS(ix), #0
-_post_ssg_vibrato_pos:
-        set     0, a
-        ld      SSG_FX(ix), a
-
-        ;; speed
-        ld      a, (hl)
-        rra
-        rra
-        rra
-        rra
-        and     #0xf
-        ld      VIBRATO_SPEED(ix), a
-
-        ;; depth, clamped to [1..16]
-        ld      a, (hl)
-        and     #0xf
-        inc     a
-        ld      VIBRATO_DEPTH(ix), a
-
-        ;; increments for last configured note
-        call    ssg_vibrato_setup_increments
-
-_post_setup:
-        inc     hl
-
-        pop     de
-        pop     bc
-
-        ;; de: fx for channel (expect: from mirrored_ssg)
-        ld      de, #state_fx
-        call    mirrored_ssg_for_channel
-
+_post_ssg_setup:
 
         ld      a, #1
         ret
@@ -1162,7 +828,7 @@ _post_setup:
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 ssg_slide_up::
         ld      a, #0
-        call    ssg_slide_common
+        call    slide_init
         ld      a, #1
         ret
 
@@ -1173,6 +839,26 @@ ssg_slide_up::
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 ssg_slide_down::
         ld      a, #1
-        call    ssg_slide_common
+        call    slide_init
+        ld      a, #1
+        ret
+
+
+;;; SSG_VOL_SLIDE_DOWN
+;;; Enable volume slide down effect for the current SSG channel
+;;; ------
+;;; [ hl ]: speed (4bits)
+ssg_vol_slide_down::
+        push    bc
+        push    de
+
+        ld      bc, #0x40
+        ld      d, #15
+        ld      a, #1
+        call    vol_slide_init
+
+        pop     de
+        pop     bc
+
         ld      a, #1
         ret

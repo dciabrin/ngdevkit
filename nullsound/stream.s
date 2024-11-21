@@ -171,17 +171,17 @@ _loop_chs:
         ;; process the stream's next opcodes
 
         ;; hl: current stream's position
-        ld      ix, (state_current_ch_stream)
-        ld      l, CH_STREAM_POS(ix)
-        ld      h, CH_STREAM_POS+1(ix)
+        ld      iy, (state_current_ch_stream)
+        ld      l, CH_STREAM_POS(iy)
+        ld      h, CH_STREAM_POS+1(iy)
 _loop_opcode:
         call    process_nss_opcode
         or      a
         jp      nz, _loop_opcode
         ;; no more opcodes can be processed, save stream's new pos
-        ld      ix, (state_current_ch_stream)
-        ld      CH_STREAM_POS(ix), l
-        ld      CH_STREAM_POS+1(ix), h
+        ld      iy, (state_current_ch_stream)
+        ld      CH_STREAM_POS(iy), l
+        ld      CH_STREAM_POS+1(iy), h
 _post_ch_process:
         ld      a, (state_streams)
         ld      b, a
@@ -223,23 +223,21 @@ update_stream_state_tracker::
         ld      b, a
         ld      a, (state_timer_ticks_count)
         cp      b
-        ;; if we can't, check whether we have macros or effects to process
-        jp      c, _check_update_macros_and_effects
+        jp      c, _check_update_stream_pipeline
+        ;; process the NSS opcodes (this will update the pipeline)
+        ;; the next row processing will take place once a new row is reached.
         call    update_streams_wait_rows
         call    process_streams_opcodes
-        ;; reset row and tick reached counters and exit
         ld      a, #0
         ld      (state_timer_ticks_count), a
-        jp      _reset_tick_reached
-_check_update_macros_and_effects:
+_check_update_stream_pipeline:
         ld      a, (state_timer_tick_reached)
         bit     TIMER_CONSUMER_STREAM_BIT, a
         jp      z, _end_update_stream
-        call    update_fm_effects
-        call    update_ssg_macros_and_effects
-_reset_tick_reached:
-        ;; reset the 'tick reached' marker bit for this tracker, next
-        ;; macro/effect processing will take place once a new tick is reached
+        ;; process the current stream pipeline
+        ;; the next processing will take place once a new tick is reached
+        call    run_fm_pipeline
+        call    run_ssg_pipeline
         res     TIMER_CONSUMER_STREAM_BIT, a
         ld      (state_timer_tick_reached), a
 _end_update_stream:
@@ -369,46 +367,46 @@ stream_all_ctx_switch::
 stream_play_multi::
         call    stream_stop
         push    de
-        pop     ix
+        pop     iy
 
         ;; setup current instruments
         ld      (state_stream_instruments), bc
 
         ;; a: number of streams
-        ld      a, (ix)
+        ld      a, (iy)
         ld      (state_streams), a
 
         ;; setup enabled channels bitfield for this music and
         ;; configure every stream with the right channel ctx opcode
-        inc     ix
-        ld      c, (ix)
-        ld      b, 1(ix)
+        inc     iy
+        ld      c, (iy)
+        ld      b, 1(iy)
         ld      (state_ch_bits), bc
         call    snd_configure_stream_ctx_switches
 
         ;; hl: stream data from NSS
-        inc     ix
-        inc     ix
-        push    ix
+        inc     iy
+        inc     iy
+        push    iy
         pop     hl
 
         ;; init streams state
-        ld      ix, #state_ch_stream
+        ld      iy, #state_ch_stream
         ld      de, #CH_STREAM_SIZE
         ld      a, (state_streams)
         ld      c, a
 _stream_play_init_loop:
         ;; a: stream data LSB
         ld      a, (hl)
-        ld      CH_STREAM_START(ix), a
-        ld      CH_STREAM_POS(ix), a
+        ld      CH_STREAM_START(iy), a
+        ld      CH_STREAM_POS(iy), a
         inc     hl
         ;; a: stream data MSB
         ld      a, (hl)
-        ld      CH_STREAM_START+1(ix), a
-        ld      CH_STREAM_POS+1(ix), a
+        ld      CH_STREAM_START+1(iy), a
+        ld      CH_STREAM_POS+1(iy), a
         inc     hl
-        add     ix, de
+        add     iy, de
         dec     c
         jr      nz, _stream_play_init_loop
 
@@ -499,29 +497,33 @@ nss_opcodes:
         .nss_op ssg_slide_up
         .nss_op ssg_slide_down
         .nss_op fm_vibrato
-        .nss_op fm_slide_up
-        .nss_op fm_slide_down
+        .nss_op fm_note_slide_up
+        .nss_op fm_note_slide_down
         .nss_op adpcm_b_vol
         .nss_op adpcm_a_vol
         .nss_op fm_pan
+        .nss_op fm_vol_slide_down
+        .nss_op ssg_vol_slide_down
+        .nss_op fm_pitch_slide_down
+
 
 
 ;;; Process a single NSS opcode
 ;;; ------
 ;;; bc: address in the stream pointing to the opcode and its args
-;;; [a, bc, ix modified - other registers saved]
+;;; [a, bc, iy modified - other registers saved]
 process_nss_opcode::
         ;; op
         ld      a, (hl)
         inc     hl
         ;; get function for opcode and tail call into it
-        ld      ix, #nss_opcodes
+        ld      iy, #nss_opcodes
         sla     a
         ld      b, #0
         ld      c, a
-        add     ix, bc
-        ld      b, 1(ix)
-        ld      c, (ix)
+        add     iy, bc
+        ld      b, 1(iy)
+        ld      c, (iy)
         push    bc
         ret
 
@@ -571,14 +573,14 @@ nss_jmp::
         ld      c, (hl)
         inc     hl
         ld      b, (hl)
-        ld      ix, (state_current_ch_stream)
+        ld      iy, (state_current_ch_stream)
         ;; hl: start of stream
-        ld      l, CH_STREAM_START(ix)
-        ld      h, CH_STREAM_START+1(ix)
+        ld      l, CH_STREAM_START(iy)
+        ld      h, CH_STREAM_START+1(iy)
         ;; hl: new pos (call offset)
         add     hl, bc
-        ld      CH_STREAM_POS(ix), l
-        ld      CH_STREAM_POS+1(ix), h
+        ld      CH_STREAM_POS(iy), l
+        ld      CH_STREAM_POS+1(iy), h
         pop     bc
         ld      a, #1
         ret
@@ -588,7 +590,14 @@ nss_jmp::
 ;;; signal the end of the NSS stream to the player
 ;;; ------
 nss_end::
+        ;; signal the end of playback for the entire music
         call    stream_stop
+        ;; ensure that the current channel's pipeline is stopped
+        ;; TODO use FX and PIPELINE macros rather than hardcodes
+        xor     a
+        ld      (ix), a
+        ld      1(ix), a
+
         ld      a, #0
         ret
 
@@ -628,22 +637,22 @@ _post_wait_rows:
 nss_call::
         push    bc
 
-        ld      ix, (state_current_ch_stream)
+        ld      iy, (state_current_ch_stream)
         ;; bc: offset
         ld      c, (hl)
         inc     hl
         ld      b, (hl)
         inc     hl
         ;; save current stream pos
-        ld      CH_STREAM_SAVED(ix), l
-        ld      CH_STREAM_SAVED+1(ix), h
+        ld      CH_STREAM_SAVED(iy), l
+        ld      CH_STREAM_SAVED+1(iy), h
         ;; hl: start of stream
-        ld      l, CH_STREAM_START(ix)
-        ld      h, CH_STREAM_START+1(ix)
+        ld      l, CH_STREAM_START(iy)
+        ld      h, CH_STREAM_START+1(iy)
         ;; hl: new pos (call offset)
         add     hl, bc
-        ld      CH_STREAM_POS(ix), l
-        ld      CH_STREAM_POS+1(ix), h
+        ld      CH_STREAM_POS(iy), l
+        ld      CH_STREAM_POS+1(iy), h
 
         pop     bc
         ld      a, #1
@@ -654,13 +663,13 @@ nss_call::
 ;;; Continue playback past the previous NSS_CALL statement
 ;;; ------
 nss_ret::
-        ld      ix, (state_current_ch_stream)
+        ld      iy, (state_current_ch_stream)
         ;; hl: saved current stream pos
-        ld      l, CH_STREAM_SAVED(ix)
-        ld      h, CH_STREAM_SAVED+1(ix)
+        ld      l, CH_STREAM_SAVED(iy)
+        ld      h, CH_STREAM_SAVED+1(iy)
         ;; hl: restore new stream pos
-        ld      CH_STREAM_POS(ix), l
-        ld      CH_STREAM_POS+1(ix), h
+        ld      CH_STREAM_POS(iy), l
+        ld      CH_STREAM_POS+1(iy), h
 
         ld      a, #1
         ret

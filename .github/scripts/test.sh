@@ -5,4 +5,5 @@ if [ -n "$PY3PATH" ]; then
 fi
 cd examples
 export XDG_RUNTIME_DIR=$HOME
-./configure && make
+MAKE=$(which gmake make | head -1)
+./configure && $MAKE

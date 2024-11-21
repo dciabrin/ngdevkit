@@ -26,12 +26,21 @@
 
         .area   struct
 
-        .local  fx_fx, fx_slide, fx_vibrato
+        .local  pipeline, fx_fx, fx_vol_slide, fx_slide, fx_vibrato
+        .local  _vol_slide_inc16, _vol_slide_pos16, _vol_slide_end, _vol_slide_size
         .local  _slide_speed, _slide_depth, _slide_inc16, _slide_pos16, _slide_end, _slide_size
-        .local _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_prev, _vibrato_next, _vibrato_size
+        .local _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
 
-;;; enabled FX. This must be the first field of a channel's state
+;;; actions to run at every tick. This must be the first field of a channel's state
+pipeline:               .blkb 1
+;;; enabled FX. This must be the second field of a channel's state
 fx_fx:                  .blkb 1
+;;; FX: volume slide
+fx_vol_slide:
+_vol_slide_inc16:       .blkw 1         ; volume slide speed
+_vol_slide_pos16:       .blkw 1         ; volume slide position (attenuation)
+_vol_slide_end:         .blkb 1         ; volume slide end (0: no attenuation)
+_vol_slide_size:
 ;;; FX: slide
 fx_slide:
 _slide_speed:           .blkb 1         ; number of increments per tick
@@ -45,25 +54,33 @@ fx_vibrato:
 _vibrato_speed:         .blkb 1         ; vibrato_speed
 _vibrato_depth:         .blkb 1         ; vibrato_depth
 _vibrato_pos:           .blkb 1         ; vibrato_pos
-_vibrato_prev:          .blkw 1         ; vibrato_prev
-_vibrato_next:          .blkw 1         ; vibrato_next
+_vibrato_pos16:         .blkw 1         ; vibrato_pos16
 _vibrato_size:
 
         ;; FX getter for a channel's state
         ;; The offset assumes that that the FX structure are located
         ;; sequentially from the start of the channel's state
-        .lclequ FX,             (fx_fx - fx_fx)
-        .lclequ SLIDE,          (fx_slide - fx_fx)
-        .lclequ SLIDE_SPEED,    (_slide_speed - fx_fx)
-        .lclequ SLIDE_DEPTH,    (_slide_depth - fx_fx)
-        .lclequ SLIDE_INC16,    (_slide_inc16 - fx_fx)
-        .lclequ SLIDE_POS16,    (_slide_pos16 - fx_fx)
-        .lclequ SLIDE_END,      (_slide_end - fx_fx)
-        .lclequ SLIDE_SIZE,     (_vibrato_size - fx_slide)
-        .lclequ VIBRATO,        (fx_vibrato - fx_fx)
-        .lclequ VIBRATO_SPEED,  (_vibrato_speed - fx_fx)
-        .lclequ VIBRATO_DEPTH,  (_vibrato_depth - fx_fx)
-        .lclequ VIBRATO_POS,    (_vibrato_pos - fx_fx)
-        .lclequ VIBRATO_PREV,   (_vibrato_prev - fx_fx)
-        .lclequ VIBRATO_NEXT,   (_vibrato_next - fx_fx)
+        .lclequ PIPELINE,       (pipeline - pipeline)
+        .lclequ FX,             (fx_fx - pipeline)
+        .lclequ VOL_SLIDE,      (fx_vol_slide - pipeline)
+        .lclequ VOL_SLIDE_INC16, (_vol_slide_inc16 - pipeline)
+        .lclequ VOL_SLIDE_POS16, (_vol_slide_pos16 - pipeline)
+        .lclequ VOL_SLIDE_END,  (_vol_slide_end - pipeline)
+        .lclequ VOL_SLIDE_SIZE, (_vol_slide_size - fx_vol_slide)
+        .lclequ SLIDE,          (fx_slide - pipeline)
+        .lclequ SLIDE_SPEED,    (_slide_speed - pipeline)
+        .lclequ SLIDE_DEPTH,    (_slide_depth - pipeline)
+        .lclequ SLIDE_INC16,    (_slide_inc16 - pipeline)
+        .lclequ SLIDE_POS16,    (_slide_pos16 - pipeline)
+        .lclequ SLIDE_END,      (_slide_end - pipeline)
+        .lclequ SLIDE_SIZE,     (_slide_size - fx_slide)
+        .lclequ VIBRATO,        (fx_vibrato - pipeline)
+        .lclequ VIBRATO_SPEED,  (_vibrato_speed - pipeline)
+        .lclequ VIBRATO_DEPTH,  (_vibrato_depth - pipeline)
+        .lclequ VIBRATO_POS,    (_vibrato_pos - pipeline)
+        .lclequ VIBRATO_POS16,  (_vibrato_pos16 - pipeline)
         .lclequ VIBRATO_SIZE,   (_vibrato_size - fx_vibrato)
+
+        .lclequ BIT_FX_VIBRATO,         0
+        .lclequ BIT_FX_SLIDE,           1
+        .lclequ BIT_FX_VOL_SLIDE,       2

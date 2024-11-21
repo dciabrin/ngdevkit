@@ -25,6 +25,9 @@ import zlib
 from dataclasses import dataclass, field
 from struct import pack, unpack, unpack_from
 from adpcmtool import ym2610_adpcma, ym2610_adpcmb
+from copy import deepcopy
+from functools import reduce
+from operator import ior
 
 VERBOSE = False
 
@@ -234,6 +237,8 @@ class ssg_macro:
     prog: list[int] = field(default_factory=list)
     keys: list[int] = field(default_factory=list)
     offset: list[int] = field(default_factory=list)
+    bits: list[int] = field(default_factory=list)
+    loop: int = 255
     autoenv: bool = False
 
 
@@ -283,6 +288,10 @@ def read_macro_data(length, bs):
     macros={}
     max_pos = bs.pos + length
     header_len = bs.u2()
+    # TODO: we only support a single loop per macro as all the data are inlined
+    # into a single sequence. This way, we simplify memory management at the expense
+    # of a incomplete macro implementation.
+    macro_loop = 255
     while bs.pos < max_pos:
         header_start = bs.pos
         # macro code (vol, arp, pitch...)
@@ -290,9 +299,14 @@ def read_macro_data(length, bs):
         if code == 255:
             break
         length = bs.u1()
-        # TODO unsupported. no loop
+        # loop step. 255 == no loop
         loop = bs.u1()
-        # TODO unsupported. last macro value stays
+        # NOTE: due to how the instruments are edited in the Furnace UI, sometimes
+        # the loop info stays in the module even if it's no longer in sync with
+        # the current data length. Double check the flag before keeping it.
+        if loop != 255 and loop<length:
+            macro_loop = loop
+        # unsupported. if loop is enabled, loop until the end
         release = bs.u1()
         # TODO meaning?
         mode = bs.u1()
@@ -308,7 +322,7 @@ def read_macro_data(length, bs):
         data = [bs.u1() for i in range(length)]
         macros[code]=data
     assert bs.pos == max_pos
-    return macros
+    return macros, macro_loop
 
 
 def configure_b_macros(ins, macros):
@@ -327,65 +341,94 @@ class ssg_prop:
 
 def read_ssg_macro(length, bs):
     # TODO -1 are unsupported in nullsound
-    code_map = {0: ssg_prop("volume", 3),      # volume
-                3: ssg_prop("waveform", 4),    # noise_tune
-                6: ssg_prop("env", 0),         # envelope shape
-                7: ssg_prop("env_vol_num", 1), # volume envelope numerator
-                8: ssg_prop("env_vol_den", 2)  # volume envelope denominator
-                }
+    # name taken from Furnace's newIns.md and UI entries
+    code_name = ["vol",
+                 "arp",
+                 "noiseFreq",
+                 "wave",
+                 "pitch",
+                 "phaseReset",
+                 "env",
+                 "num",
+                 "den"
+                 ]
+    code_offset = {"vol": 3,
+                   "wave": 4,
+                   "env": 0,
+                   # "num": 1,
+                   # "den": 2
+                   }
+
+    code_load_bit = {"vol": 1<<4, # BIT_LOAD_VOL
+                     "wave": 1<<3, # BIT_LOAD_WAVEFORM
+                     "env": 1<<5, # BIT_LOAD_REGS
+                     "noiseFreq": 1<<5, # BIT_LOAD_REGS
+                     }
 
     autoenv=False
     blocks = {}
-    macros = read_macro_data(length, bs)
+    macros, loop = read_macro_data(length, bs)
     for code in macros:
-        if code not in code_map:
-            warning("macro element not supported yet: %02x"%code)
-        else:
-            blocks[code_map[code].offset] = macros[code]
+        blocks[code_name[code]] = macros[code]
 
-    # pass: create a "empty" waveform property if it's not there
-    # we need it to tell nullsound to not update the envelope SSG register
-    if 0 not in blocks:
-        blocks[0] = [128] # do not update envelope (bit7 set)
-    # pass: convert waveform for noise_tone register
-    if 4 in blocks:
-        # NOTE: only read a single waveform as we don't allow
-        # sequence on this register right now
-        wav=blocks[4][0]
-        env, noise, tone = ubits(wav,[2,2],[1,1],[0,0]) # latest furnace version
-        # pass: store envelope bit as mode for volume register
-        if 3 in blocks:
-            new_vols=[env<<4|v for v in blocks[3]]
-            blocks[3]=new_vols
-        new_wav=(noise<<3|tone)^0xff
-        blocks[4]=[new_wav]
+    # pass: merge waveform sequence into vol & noise_tone sequences for SSG registers
+    if "wave" in blocks:
+        for i, wav in enumerate(blocks["wave"]):
+            env, noise, tone = ubits(wav,[2,2],[1,1],[0,0]) # valid with furnace > dev213
+            # pass: store envelope bit as mode for volume register
+            if "vol" in blocks and i < len(blocks["vol"]):
+                new_vol = (env<<4) | (blocks["vol"][i])
+                blocks["vol"][i] = new_vol
+            new_wav=(noise<<3|tone)^0xff
+            blocks["wave"][i]=new_wav
+
     # pass: put auto-env information aside, it requires muls and divs
     # and we don't want to do that at runtime on the Z80. Instead
-    # we will simulate that feature via a specific NSS opcode
-    if 1 in blocks or 2 in blocks:
+    # we simulate that feature via a specific NSS opcode
+    if "num" in blocks or "den" in blocks:
         # NOTE: only read a single element as we don't allow
-        # macros on these registers right now
-        num = blocks.get(1,[1])[0]
-        den = blocks.get(2,[1])[0]
+        # sequence on these registers right now
+        num = blocks.get("num",[1])[0]
+        den = blocks.get("den",[1])[0]
         autoenv=(num,den)
-        blocks.pop(1, None)
-        blocks.pop(2, None)
+        blocks.pop("num", None)
+        blocks.pop("den", None)
+
+    # pass: compute load bits for all the macro steps
+    # macrolen = max([len(blocks[k]) for k in keys])
+    maxlen = max([len(blocks[k]) for k in blocks.keys()])
+    bitblocks = {}
+    # get the load bit for each key at every step
+    for k in blocks.keys():
+        listbit = [code_load_bit[k] for _ in range(len(blocks[k]))]
+        listbit.extend([0 for _ in range(maxlen-len(blocks[k]))])
+        bitblocks[k] = listbit
+    # add BIT_EVAL_MACRO for every step (set last step only when looping)
+    bitblocks['_'] = [1<<1]*maxlen
+    if loop == 255:
+        bitblocks['_'][-1] = 0
+    # merge all the load bits for every step
+    mergedbits = [reduce(ior,l) for l in zip(*bitblocks.values())]
+
+    # pass: convert Furnace keys to NSS offsets
+    tmpblocks={}
+    for k in blocks.keys():
+        if k not in code_offset:
+            warning("macro element not supported yet: %02x"%code)
+        else:
+            tmpblocks[code_offset[k]]=blocks[k]
+    blocks=tmpblocks
+
     # pass: build macro program
-    # a macro program consists of two separate parts:
     prog = []
-    # the first parts is a sequence that initializes SSG registers
-    # that should not be updated at every tick (done in ssg_macro)
-    keys = sorted(filter(lambda x: x in [4,0],blocks.keys()))
-    iseq, _ = compile_macro_sequence(keys, blocks)
-    prog.extend(iseq)
-    # the second parts is a series of sequences that update SSG registers
-    # at every tick. Right now it only includes volume.
-    keys = sorted(filter(lambda x: x not in [4,0],blocks.keys()))
-    nseq, offset = compile_macro_sequence(keys, blocks)
-    prog.extend(nseq)
-    # add end of macro marker
+    realblocks=blocks
+    blocks=deepcopy(realblocks)
+    keys = sorted(list(blocks.keys()))
+    seq, offset = compile_macro_sequence(keys, blocks)
+    prog = []
+    prog.extend(seq)
     prog.append(255)
-    issg = ssg_macro(prog=prog, keys=keys, offset=offset, autoenv=autoenv)
+    issg = ssg_macro(prog=prog, keys=keys, offset=offset, bits=mergedbits, loop=loop, autoenv=autoenv)
     return issg
 
 
@@ -410,7 +453,7 @@ def compile_macro_sequence(keys, blocks):
 def read_instrument(nth, bs, smp):
     def asm_ident(x):
         return re.sub(r"\W|^(?=\d)", "_", x).lower()
-    
+
     assert bs.read(4) == b"INS2"
     endblock = bs.pos + bs.u4()
     assert bs.u2() >= 127  # format version
@@ -439,8 +482,8 @@ def read_instrument(nth, bs, smp):
             mac = read_ssg_macro(length, bs)
         elif feat == b"MA" and itype == 38:
             # other macro types are currently not supported
-            mac = read_macro_data(length, bs)
-        elif feat == b"NE":            
+            mac, _ = read_macro_data(length, bs)
+        elif feat == b"NE":
             # NES DPCM tag is present when the instrument
             # uses a PCM sample instead of ADPCM. Skip it
             assert bs.u1()==0, "sample map unsupported"
@@ -467,6 +510,7 @@ def read_instrument(nth, bs, smp):
     if itype == 6:
         mac.name = asm_ident("macro_%02x_%s"%(nth, name))
         mac.load_name = asm_ident("macro_%02x_load_func"%nth)
+        mac.loop_name = asm_ident("macro_%02x_loop"%nth)
         return mac
     else:
         ins.name = asm_ident("instr_%02x_%s"%(nth, name))
@@ -578,37 +622,44 @@ def asm_ssg_macro(mac, fd):
     prev = 0
     cur = mac.prog.index(255, 0)
     lines = []
+    # split macro into list of steps
     while cur != prev:
         line = mac.prog[prev:cur+1]
         lines.append(", ".join(["0x%02x"%x for x in line]))
         prev = cur+1
         cur = mac.prog.index(255,cur+1)
+    # there should be a load value for each line
+    assert len(lines) == len(mac.bits)
     # macro actions
     print("%s:" % mac.name, file=fd)
-    longest = max([len(x) for x in lines])
+    longest = max([len(x) for x in lines]) + len(", 0x..")
     step = 0
     print("        ;; macro load function", file=fd)
     print("        .dw     %s" % mac.load_name, file=fd)
     print("        ;; macro actions", file=fd)
-    for l in lines:
-        print("        .db     %s   ; tick %d"%(l.ljust(longest), step), file=fd)
+    for l, b in zip(lines, mac.bits):
+        fmtstep = ("%s, 0x%02x"%(l,b)).ljust(longest)
+        if step==mac.loop:
+            print("%s:" % mac.loop_name, file=fd)
+        print("        .db     %s   ; tick %d"%(fmtstep, step), file=fd)
         step += 1
     print("        .db     %s   ; end"%"0xff".ljust(longest), file=fd)
+    if mac.loop != 255:
+        print("        .dw     %s   ; loop"%mac.loop_name.ljust(longest), file=fd)
+    else:
+        print("        .dw     %s   ; no loop"%"0x0000".ljust(longest), file=fd)
     print("", file=fd)
     # load func
     asm_ssg_load_func(mac, fd)
 
-    
+
 def asm_ssg_load_func(mac, fd):
     def asm_ssg(reg):
         print("        ld      b, #0x%02x"%reg, file=fd)
         print("        ld      c, (hl)", file=fd)
         print("        call    ym2610_write_port_a", file=fd)
     def asm_cha(reg):
-        print("        ld      a, (state_ssg_channel)", file=fd)
-        print("        ld      b, a", file=fd)
-        print("        ld      c, (hl)", file=fd)
-        print("        call    ssg_mix_volume", file=fd)
+        print("        set     4, (ix)", file=fd)
     def offset(off):
         if off==1:
             print("        inc     hl", file=fd)
@@ -624,8 +675,21 @@ def asm_ssg_load_func(mac, fd):
     cha_map = {
         3: 0x08  # REG_SSG_A_VOLUME
     }
+
+    # the load function only take care of generic registers
+    # filter out the other registers in the macro (waveform, note)
+    gen_off = []
+    gen_keys = []
+    prev_off = 0
+    for o,k in zip(mac.offset, mac.keys):
+        if k in [0, 4]:
+            prev_off += 1
+            continue
+        gen_off.append(o+prev_off)
+        gen_keys.append(k)
+
     print("%s:" % mac.load_name, file=fd)
-    data = zip(range(len(mac.offset)), mac.offset, mac.keys)
+    data = zip(range(len(mac.offset)), gen_off, gen_keys)
     for i, o, k in data:
         if i != 0:
             o+=1

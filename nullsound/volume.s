@@ -24,9 +24,11 @@
         .include "ym2610.inc"
         .include "ports.inc"
         .include "timer.inc"
+        .include "struct-fx.inc"
 
-        ;; TODO replace hardcoded offset with struct include
-        .equ    PROPS_VOL_OFFSET, 21
+        ;; TODO remove bitmask hardcodes
+        .lclequ FM_BIT_LOAD_VOL,       3
+        .lclequ SSG_BIT_LOAD_VOL,      4
 
 
 ;;;
@@ -135,7 +137,7 @@ volume_reset_music_levels::
         ld      (state_volume_adpcm_a_master), a
         ;; reset channels level based on current music level
         call    volume_update_channels_levels
-        call    volume_update_ym2610
+        call    volume_update_stream_state
         pop     hl
         pop     de
         pop     bc
@@ -234,59 +236,52 @@ _fade_post_bit1:
 ;;; Update currently playing notes in the YM2610 to reflect the how
 ;;; the channels' output levels are currently configured in nullsound
 ;;; ------
-;;; [a, de, bc, hl modified]
-volume_update_ym2610:
+;;; [a, de, bc, hl, iy modified]
+volume_update_stream_state:
+        push    iy
         ;; d: FM + SSG channels in use
         ld      a, (state_ch_bits)
         ld      d, a
-        ;; save the current FM channel context
-        ld      a, (state_fm_channel)
-        push    af
-        ld      a, #0
-        ld      (state_fm_channel), a
-        ;; Loop over all the FM channels that need to be updated
-        ;; e: total number of FM channels to process
-        ld      e, #4
-_vol_fm_loop:
-        ;; channel used in the music?
-        bit     0, d
-        jr      z, _vol_fm_next
-        push    de
-        call    fm_ctx_set_current
-        call    fm_set_ops_level_for_instr
-        pop     de
-        ld      a, (state_fm_channel)
-_vol_fm_next:
-        inc     a
-        sra     d
-        dec     e
-        jr      nz, _vol_fm_loop
-        ;; restore the current FM channel context
-        pop     af
-        call    fm_ctx_set_current
 
-        ;; update SSG channels, no loop here, it's smaller that way
+        ;; Notify the FM pipeline
         bit     0, d
-        jr      z, _vol_ssg_b
-        ld      a, (state_mirrored_ssg_a+PROPS_VOL_OFFSET)
-        ld      c, a
-        ld      b, #0
-        call    ssg_mix_volume
-_vol_ssg_b:
+        jr      z, _vol_upd_post_fm1
+        ld      iy, #state_fm1
+        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+_vol_upd_post_fm1:
         bit     1, d
-        jr      z, _vol_ssg_c
-        ld      a, (state_mirrored_ssg_b+PROPS_VOL_OFFSET)
-        ld      c, a
-        ld      b, #1
-        call    ssg_mix_volume
-_vol_ssg_c:
+        jr      z, _vol_upd_post_fm2
+        ld      iy, #state_fm2
+        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+_vol_upd_post_fm2:
         bit     2, d
-        jr      z, _vol_post_ssg
-        ld      a, (state_mirrored_ssg_c+PROPS_VOL_OFFSET)
-        ld      c, a
-        ld      b, #2
-        call    ssg_mix_volume
-_vol_post_ssg:
+        jr      z, _vol_upd_post_fm3
+        ld      iy, #state_fm3
+        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+_vol_upd_post_fm3:
+        bit     3, d
+        jr      z, _vol_upd_post_fm4
+        ld      iy, #state_fm4
+        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+_vol_upd_post_fm4:
+
+        ;; Notify the SSG pipeline
+        bit     4, d
+        jr      z, _vol_upd_post_ssg_a
+        ld      iy, #state_mirrored_ssg_a
+        set     SSG_BIT_LOAD_VOL, PIPELINE(iy)
+_vol_upd_post_ssg_a:
+        bit     5, d
+        jr      z, _vol_upd_post_ssg_b
+        ld      iy, #state_mirrored_ssg_b
+        set     SSG_BIT_LOAD_VOL, PIPELINE(iy)
+_vol_upd_post_ssg_b:
+        bit     6, d
+        jr      z, _vol_upd_post_ssg_c
+        ld      iy, #state_mirrored_ssg_c
+        set     SSG_BIT_LOAD_VOL, PIPELINE(iy)
+_vol_upd_post_ssg_c:
+
 
         ;; d: ADPCM channels in use
         ld      a, (state_ch_bits+1)
@@ -332,6 +327,7 @@ _vol_adpcm_a_next:
         call    ym2610_write_port_a
 _vol_post_adpcm_b:
 
+        pop     iy
         ret
 
 
@@ -372,8 +368,8 @@ update_volume_state_tracker::
         call    volume_level_from_ramp
         ld      (state_adpcm_b_volume_attenuation), a
 
-        ;; update YM2610
-        call    volume_update_ym2610
+        ;; notify the stream tracker and the YM2610 of the update
+        call    volume_update_stream_state
 
 fade::
         ;; fade progression
@@ -408,7 +404,7 @@ stream_volume_down::
         ld      (state_volume_music_level), a
 _post_vol_down:
         call    volume_update_channels_levels
-        call    volume_update_ym2610
+        call    volume_update_stream_state
         pop     bc
         ret
 
@@ -425,7 +421,7 @@ stream_volume_up::
         ld      (state_volume_music_level), a
 _post_vol_up:
         call    volume_update_channels_levels
-        call    volume_update_ym2610
+        call    volume_update_stream_state
         pop     bc
         ret
 

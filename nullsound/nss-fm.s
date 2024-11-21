@@ -25,32 +25,53 @@
         .include "struct-fx.inc"
 
 
-        .equ    NSS_FM_INSTRUMENT_PROPS,        28
-        .equ    NSS_FM_NEXT_REGISTER,           4
-        .equ    NSS_FM_NEXT_REGISTER_GAP,       16
-        .equ    NSS_FM_END_OF_REGISTERS,        0xb3
-        .equ    INSTR_TL_OFFSET,                30
-        .equ    INSTR_FB_ALGO_OFFSET,           28
-        .equ    INSTR_ALGO_MASK,                7
-        .equ    L_R_MASK,                       0xc0
-        .equ    AMS_PMS_MASK,                   0x37
+        .lclequ FM_STATE_SIZE,(state_fm_end-state_fm)
 
-        .equ    FM_STATE_SIZE,(state_fm_end-state_fm)
-        .equ    FM_FX,(state_fm_fx-state_fm)
+        ;; FM constants
+        .lclequ NSS_FM_INSTRUMENT_PROPS,        28
+        .lclequ NSS_FM_NEXT_REGISTER,           4
+        .lclequ NSS_FM_NEXT_REGISTER_GAP,       16
+        .lclequ NSS_FM_END_OF_REGISTERS,        0xb3
+        .lclequ INSTR_TL_OFFSET,                30
+        .lclequ INSTR_FB_ALGO_OFFSET,           28
+        .lclequ INSTR_ALGO_MASK,                7
+        .lclequ L_R_MASK,                       0xc0
+        .lclequ AMS_PMS_MASK,                   0x37
+        .lclequ OP1_BIT, 1
+        .lclequ OP2_BIT, 4
+        .lclequ OP3_BIT, 2
+        .lclequ OP4_BIT, 8
 
-        .equ    NOTE_SEMITONE,(state_fm_note_semitone-state_fm)
-        .equ    NOTE_FNUM,(state_fm_note_fnum-state_fm)
-        .equ    NOTE_BLOCK,(state_fm_note_block-state_fm)
+        ;; getters for FM state
+        .lclequ NOTE,(state_fm_note_semitone-state_fm)
+        .lclequ NOTE_SEMITONE,(state_fm_note_semitone-state_fm)
+        .lclequ NOTE_POS16,(state_fm_note_pos16-state_fm)
+        .lclequ NOTE_FNUM,(state_fm_note_fnum-state_fm)
+        .lclequ NOTE_BLOCK,(state_fm_note_block-state_fm)
+        .lclequ INSTRUMENT, (state_fm_instrument-state_fm)
+        .lclequ OP1, (state_fm_op1_vol-state_fm)
+        .lclequ OP2, (state_fm_op2_vol-state_fm)
+        .lclequ OP3, (state_fm_op3_vol-state_fm)
+        .lclequ OP4, (state_fm_op4_vol-state_fm)
+        .lclequ OUT_OPS, (state_fm_out_ops-state_fm)
+        .lclequ OUT_OP1, (state_fm_out_op1-state_fm)
+        .lclequ VOL, (state_fm_vol-state_fm)
 
-        .equ    OP1_BIT, 1
-        .equ    OP2_BIT, 4
-        .equ    OP3_BIT, 2
-        .equ    OP4_BIT, 8
+        ;; pipeline state for FM channel
+        .lclequ STATE_PLAYING,      0x01
+        .lclequ STATE_EVAL_MACRO,   0x02
+        .lclequ STATE_LOAD_NOTE,    0x04
+        .lclequ STATE_LOAD_VOL,     0x08
+        .lclequ STATE_LOAD_REGS,    0x10
+        .lclequ STATE_LOAD_ALL,     0x1e
+        .lclequ STATE_CONFIG_VOL,   0x20
+        .lclequ BIT_PLAYING,        0
+        .lclequ BIT_EVAL_MACRO,     1
+        .lclequ BIT_LOAD_NOTE,      2
+        .lclequ BIT_LOAD_VOL,       3
+        .lclequ BIT_LOAD_REGS,      4
+        .lclequ BIT_CONFIG_VOL,     5
 
-        ;; this is to use IY as two IYH and IYL 8bits registers
-        .macro dec_iyl
-        .db     0xfd, 0x2d
-        .endm
 
         .area  DATA
 
@@ -71,64 +92,55 @@ state_fm_ym2610_channel::
 ;;; FM mirrored state
 state_fm:
 ;;; FM1
-state_fm_fx: .db     0             ; must be the first field on the FM state
-;;; FX: slide
-state_fm_slide:
-state_fm_slide_speed: .db       0  ; number of increments per tick
-state_fm_slide_depth: .db       0  ; distance in semitones
-state_fm_slide_inc16: .dw       0  ; 1/8 semitone increment * speed
-state_fm_slide_pos16: .dw       0  ; slide pos
-state_fm_slide_end:   .db       0  ; end note (octave/semitone)
-;;; FX: vibrato
-state_fm_vibrato:
-state_fm_vibrato_speed: .db     0  ; vibrato_speed
-state_fm_vibrato_depth: .db     0  ; vibrato_depth
-state_fm_vibrato_pos:   .db     0  ; vibrato_pos
-state_fm_vibrato_prev:  .dw     0  ; vibrato_prev
-state_fm_vibrato_next:  .dw     0  ; vibrato_next
+state_fm1:
+state_fm_pipeline:              .blkb   1       ; actions to run at every tick (load note, vol, other regs)
+state_fm_fx:                    .blkb   1       ; enabled FX for this channel
+;;; FX state trackers
+state_fm_fx_vol_slide:          .blkb   VOL_SLIDE_SIZE
+state_fm_fx_slide:              .blkb   SLIDE_SIZE
+state_fm_fx_vibrato:            .blkb   VIBRATO_SIZE
+;;; FM-specific state
 ;;; Note
 state_fm_note:
-state_fm_note_semitone: .db    0  ; note (octave+semitone)
-state_fm_note_fnum:     .dw    0  ; note base f-num
-state_fm_note_block:    .db    0  ; note block (multiplier)
+state_fm_instrument:            .blkb    1      ; instrument
+state_fm_note_semitone:         .blkb    1      ; NSS note (octave+semitone) to be played on the FM channel
+state_fm_note_pos16:            .blkb    2      ; channel's fixed-point note after the FX pipeline
+state_fm_note_fnum:             .blkb    2      ; channel's f-num after the FX pipeline
+state_fm_note_block:            .blkb    1      ; channel's FM block (multiplier) after the FX pipeline
+;; volume
+state_fm_vol:                   .blkb    1      ; configured note volume (attenuation)
+state_fm_op1_vol:               .blkb    1      ; configured volume for OP1
+state_fm_op2_vol:               .blkb    1      ; configured volume for OP2
+state_fm_op3_vol:               .blkb    1      ; configured volume for OP3
+state_fm_op4_vol:               .blkb    1      ; configured volume for OP4
+state_fm_out_ops:               .blkb    1      ; bitmask of output OPs based on the configured FM algorithm
+state_fm_out_op1:               .blkb    1      ; ym2610 volume for OP1 after the FX pipeline
+state_fm_out_op2:               .blkb    1      ; ym2610 volume for OP2 after the FX pipeline
+state_fm_out_op3:               .blkb    1      ; ym2610 volume for OP3 after the FX pipeline
+state_fm_out_op4:               .blkb    1      ; ym2610 volume for OP4 after the FX pipeline
+;;;
 state_fm_end:
 ;;; FM2
+state_fm2:
 .blkb   FM_STATE_SIZE
 ;;; FM3
+state_fm3:
 .blkb   FM_STATE_SIZE
 ;;; FM4
+state_fm4:
 .blkb   FM_STATE_SIZE
 
 
 ;;; detune per FM channel
+;;; TODO move to the state struct
 state_fm_detune::
         .db     0
         .db     0
         .db     0
         .db     0
 
-;;; current note volume per FM channel
-state_fm_vol::
-        .db     0
-        .db     0
-        .db     0
-        .db     0
-
-;;; bitfields for the output OPs based on the channel's configured algorithm
-state_fm_out_ops::
-        .db     0
-        .db     0
-        .db     0
-        .db     0
-
-;;; current instrument per FM channel
-state_fm_instr::
-        .db     0
-        .db     0
-        .db     0
-        .db     0
-
 ;;; current pan (and instrument's AMS PMS) per FM channel
+;;; TODO move to the state struct
 state_pan_ams_pms::
         .db     0
         .db     0
@@ -155,18 +167,26 @@ init_nss_fm_state_tracker::
         inc     de
         ;; zero state up to instr, which has a different init state
         ld      (hl), #0
-        ld      bc, #state_fm_instr-_state_fm_start
-        ldir
-        ;; init instr to a non-existing instr (0xff)
-        ld      (hl), #0xff
-        ld      bc, #4
+        ld      bc, #state_pan_ams_pms-_state_fm_start
         ldir
         ;; pan has L and R enabled by default (0xc0)
         ld      (hl), #0xc0
         ld      bc, #3
         ldir
+        ;; init instr to a non-existing instr (0xff)
+        ld      a, #0xff
+        ld      hl, #(state_fm+INSTRUMENT)
+        ld      bc, #FM_STATE_SIZE
+        add     hl, bc
+        ld      (hl), a
+        add     hl, bc
+        ld      (hl), a
+        add     hl, bc
+        ld      (hl), a
+        add     hl, bc
+        ld      (hl), a
         ;; global FM volume is initialized in the volume state tracker
-        ;; init ym2610 function pointer
+        ;; init YM2610 function pointer
         ld      a, #0xc3        ; jp 0x....
         ld      (ym2610_write_func), a
         call    fm_ctx_reset
@@ -189,6 +209,22 @@ fm_ctx_reset::
 fm_ctx_set_current::
         ;; set FM context
         ld      (state_fm_channel), a
+
+        ;; set FM struct pointer for context
+        ld      ix, #state_fm
+        push    bc
+        bit     0, a
+        jr      z, _fm_ctx_post_bit0
+        ld      bc, #FM_STATE_SIZE
+        add     ix, bc
+_fm_ctx_post_bit0:
+        bit     1, a
+        jr      z, _fm_ctx_post_bit1
+        ld      bc, #FM_STATE_SIZE*2
+        add     ix, bc
+_fm_ctx_post_bit1:
+        pop     bc
+
         ;; set YM2610 channel value for context
         cp      #2
         jp      c, _ctx_no_2
@@ -287,19 +323,6 @@ fm_ctx_4::
         ret
 
 
-;;; FM_INSTRUMENT_EXT
-;;; Configure the operators of an FM channel based on an instrument's data
-;;; ------
-;;; [ hl ]: FM channel
-;;; [hl+1]: instrument number
-fm_instrument_ext::
-        ;; set new current FM channel
-        ld      a, (hl)
-        call    fm_ctx_set_current
-        inc     hl
-        jp      fm_instrument
-
-
 ;;; output OPs based on the layout of each FM algorithm of the YM2610
 ;;;  7   6   5   4   3   2   1   0
 ;;; ___ ___ ___ ___ OP4 OP2 OP3 OP1
@@ -314,232 +337,353 @@ fm_out_ops_table:
         .db     0xf             ; algo 7: [1111] OP4, OP2, OP3, OP1
 
 
-;;; fm_set_out_ops_bitfield
 ;;; Configure the output OPs on an instrument's data
 ;;; ------
 ;;; hl: instrument address
+;;; modified: hl, bc
 fm_set_out_ops_bitfield::
+        push    iy
         push    hl
-
-        ;; de: OPs out address for channel
-        ld      hl, #state_fm_out_ops
-        ld      a, (state_fm_channel)
-        ld      c, a
-        ld      b, #0
-        add     hl, bc
-        ld      d, h
-        ld      e, l
-
-        ;; hl: address of instrument data's algo
-        pop     hl
-        ld      bc, #INSTR_FB_ALGO_OFFSET
-        add     hl, bc
+        ;; iy: address of instrument data
+        pop     iy
 
         ;; a: algo
-        ld      a, (hl)
+        ld      a, INSTR_FB_ALGO_OFFSET(iy)
         and     #INSTR_ALGO_MASK
 
-        ;; hl: bitfield address for algo
+        ;; hl: bitmask address for algo
         ld      hl, #fm_out_ops_table
         ld      c, a
         ld      b, #0
         add     hl, bc
 
-        ;; set OPs out info for current channel
+        ;; set out OPs bitmask for current channel
         ld      a, (hl)
-        ld      (de), a
+        ld      OUT_OPS(ix), a
+
+        pop     iy
+        ret
+
+
+;;; Update the current state's output level for all OPs based on an instrument
+;;; ------
+;;; ix: state for the current channel
+;;; hl: address of the instrument's data
+;;; [hl, iy modified]
+fm_set_ops_level::
+        push    hl
+        pop     iy
+
+        ;; set base OP levels from instruments
+        ld      a, INSTR_TL_OFFSET(iy)
+        ld      OP1(ix), a
+        ld      a, INSTR_TL_OFFSET+1(iy)
+        ld      OP2(ix), a
+        ld      a, INSTR_TL_OFFSET+2(iy)
+        ld      OP3(ix), a
+        ld      a, INSTR_TL_OFFSET+3(iy)
+        ld      OP4(ix), a
+
+        ld      a, INSTR_FB_ALGO_OFFSET(iy)
+        and     #INSTR_ALGO_MASK
+
+        ;; hl: bitmask address for algo
+        ld      hl, #fm_out_ops_table
+        ld      c, a
+        ld      b, #0
+        add     hl, bc
+
+        ;; set out OPs bitmask for current channel
+        ld      a, (hl)
+        ld      OUT_OPS(ix), a
 
         ret
 
 
-;;; fm_set_ops_level
-;;; Configure the operator levels for the current FM channel
-;;; based on an instrument's data
+;;; Compute fixed-point note position after FX-pipeline
 ;;; ------
-;;; hl: instrument address
-fm_set_ops_level::
-        push    hl
+;;; ix: state for the current channel
+compute_fm_fixed_point_note::
+        ;; hl: note from currently configured note (fixed point)
+        ld      a, #0
+        ld      l, a
+        ld      h, NOTE_SEMITONE(ix)
 
-        ;; bc: current channel
-        ld      a, (state_fm_channel)
-        ld      c, a
-        ld      b, #0
-
-        ;; clear pending volume change flag for current channel
-        ld      hl, #state_fm_vol
+        ;; bc: slide offset if the slide FX is enabled
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _fm_post_add_slide
+        ld      c, SLIDE_POS16(ix)
+        ld      b, SLIDE_POS16+1(ix)
         add     hl, bc
-        res     7, (hl)
-        ;; d: note volume for current channel
-        ld      d, (hl)
+_fm_post_add_slide::
 
-        ;; e: bitfields for the output OPs
-        ld      hl, #state_fm_out_ops
+        ;; bc vibrato offset if the vibrato FX is enabled
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _fm_post_add_vibrato
+        ld      c, VIBRATO_POS16(ix)
+        ld      b, VIBRATO_POS16+1(ix)
         add     hl, bc
-        ld      e, (hl)
+_fm_post_add_vibrato::
 
-        ;; b: OP1 start register in YM2610 for current channel
-        res     1, a
-        add     a, #REG_FM1_OP1_TOTAL_LEVEL
+        ;; update computed fixed-point note position
+        ld      NOTE_POS16(ix), l
+        ld      NOTE_POS16+1(ix), h
+        ret
+
+
+;;; Compute the YM2610's volume registers value from the OP's volumes
+;;; ------
+;;; modified: bc, de, hl
+compute_ym2610_fm_vol::
+        ;; a: note vol (attenuation) for current channel
+        ld      a, VOL(ix)
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _vol_post_clamp_up
+        ;; add slide down vol and clamp
+        add     VOL_SLIDE_POS16+1(ix)
+        bit     7, a
+        jr      z, _vol_post_clamp_up
+        ld      a, #127
+_vol_post_clamp_up:
+        ;; b: intermediate attenuation (note vol + vol slide)
         ld      b, a
 
-        ;; hl: ops total level (8bit add)
-        pop     hl              ; instrument address
-        ld      a, #INSTR_TL_OFFSET
+        ;; c: bitmask for the output OPs + sentinel bits for looping
+        ld      a, OUT_OPS(ix)
+        or      #0xF0           ; 4 bits => 4 total loads (1 load per OP).
+        ld      c, a
+
+        ;; hl: address of instrument's ops volumes
+        push    ix
+        pop     hl
+        ld      de, #OP1
+        add     hl, de
+
+        ;; de: address of computed volumes for ops register (8bit aligned add)
+        push    ix
+        pop     de
+        ld      a, #OUT_OP1
+        add     e
+        ld      e, a
+
+_c_ops_loop:
+        ;; a: OP level
+        ld      a, (hl)
+        inc     hl
+
+        ;; check whether OP is an output
+        bit     0, c
+        jr      z, _c_ops_result
+
+        ;; if so, subtract intermediate volume (attenuation)
+        add     b
+        bit     7, a
+        jr      z, _c_ops_post_clamp
+        ld      a, #127
+_c_ops_post_clamp:
+
+        ;; substract global volume attenuation
+        ;; NOTE: YM2610's FM output level ramp follows an exponential curve,
+        ;; so we implement this output level attenuation via a basic
+        ;; addition, clamped to 127 (max attenuation).
+        ld      b, a
+        ld      a, (state_fm_volume_attenuation)
+        add     b
+        bit     7, a
+        jr      z, _c_ops_post_global_clamp
+        ld      a, #127
+_c_ops_post_global_clamp:
+
+_c_ops_result:
+        ;; saved configured OP value
+        ld      (de), a
+        inc     de
+_c_ops_next:
+        srl     c
+        bit     4, c
+        jr      nz, _c_ops_loop
+
+        ret
+
+
+;;; Compute the YM2610's note registers value from state's fixed-point note
+;;; ------
+;;; modified: bc, de, hl
+compute_ym2610_fm_note::
+        ;; b: current note (integer part)
+        ld      b, NOTE_POS16+1(ix)
+
+        ;; d: octave and semitone from note
+        ld      hl, #note_to_octave_semitone
+        ld      a, l
+        add     b
+        ld      l, a
+        ld      d, (hl)
+
+        ;; c: block
+        ld      a, d
+        and     #0xf0
+        sra     a
+        ld      NOTE_BLOCK(ix), a
+
+        ;; a: current semitone
+        ld      a, d
+        and     #0xf
+        ;; hl: base f-num for current semitone (8bit-add)
+        ld      hl, #fm_note_f_num
+        sla     a
         add     a, l
         ld      l, a
         adc     a, h
         sub     l
         ld      h, a
-
-_ops_loop:
-        ;; check whether current OP is an output
-        bit     0, e
-        jr      z, _ops_no_out
-_ops_out:
-        ;; configure OP from instrument's TL faded with current volume
-        ;; current OP's total level per instrument
-        ld      a, (hl)
-        ;; mix with note volume and clamp
-        add     d
-        bit     7, a
-        jr      z, _ops_post_clamp
-        ld      a, #127
-_ops_post_clamp:
-        ;;  CHECK aren't we always below 128 here?
-        and     #0x7f
-        ;; last attenuation to match the configured FM output level
-        ;; NOTE: YM2610's FM output level ramp follows an exponential curve,
-        ;; so we implement this output level attenuation via a basic
-        ;; addition, clamped to 127 (max attenuation).
-        ld      c, a
-        ld      a, (state_fm_volume_attenuation)
-        add     c
-        bit     7, a
-        jr      z, _ops_post_level_clamp
-        ld      a, #127
-_ops_post_level_clamp:
-        ld      c, a
-        jr      _ops_set_and_next
-_ops_no_out:
-        ;; OP not an output, configure it from instrument TL only
+        ld      b, (hl)
+        inc     hl
         ld      c, (hl)
-_ops_set_and_next:
-        call    ym2610_write_func
-        ;; next OP in instrument data
-        inc     hl
-        ;; next OP in YM2610
-        ld      a, b
-        add     a, #NSS_FM_NEXT_REGISTER
-        ld      b, a
-        ;; shirt right to get next OP in bitfield (keep e6 bit clean)
-        sra     e
-        res     6, e
-        ld      a, e
+        ld      h, b
+        ld      l, c
+        push    hl              ; + f-num
+
+        ;; b: next semitone distance from current note
+        ;; TODO 8bit add or aligned add
+        ld      a, d
         and     #0xf
-        jr      nz, _ops_loop
-_ops_end_loop:
-        ret
-
-
-;;; fm_check_set_ops_level
-;;; Check whether we need to reconfigure operators levels for the current FM channel
-;;; ------
-;;; modified: bc, de, hl
-fm_check_set_ops_level:
-        ;; hl: volume setting for current channel
-        ld      hl, #state_fm_vol
-        ld      a, (state_fm_channel)
-        ld      c, a
-        ld      b, #0
-        add     hl, bc
-
-        ;; check pending volume change flag and update if necessary
-        bit     7, (hl)
-        jr      nz, fm_set_ops_level_for_instr
-        ret
-fm_set_ops_level_for_instr:
-        ;; hl: instrument for channel (8bit add)
-        ld      hl, #state_fm_instr
-        ld      a, (state_fm_channel)
-        add     a, l
+        ld      hl, #fm_semitone_distance
+        add     l
+        inc     a
         ld      l, a
-        ld      a, (hl)
+        ld      b, (hl)
+        ;; c: FM: intermediate frequency is positive
+        ld      c, #0
+        ;; e: intermediate note position (fractional part)
+        ld      e, NOTE_POS16(ix)
+        ;; de: current intermediate frequency f_dist
+        call    slide_intermediate_freq
 
-        ;; hl: instrument address in ROM
-        sla     a
-        ld      c, a
-        ;; ld      a, b
-        ld      b, #0
-        ld      hl, (state_stream_instruments)
-        add     hl, bc
-        ;; ld      b, a
-        ld      e, (hl)
-        inc     hl
-        ld      d, (hl)
-        inc     hl
-        push    de
-        pop     hl
+        pop     hl              ; - f-num
+        add     hl, de
+        ld      NOTE_FNUM(ix), l
+        ld      NOTE_FNUM+1(ix), h
 
-        jp      fm_set_ops_level
+        ret
 
 
-;;; update_fm_effects
+;;; run_fm_pipeline
 ;;; ------
-;;; For all FM channels:
-;;;  - update the state of all enabled effects
+;;; Run the entire FM pipeline once. for each FM channels:
+;;;  - update the state of all enabled FX
+;;;  - load specific parts of the state (note, vol...) into YM2610 registers
 ;;; Meant to run once per tick
-update_fm_effects::
+run_fm_pipeline::
         push    de
-        ;; TODO should we consider IX and IY scratch registers?
         push    iy
         push    ix
 
-        ;; effects expect the right FM channel context,
-        ;; so save the current channel context and loop
-        ;; it artificially before calling the macro
+        ;; we loop though every channel during the execution,
+        ;; so save the current channel context
         ld      a, (state_fm_channel)
         push    af
 
-        ;; update mirrored state of all FM channels
-
-        ld      de, #state_fm ; FM1 mirrored state
+        ;; update state of all FM channels, starting from FM1
         xor     a
-        call    fm_ctx_set_current ; fm ctx: fm1
-        ld      iy, #4
-_2_update_loop:
-        push    de              ; +state_mirrored
-        ;; hl: mirrored state
-        push    de              ; state_mirrored
-        pop     hl              ; state_mirrored
-
-        ;; configure
-        ld      a, (hl)
-_fm_chk_fx_vibrato:
-        bit     0, a
-        jr      z, _fm_chk_fx_slide
-        call    eval_fm_vibrato_step
-        jr      _fm_post_effects
-_fm_chk_fx_slide:
-        bit     1, a
-        jr      z, _fm_post_effects
-        call    eval_fm_slide_step
-_fm_post_effects:
-        ;; prepare to update the next channel
-        ;; de: next state_mirrored
-        pop     hl              ; -state_mirrored
-        ld      bc, #FM_STATE_SIZE
-        add     hl, bc
-        ld      d, h
-        ld      e, l
-        ;; next FM context
-        ld      a, (state_fm_channel)
-        inc     a
+_fm_update_loop:
         call    fm_ctx_set_current
 
-        dec_iyl
-        jp      nz, _2_update_loop
+        ;; bail out if the current channel is not in use
+        ld      a, PIPELINE(ix)
+        or      a, FX(ix)
+        cp      #0
+        jp      z, _end_fm_channel_pipeline
 
-        ;; restore the real fm channel context
+        ;; Pipeline action: evaluate one FX step for each enabled FX
+
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _fm_post_fx_vibrato
+        call    eval_fm_vibrato_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_fm_post_fx_vibrato:
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _fm_post_fx_slide
+        call    eval_fm_slide_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_fm_post_fx_slide:
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _fm_post_fx_vol_slide
+        call    eval_vol_slide_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_fm_post_fx_vol_slide:
+
+        ;; Pipeline action: make sure no load note takes place when not playing
+        bit     BIT_PLAYING, PIPELINE(ix)
+        jr      nz, _fm_post_check_playing
+        res     BIT_LOAD_NOTE, PIPELINE(ix)
+_fm_post_check_playing:
+
+        ;; Pipeline action: load volume registers when the volume state is modified
+        bit     BIT_LOAD_VOL, PIPELINE(ix)
+        jr      z, _post_load_fm_vol
+        res     BIT_LOAD_VOL, PIPELINE(ix)
+
+        call    compute_ym2610_fm_vol
+
+        ;; hl: OPs volume data
+        push    ix
+        pop     hl
+        ld      bc, #OUT_OP1
+        add     hl, bc
+
+        ;; b: OP1 start register in YM2610 for current channel
+        ld      a, (state_fm_channel)
+        res     1, a
+        add     #REG_FM1_OP1_TOTAL_LEVEL
+        ld      b, a
+
+        ;; load all OPs volumes
+        ld      d, #4
+fm_vol_load_loop:
+        ld      c, (hl)
+        call    ym2610_write_func
+        dec     d
+        jr      z, _post_load_fm_vol
+        inc     hl
+        ld      a, b
+        add     a, #NSS_FM_NEXT_REGISTER
+        ld      b, a
+        jr      fm_vol_load_loop
+_post_load_fm_vol:
+
+        ;; Pipeline action: load note register when the note state is modified
+        bit     BIT_LOAD_NOTE, PIPELINE(ix)
+        jr      z, _post_load_fm_note
+        res     BIT_LOAD_NOTE, PIPELINE(ix)
+
+        call    compute_fm_fixed_point_note
+        call    compute_ym2610_fm_note
+
+        ;; reload computed note
+        ld      l, NOTE_FNUM(ix)
+        ld      h, NOTE_FNUM+1(ix)
+        ld      c, NOTE_BLOCK(ix)
+        call    fm_set_fnum_registers
+
+        ;; start current FM channel (enable all OPs)
+        ld      a, (state_fm_ym2610_channel)
+        or      #0xf0
+        ld      c, a
+        ld      b, #REG_FM_KEY_ON_OFF_OPS
+        call    ym2610_write_port_a
+_post_load_fm_note:
+
+_end_fm_channel_pipeline:
+        ;; next context
+        ld      a, (state_fm_channel)
+        inc     a
+        cp      #4
+        jr      nc, _fm_end_pipeline
+        jp      _fm_update_loop
+
+_fm_end_pipeline:
+        ;; restore the real channel context
         pop     af
         call    fm_ctx_set_current
 
@@ -556,24 +700,15 @@ _fm_post_effects:
 ;;; ------
 ;;; [ hl ]: volume [0-127]
 fm_vol::
-        push    de
-
-        ;; de: volume for channel (8bit add)
-        ld      de, #state_fm_vol
-        ld      a, (state_fm_channel)
-        add     a, e
-        ld      e, a
-
         ;; a: volume (difference from max volume)
         ld      a, #127
         sub     (hl)
         inc     hl
 
         ;; register pending volume configuration for channel
-        set     7, a
-        ld      (de), a
+        ld      VOL(ix), a
+        set     BIT_LOAD_VOL, PIPELINE(ix)
 
-        pop     de
         ld      a, #1
         ret
 
@@ -591,23 +726,16 @@ fm_instrument::
         push    hl
         push    de
 
-        ;; hl: instrument for channel (8bit add)
-        push    af
-        ld      hl, #state_fm_instr
-        ld      a, (state_fm_channel)
-        add     a, l
-        ld      l, a
-        pop     af
-
         ;; if the current instrument for channel is not updated, bail out
-        ld      b, (hl)
+        ld      b, INSTRUMENT(ix)
         cp      b
         jp      z, _fm_instr_end
 
         ;; else recall new instrument for channel
-        ld      (hl), a
+        ld      INSTRUMENT(ix), a
 
         ;; stop current FM channel (disable all OPs)
+        ;; TODO move that to the pipeline?
         push    af
 
         ld      a, (state_fm_ym2610_channel)
@@ -635,10 +763,7 @@ fm_instrument::
         inc     hl
         push    de
         pop     hl
-
-        ;; save instrument address for helper funcs
-        push    hl
-        push    hl
+        push    hl              ; +instrument address
 
         ;; d: all FM properties
         ld      d, #NSS_FM_INSTRUMENT_PROPS
@@ -671,13 +796,11 @@ _fm_port_loop:
 _fm_end:
         ;; set the pan, AMS and PMS settings for this instrument
         call    fm_set_pan_ams_pms
-        ;; set the output OPs for this instrument
-        pop     hl
-        call    fm_set_out_ops_bitfield
-        ;; adjust real volume for channel based on instrument's
-        ;; config and current note volume
-        pop     hl
+        ;; set the state's output OPs from this instrument
+        pop     hl              ; -instrument address
         call    fm_set_ops_level
+
+        set     BIT_LOAD_VOL, PIPELINE(ix)
 
 _fm_instr_end:
         pop     de
@@ -685,6 +808,7 @@ _fm_instr_end:
         pop     bc
         ld      a, #1
         ret
+
 
 ;;; fm_set_pan_ams_pms
 ;;; set the AMS and PMS settings for this instrument,
@@ -822,120 +946,19 @@ _detune_positive:
         ret
 
 
-;;; Configure the FM channel based on a macro's data
-;;; ------
-;;; IN:
-;;;   de: start offset in FM state data
-;;; OUT
-;;;   de: start offset for the current channel
-;;; de, c modified
-fm_state_for_channel:
-        ;; c: current channel
-        ld      a, (state_fm_channel)
-        ld      c, a
-        ;; a: offset in bytes for current mirrored state
-        xor     a
-        bit     1, c
-        jp      z, _fm_post_double
-        ld      a, #FM_STATE_SIZE
-        add     a
-_fm_post_double:
-        bit     0, c
-        jp      z, _fm_post_plus
-        add     #FM_STATE_SIZE
-_fm_post_plus:
-        ;; de + a (8bit add)
-        add     a, e
-        ld      e, a
-        ret
-
-
-;;; Update the vibrato for the current FM channel and update the YM2610
+;;; Update the vibrato for the current FM channel
 ;;; ------
 ;;; hl: mirrored state of the current fm channel
 eval_fm_vibrato_step::
         push    hl
         push    de
         push    bc
-        push    ix
-
-        ;; ix: state fx for current channel
-        push    hl
-        pop     ix
 
         call    vibrato_eval_step
 
-        ;; ;; configure FM channel with new frequency
-        ld      c, NOTE_BLOCK(ix)
-        call    fm_set_fnum_registers
-
-        pop     ix
         pop     bc
         pop     de
         pop     hl
-
-        ret
-
-
-;;; Setup FM vibrato: position and increments
-;;; ------
-;;; ix : ssg state for channel
-;;;      the note semitone must be already configured
-fm_vibrato_setup_increments::
-        push    bc
-        push    hl
-        push    de
-
-        ld      hl, #fm_semitone_distance
-        ld      a, NOTE_SEMITONE(ix)
-        and     #0xf
-        add     l
-        ld      l, a
-        call    vibrato_setup_increments
-
-        ;; de: vibrato prev increment, fixed point (negate)
-        xor     a
-        sub     e
-        ld      e, a
-        sbc     a, a
-        sub     d
-        ld      d, a
-        ld      VIBRATO_PREV(ix), e
-        ld      VIBRATO_PREV+1(ix), d
-        ;; hl: vibrato next increment, fixed point
-        ld      VIBRATO_NEXT(ix), l
-        ld      VIBRATO_NEXT+1(ix), h
-
-        pop     de
-        pop     hl
-        pop     bc
-        ret
-
-
-;;; Setup slide effect for the current FM channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-;;;    a  : slide direction: 0 == up, 1 == down
-fm_slide_common::
-        push    bc
-        push    de
-
-        ;; de: FX for channel
-        ld      b, a
-        ld      de, #state_fm_fx
-        call    fm_state_for_channel
-        ld      a, b
-
-        ;; ix: FM state for channel
-        push    de
-        pop     ix
-
-        call    slide_init
-        ld      e, NOTE_SEMITONE(ix)
-        call    slide_setup_increments
-
-        pop     de
-        pop     bc
 
         ret
 
@@ -943,88 +966,29 @@ fm_slide_common::
 ;;; Update the slide for the current channel
 ;;; Slide moves up or down by 1/8 of semitone increments * slide depth.
 ;;; ------
-;;; hl: state for the current channel
+;;; IN:
+;;;   hl: state for the current channel
+;;; OUT:
+;;;   bc:
 eval_fm_slide_step::
         push    hl
         push    de
         push    bc
-        push    ix
+        ;; push    ix
 
         ;; update internal state for the next slide step
         call    eval_slide_step
 
         ;; effect still in progress?
         cp      a, #0
-        jp      nz, _fm_slide_add_intermediate
-        ;; otherwise reset note state and load into YM2610
-        ld      NOTE_SEMITONE(ix), d
-        ;; a: semitone
-        ld      a, d
-        and     #0xf
-        ;; hl: base f-num for current semitone (8bit-add)
-        ld      hl, #fm_note_f_num
-        sla     a
-        add     a, l
-        ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
-        ;; restore detune at the end of the effect if there was any
-        call    fm_get_f_num
-        ld      NOTE_FNUM(ix), l
-        ld      NOTE_FNUM+1(ix), h
-        ld      a, d
-        jr      _fm_slide_load_fnum
+        jp      nz, _end_fm_slide_load_fnum2
+        ;; otherwise set the end note as the new base note
+        ld      a, NOTE(ix)
+        add     d
+        ld      NOTE(ix), a
+_end_fm_slide_load_fnum2:
 
-_fm_slide_add_intermediate:
-        ;; a: current semitone
-        ld      a, SLIDE_POS16+1(ix)
-        and     #0xf
-        ;; b: next semitone distance from current note
-        ld      hl, #fm_semitone_distance
-        add     l
-        inc     a
-        ld      l, a
-        ld      b, (hl)
-        ;; c: FM: intermediate frequency is positive
-        ld      c, #0
-        ;; e: intermediate semitone position (fractional part)
-        ld      e, SLIDE_POS16(ix)
-        ;; de: current intermediate frequency f_dist
-        call    slide_intermediate_freq
-
-        ;; a: semitone
-        ld      a, SLIDE_POS16+1(ix)
-        and     #0xf
-        ;; hl: base f-num for current semitone (8bit-add)
-        ld      hl, #fm_note_f_num
-        sla     a
-        add     a, l
-        ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
-        ld      b, (hl)
-        inc     hl
-        ld      c, (hl)
-        ld      h, b
-        ld      l, c
-
-        ;; load new frequency into the YM2610
-        ;; hl: semitone frequency + f_dist
-        add     hl, de
-
-        ;; a: block
-        ld      a, SLIDE_POS16+1(ix)
-
-_fm_slide_load_fnum:
-        and     #0xf0
-        sra     a
-        ld      NOTE_BLOCK(ix), a
-        ld      c, a
-        call    fm_set_fnum_registers
-
-        pop     ix
+        ;; pop     ix
         pop     bc
         pop     de
         pop     hl
@@ -1032,34 +996,15 @@ _fm_slide_load_fnum:
         ret
 
 
-;;; FM_NOTE_ON_EXT
-;;; Emit a specific note (frequency) on an FM channel
-;;; ------
-;;; [ hl ]: FM channel
-;;; [hl+1]: note (0xAB: A=octave B=semitone)
-fm_note_on_ext::
-        ;; set new current FM channel
-        ld      a, (hl)
-        call    fm_ctx_set_current
-        inc     hl
-        jp      fm_note_on
-
-
 ;;; FM_NOTE_ON
 ;;; Emit a specific note (frequency) on an FM channel
 ;;; ------
 ;;; [ hl ]: note (0xAB: A=octave B=semitone)
 fm_note_on::
-        push    de
         push    bc
 
-        ;; iy: note for channel
-        ld      de, #state_fm
-        call    fm_state_for_channel
-        push    de
-        pop     ix
-
         ;; stop current FM channel (disable all OPs)
+        ;; CHECK: do it in the pipeline instead?
         ld      a, (state_fm_ym2610_channel)
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
@@ -1069,62 +1014,13 @@ fm_note_on::
         ;; b: note (0xAB: A=octave B=semitone)
         ld      b, (hl)
         inc     hl
-        push    hl
         ld      NOTE_SEMITONE(ix), b
 
-        ;; check active effects
-        ld      a, (ix)
-_fm_on_check_vibrato:
-        bit     0, a
-        jr      z, _fm_on_check_slide
-        ;; reconfigure increments for current semitone
-        call    fm_vibrato_setup_increments
-_fm_on_check_slide:
-        bit     1, a
-        jr      z, _fm_on_post_fx
-        ;; reconfigure increments for current semitone
-        ld      e, NOTE_SEMITONE(ix)
-        call    slide_setup_increments
-_fm_on_post_fx:
+        ld      a, PIPELINE(ix)
+        or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
+        ld      PIPELINE(ix), a
 
-        ;; d: block (octave)
-        ld      a, b
-        and     #0xf0
-        sra     a
-        ld      d, a
-        ld      NOTE_BLOCK(ix), d
-
-        ;; a: semitone
-        ld      a, b
-        and     #0xf
-        ;; hl: semitone -> f_num address
-        ld      hl, #fm_note_f_num
-        sla     a
-        ld      b, #0
-        ld      c, a
-        add     hl, bc
-        ;; hl: fnum address -> (de)tuned F-num
-        call    fm_get_f_num
-        ld      NOTE_FNUM(ix), l
-        ld      NOTE_FNUM+1(ix), h
-        ;; c: block
-        ld      c, d
-        call    fm_set_fnum_registers
-
-        ;; update volume if a change was requested prior
-        ;; to playing this new note.
-        call    fm_check_set_ops_level
-
-        ;; start current FM channel (enable all OPs)
-        ld      a, (state_fm_ym2610_channel)
-        or      #0xf0
-        ld      c, a
-        ld      b, #REG_FM_KEY_ON_OFF_OPS
-        call    ym2610_write_port_a
-
-        pop     hl
         pop     bc
-        pop     de
 
         ;; fm context will now target the next channel
         ld      a, (state_fm_channel)
@@ -1135,33 +1031,22 @@ _fm_on_post_fx:
         ret
 
 
-;;; FM_NOTE_OFF_EXT
-;;; Release the note on an FM channel. The sound will decay according
-;;; to the current configuration of the FM channel's operators.
-;;; ------
-;;; [ hl ]: FM channel
-fm_note_off_ext::
-        ;; set new current FM channel
-        ld      a, (hl)
-        call    fm_ctx_set_current
-        inc     hl
-        jp      fm_note_off
-
-
 ;;; FM_NOTE_OFF
 ;;; Release the note on an FM channel. The sound will decay according
 ;;; to the current configuration of the FM channel's operators.
 ;;; ------
 fm_note_off::
         push    bc
-
-        ;; stop all OP of FM channel
+        ;; stop all OPs of FM channel
         ld      a, (state_fm_ym2610_channel)
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
         call    ym2610_write_port_a
-
         pop     bc
+
+        ;; disable playback in the pipeline, any note lod_note bit
+        ;; will get cleaned during the next pipeline run
+        res     BIT_PLAYING, PIPELINE(ix)
 
         ;; FM context will now target the next channel
         ld      a, (state_fm_channel)
@@ -1172,80 +1057,15 @@ fm_note_off::
         ret
 
 
-;;; OPX_SET_COMMON
-;;; Set an operator's property for the current FM channel
-;;; ------
-;;; [ b  ]: register of the OP's property
-;;; [ c  ]: value
-
-opx_set_common::
-        push    bc
-        push    de
-
-        ;; e: fm channel
-        ld      a, (state_fm_channel)
-        ld      e, a
-
-        ;; adjust register based on channel
-        bit     0, e
-        jp      z, _no_adj
-        inc     b
-_no_adj:
-        call    ym2610_write_func
-
-        pop     de
-        pop     bc
-        ret
-
-
-;;; Scale the volume of an operator based on the global FM
-;;; attenuation, if this OP is configured as an output OP
-;;; for the current channel
-;;; ------
-;;; b: OP bit
-;;; c: volume
-;;; [a, bc, de modified]
-opx_level_scale::
-        ;; a: output OPs for the current FM channel
-        ld      de, #state_fm_out_ops
-        ld      a, (state_fm_channel)
-        add     e
-        ld      e, a
-        ld      a, (de)
-
-        ;; if the volume updates an output OP, scale it to
-        ;; match the currently configured FM output level
-        and     b
-        jr      z, _post_opx_level_scale
-        ;; NOTE: YM2610's FM output level ramp follows an exponential curve,
-        ;; so we implement this output level attenuation via a basic
-        ;; addition, clamped to 127 (max attenuation).
-        ld      a, (state_fm_volume_attenuation)
-        add     c
-        bit     7, a
-        jr      z, _opx_post_level_clamp
-        ld      a, #127
-_opx_post_level_clamp:
-        ld      c, a
-_post_opx_level_scale:
-        ret
-
-
 ;;; OP1_LVL
 ;;; Set the volume of OP1 for the current FM channel
 ;;; ------
 ;;; [ hl ]: volume level
 op1_lvl::
-        push    bc
-        push    de
-        ld      c, (hl)
+        ld      a, (hl)
         inc     hl
-        ld      b, #OP1_BIT
-        call    opx_level_scale
-        ld      b, #REG_FM1_OP1_TOTAL_LEVEL
-        call    opx_set_common
-        pop     de
-        pop     bc
+        ld      OP1(ix), a
+        set     BIT_LOAD_VOL, PIPELINE(ix)
         ld      a, #1
         ret
 
@@ -1255,16 +1075,10 @@ op1_lvl::
 ;;; ------
 ;;; [ hl ]: volume level
 op2_lvl::
-        push    bc
-        push    de
-        ld      c, (hl)
+        ld      a, (hl)
         inc     hl
-        ld      b, #OP2_BIT
-        call    opx_level_scale
-        ld      b, #REG_FM1_OP2_TOTAL_LEVEL
-        call    opx_set_common
-        pop     de
-        pop     bc
+        ld      OP2(ix), a
+        set     BIT_LOAD_VOL, PIPELINE(ix)
         ld      a, #1
         ret
 
@@ -1274,16 +1088,10 @@ op2_lvl::
 ;;; ------
 ;;; [ hl ]: volume level
 op3_lvl::
-        push    bc
-        push    de
-        ld      c, (hl)
+        ld      a, (hl)
         inc     hl
-        ld      b, #OP3_BIT
-        call    opx_level_scale
-        ld      b, #REG_FM1_OP3_TOTAL_LEVEL
-        call    opx_set_common
-        pop     de
-        pop     bc
+        ld      OP3(ix), a
+        set     BIT_LOAD_VOL, PIPELINE(ix)
         ld      a, #1
         ret
 
@@ -1293,16 +1101,10 @@ op3_lvl::
 ;;; ------
 ;;; [ hl ]: volume level
 op4_lvl::
-        push    bc
-        push    de
-        ld      c, (hl)
+        ld      a, (hl)
         inc     hl
-        ld      b, #OP4_BIT
-        call    opx_level_scale
-        ld      b, #REG_FM1_OP4_TOTAL_LEVEL
-        call    opx_set_common
-        pop     de
-        pop     bc
+        ld      OP4(ix), a
+        set     BIT_LOAD_VOL, PIPELINE(ix)
         ld      a, #1
         ret
 
@@ -1312,92 +1114,60 @@ op4_lvl::
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 fm_vibrato::
-        push    bc
-        push    de
-
-        ;; de: fx for channel
-        ld      de, #state_fm_fx
-        call    fm_state_for_channel
-        push    de
-        pop     ix
+        ;; TODO: move this part to common vibrato_init
 
         ;; hl == 0 means disable vibrato
         ld      a, (hl)
         cp      #0
         jr      nz, _setup_fm_vibrato
-        push    hl              ; NSS stream pos
 
         ;; disable vibrato fx
-        ld      a, FM_FX(ix)
-        res     0, a
-        ld      FM_FX(ix), a
-        ;; reconfigure the original note into the YM2610
-        ld      l, NOTE_FNUM(ix)
-        ld      h, NOTE_FNUM+1(ix)
-        ld      c, NOTE_BLOCK(ix)
-        call    fm_set_fnum_registers
+        res     BIT_FX_VIBRATO, FX(ix)
 
-        pop     hl              ; NSS stream pos
+        ;; reload configured note at the next pipeline run
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+
+        inc     hl
         jr      _post_fm_vibrato_setup
 
 _setup_fm_vibrato:
-        ;; vibrato fx on
-        ld      a, FM_FX(ix)
-        ;; if vibrato was in use, keep the current vibrato pos
-        bit     0, a
-        jp      nz, _post_fm_vibrato_pos
-        ;; reset vibrato sine pos
-        ld      VIBRATO_POS(ix), #0
-_post_fm_vibrato_pos:
-        set     0, a
-        ld      FM_FX(ix), a
-
-        ;; speed
-        ld      a, (hl)
-        rra
-        rra
-        rra
-        rra
-        and     #0xf
-        ld      VIBRATO_SPEED(ix), a
-
-        ;; depth, clamped to [1..16]
-        ld      a, (hl)
-        and     #0xf
-        inc     a
-        ld      VIBRATO_DEPTH(ix), a
-
-        ;; increments for last configured note
-        call    fm_vibrato_setup_increments
+        call    vibrato_init
 
 _post_fm_vibrato_setup:
-        inc     hl
-
-        pop     de
-        pop     bc
 
         ld      a, #1
         ret
 
 
-;;; FM_SLIDE_UP
+;;; FM_NOTE_SLIDE_UP
 ;;; Enable slide up effect for the current FM channel
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
-fm_slide_up::
+fm_note_slide_up::
         ld      a, #0
-        call    fm_slide_common
+        call    slide_init
         ld      a, #1
         ret
 
 
-;;; FM_SLIDE_DOWN
+;;; FM_NOTE_SLIDE_DOWN
 ;;; Enable slide down effect for the current FM channel
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
-fm_slide_down::
+fm_note_slide_down::
         ld      a, #1
-        call    fm_slide_common
+        call    slide_init
+        ld      a, #1
+        ret
+
+
+;;; FM_PITCH_SLIDE_DOWN
+;;; Enable slide down effect for the current FM channel
+;;; ------
+;;; [ hl ]: speed (8bits)
+fm_pitch_slide_down::
+        ld      a, #1
+        call    slide_pitch_init
         ld      a, #1
         ret
 
@@ -1439,5 +1209,25 @@ fm_pan::
 
         pop     bc
         pop     de
+        ld      a, #1
+        ret
+
+
+;;; FM_VOL_SLIDE_DOWN
+;;; Enable volume slide down effect for the current FM channel
+;;; ------
+;;; [ hl ]: speed (4bits)
+fm_vol_slide_down::
+        push    bc
+        push    de
+
+        ld      bc, #0x40
+        ld      d, #127
+        ld      a, #1
+        call    vol_slide_init
+
+        pop     de
+        pop     bc
+
         ld      a, #1
         ret

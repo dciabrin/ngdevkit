@@ -27,19 +27,20 @@
         .area  CODE
 
 
-;;; Enable slide effect for the current SSG channel
+;;; Enable slide effect for the current channel
 ;;; ------
-;;;   ix  : FM state for channel
+;;;   ix  : state for channel
 ;;;    a  : slide direction: 0 == up, 1 == down
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 slide_init::
+        push    bc
+        push    de
+
         ;; b: slide direction (from a)
         ld      b, a
 
-        ;; slide fx on
-        ld      a, FX(ix)
-        set     1, a
-        ld      FX(ix), a
+        ;; enable slide FX
+        set     BIT_FX_SLIDE, FX(ix)
 
         ;; a: speed
         ld      a, (hl)
@@ -48,6 +49,7 @@ slide_init::
         rra
         rra
         and     #0xf
+
         ;; de: inc16 = speed / 8
         ld      d, a
         ld      e, #0
@@ -85,67 +87,86 @@ _post_depth_negate:
 
         inc     hl
 
+        ;; init semitone position, fixed point representation
+        ld      a, #0
+        ld      SLIDE_POS16(ix), a
+        ld      SLIDE_POS16+1(ix), a
+
+        ;; save target depth
+        ld      a, SLIDE_DEPTH(ix)
+        ld      SLIDE_END(ix), a
+
+        pop     de
+        pop     bc
+
         ret
 
 
-;;; Setup the end semitone for the currently configured slide
+;;; Enable slide effect for the current channel
 ;;; ------
-;;; ix : state for channel
-;;;  e : semitone to configure increments from
-slide_setup_increments::
+;;;   ix  : state for channel
+;;;    a  : slide direction: 0 == up, 1 == down
+;;; [ hl ]: speed (4bits) and depth (4bits)
+slide_pitch_init::
         push    bc
         push    de
 
-        ;; init semitone position, fixed point representation
-        ld      SLIDE_POS16+1(ix), e
-        ld      a, #0
-        ld      SLIDE_POS16(ix), a
-
-        ;; d: depth, negative if slide goes down
-        ld      d, SLIDE_DEPTH(ix)
-
-        ;; c: note adjust. slide up: 4, slide down: -4
-        ld      c, #4
-        bit     7, d
-        jr      z, _post_inc_adjust
-        ld      c, #-4
-_post_inc_adjust:
-
-        ;; b: current octave
-        ld      a, SLIDE_POS16+1(ix)
-        and     #0xf0
+        ;; b: slide direction (from a)
         ld      b, a
 
-        ;; e: target octave
-        ld      a, SLIDE_POS16+1(ix)
-        add     d
-        and     #0xf0
+        ;; enable slide FX
+        set     BIT_FX_SLIDE, FX(ix)
+
+        ;; a: speed
+        ld      a, (hl)
+
+        ;; de: inc16 = speed / 32
+        ld      d, a
+        ld      e, #0
+        srl     d
+        rr      e
+        srl     d
+        rr      e
+        srl     d
+        rr      e
+        srl     d
+        rr      e
+        srl     d
+        rr      e
+        ;; down: negate inc16
+        bit     0, b
+        jr      z, _post_inc16_negate2
+        ld      a, #0
+        sub     e
         ld      e, a
-
-        ;; if current and target octave differ, skip missing steps in the depth
-        ld      a, b
-        cp      e
-        jr      z, _post_depth_adjust
-        ld      a, d
-        add     c               ; slide up: 4, slide down: -4
+        ld      a, #0
+        sbc     d
         ld      d, a
-_post_depth_adjust:
+_post_inc16_negate2:
+        ld      SLIDE_INC16(ix), e
+        ld      SLIDE_INC16+1(ix), d
 
-        ;; a: current octave/note
-        ld      a, SLIDE_POS16+1(ix)
+        ;; depth
+        ld      a, #127
+        ;; down: negate depth
+        ;; we also need to go one seminote below, to account for the
+        ;; fractional parts of the slide.
+        bit     0, b
+        jr      z, _post_depth_negate2
+        neg
+        dec     a
+_post_depth_negate2:
+        ld      SLIDE_DEPTH(ix), a
 
-        ;; d: target octave/note
-        add     d
-        ld      d, a
+        inc     hl
 
-        ;; when target note is a missing step, adjust to the next note
-        and     #0xf
-        cp      #12
-        ld      a, d
-        jr      c, _post_target_note
-        add     c             ; slide up: 4, slide down: -4
-_post_target_note:
-        ;; save target octave/note
+        ;; init semitone position, fixed point representation
+        ld      a, #0
+        ld      SLIDE_POS16(ix), a
+        ld      SLIDE_POS16+1(ix), a
+
+        ;; save target depth
+        ld      a, SLIDE_DEPTH(ix)
         ld      SLIDE_END(ix), a
 
         pop     de
@@ -211,20 +232,17 @@ _post_sign_chk:
         ret
 
 
-;;; Increment current fixed point position in the semitone table and
-;;; stop effects when the target position is reached
+;;; Increment current fixed point displacement and
+;;; stop effects when the target displacement is reached
 ;;; ------
 ;;; IN:
 ;;;   ix : state for channel
 ;;;    c : slide direction: 0 == up, 1 == down
 ;;; OUT:
 ;;;    a : whether effect is finished (0: finished, 1: still running)
-;;;    d : when effect is finished, target semitone
+;;;    d : when effect is finished, target displacement
+;;; de modified
 eval_slide_step:
-        ;; ix: state for the current channel
-        push    hl
-        pop     ix
-
         ;; c: 0 slide up, 1 slide down
         ld      a, SLIDE_INC16+1(ix)
         rlc     a
@@ -234,7 +252,7 @@ eval_slide_step:
         ;; INC16 increment is 1/8 semitone (0x0020) * depth
         ;; negative for slide down
 
-        ;; add/sub increment to the current semitone POS16
+        ;; add/sub increment to the current semitone displacement POS16
         ;; e: fractional part
         ld      a, SLIDE_INC16(ix)
         add     SLIDE_POS16(ix)
@@ -243,23 +261,8 @@ eval_slide_step:
         ;; d: integer part
         ld      a, SLIDE_INC16+1(ix)
         adc     SLIDE_POS16+1(ix)
+        ld      SLIDE_POS16+1(ix), a
         ld      d, a
-        ;; do we need to skip missing steps in the note table
-        and     #0xf
-        cp      #0xc
-        jr      c, _post_skip
-        ld      a, d
-        ;; slide direction
-        bit     0, c
-        jr      z, _slide_dist_up
-        add     #-4
-        ld      d, a
-        jr      _post_skip
-_slide_dist_up:
-        add     #4
-        ld      d, a
-_post_skip:
-        ld      SLIDE_POS16+1(ix), d
 
         ;; have we reached the end of the slide?
         ;; slide up:   continue if cur < end
@@ -276,31 +279,18 @@ _slide_cp:
         jr      c, _slide_intermediate
 
         ;; slide is finished, stop effect
-        ld      (ix), #0
+        res     BIT_FX_SLIDE, FX(ix)
 
-        ;; d: clamp the last slide pos to the target semitone
+        ;; d: clamp the last slide pos to the target displacement
         ld      d, SLIDE_END(ix)
 
         ;; for slide down, we finish one note below the real target to play
-        ;; all ticks with fractional parts. Adjust the end note back if needed
+        ;; all ticks with fractional parts. Adjust the end displacement back if needed
         bit     0, c
         jr      z, _post_adjust
-        ld      a, d
-        and     #0xf
-        cp      #11
-        jr      c, _neg_inc_adjust
-        ;; adjust to next note (after the missing steps in the note table)
-        ld      a, d
-        add     #5
-        ld      d, a
-        jr      _post_adjust
-_neg_inc_adjust:
-        ;; adjust to next note
-        ld      a, d
-        inc     a
-        ld      d, a
+        inc     d
 _post_adjust:
-        ;; effect is finished, new semitone in d
+        ;; effect is finished, new displacement in d
         ld      a, #0
         ret
 

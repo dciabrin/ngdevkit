@@ -32,6 +32,8 @@ VERBOSE = False
 def error(s):
     sys.exit("error: " + s)
 
+def warn(s):
+    print("WARNING: %s"%s, file=sys.stderr)
 
 def dbg(s):
     if VERBOSE:
@@ -68,6 +70,11 @@ def is_empty(r):
     return r.note==-1 and r.ins==-1 and r.vol==-1 and all([f==-1 for f,v in r.fx])
 
 
+def to_fm_note(furnace_note):
+    # we count octave from C-0 (furnace starts from C--5)
+    fm_note = furnace_note - 5*12
+    return fm_note
+
 def to_nss_note(furnace_note):
     octave = (furnace_note // 12) - 5
     note = furnace_note % 12
@@ -86,6 +93,11 @@ def make_ssg_note(furnace_note):
     nss_note = (octave << 4) + note
     return s_note(nss_note)
 
+def to_ssg_note(furnace_note):
+    # we count octave from C-0 (furnace starts from C--5)
+    fm_note = furnace_note - 5*12
+    return fm_note
+
 
 def dbg_row(r, cols):
     semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
@@ -98,21 +110,21 @@ def dbg_row(r, cols):
         semitone=r.note%12
         notestr = "%s%s"%(semitones[semitone].ljust(2,"-"), octave)
 
-    insstr = "%02x"%r.ins if r.ins != -1 else ".."
-    volstr = "%02x"%r.ins if r.vol != -1 else ".."
+    insstr = "%02X"%r.ins if r.ins != -1 else ".."
+    volstr = "%02X"%r.vol if r.vol != -1 else ".."
 
     fxstr=""
     for f,v in r.fx[:cols]:
-        sf = "%02x" % f if f!=-1 else ".."
-        sv = "%02x" % v if v!=-1 else ".."
+        sf = "%02X" % f if f!=-1 else ".."
+        sv = "%02X" % v if v!=-1 else ".."
         fxstr += " %s%s" % (sf, sv)
-    print("%s %s %s%s"%(notestr,insstr,volstr,fxstr))
+    return "%s %s %s%s"%(notestr,insstr,volstr,fxstr)
 
     
 def dbg_pattern(p, m):
     cols = m.fxcolumns[p.channel]
     for r in p.rows:
-        dbg_row(r, cols)
+        print(dbg_row(r, cols))
 
         
 
@@ -256,11 +268,15 @@ def register_nss_ops():
         ("s_slide_d", ["speed_depth"]),
         # 0x30
         ("fm_vibrato", ["speed_depth"]),
-        ("fm_slide_u", ["speed_depth"]),
-        ("fm_slide_d", ["speed_depth"]),
+        ("fm_note_slide_u", ["speed_depth"]),
+        ("fm_note_slide_d", ["speed_depth"]),
         ("b_vol"   , ["volume"]),
         ("a_vol"   , ["volume"]),
         ("fm_pan"  , ["pan_mask"]),
+        ("fm_vol_slide_d", ["speed"]),
+        ("s_vol_slide_d", ["speed"]),
+        # 0x40
+        ("fm_pitch_slide_d", ["speed"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -328,19 +344,34 @@ def convert_fm_row(row, channel):
                 opcodes.append(fm_pitch((fxval-0x80)//3))
             elif fx == 0xe1:  # slide up
                 assert fxval != -1
-                opcodes.append(fm_slide_u(fxval))
+                opcodes.append(fm_note_slide_u(fxval))
             elif fx == 0xe2:  # slide down
                 assert fxval != -1
-                opcodes.append(fm_slide_d(fxval))
+                opcodes.append(fm_note_slide_d(fxval))
+            elif fx == 0x0a:  # volume slide down
+                # fxval == -1 means disable vibrato
+                fxval = max(fxval, 0)
+                opcodes.append(fm_vol_slide_d(fxval))
+            elif fx == 0x02:  # pitch slide down
+                # fxval == -1 means disable vibrato
+                fxval = max(fxval, 0)
+                opcodes.append(fm_pitch_slide_d(fxval))
 
         # note
         if row.note != -1:
             if row.note == 180:
                 opcodes.append(fm_stop())
             else:
-                opcodes.append(fm_note(to_nss_note(row.note)))
+                opcodes.append(fm_note(to_fm_note(row.note)))
     return jmp_to_order, opcodes
 
+def s_vol_clamp(row):
+    # TODO report proper location
+    newvol = max(0, min(15, row.vol))
+    if row.vol != newvol:
+        rowstr = dbg_row(row, 2)
+        warn("clamped volume to %02X for SSG row: %s"%(newvol, rowstr))
+    return newvol
 
 def convert_s_row(row, channel):
     ctx_t = {4: s_ctx_1, 5: s_ctx_2, 6: s_ctx_3}
@@ -354,6 +385,8 @@ def convert_s_row(row, channel):
             opcodes.append(s_macro(row.ins))
         # volume
         if row.vol != -1:
+            # bound checks w.r.t SSG limit
+            row.vol = s_vol_clamp(row)
             opcodes.append(s_vol(row.vol))
         # effects
         for fx, fxval in row.fx:
@@ -377,13 +410,17 @@ def convert_s_row(row, channel):
             elif fx == 0xe2:  # slide down
                 assert fxval != -1
                 opcodes.append(s_slide_d(fxval))
+            elif fx == 0x0a:  # volume slide down
+                # fxval == -1 means disable vibrato
+                fxval = max(fxval, 0)
+                opcodes.append(s_vol_slide_d(fxval))
 
         # note
         if row.note != -1:
             if row.note == 180:
                 opcodes.append(s_stop())
             else:
-                opcodes.append(make_ssg_note(row.note))
+                opcodes.append(s_note(to_ssg_note(row.note)))
     return jmp_to_order, opcodes
 
 
@@ -888,8 +925,8 @@ def simulate_ssg_autoenv(nss, ins):
         elif type(op) == s_note:
             autoenv=s_autoenv[s_ctx]
             if autoenv:
-                o=(op.note>>4)&0xf
-                n=op.note&0xf
+                o = (op.note // 12) + 1
+                n = op.note % 12
                 notefreq = int(freqs[o-1][n])
                 num, den = autoenv
                 period = ((125000//notefreq)*den//num)//16

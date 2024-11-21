@@ -26,36 +26,41 @@
 
         .area  CODE
 
+        .equ    VIBRATO_PRECALC_SIZE, 64
 
-;;; Setup prev and next increments for vibrato
+
+
+;;; Enable vibrato effect for the current channel
 ;;; ------
-;;; IN:
-;;;   ix  : fm state for channel
-;;;         the note semitone must be already configured
-;;; [ hl ]: prev semitone distance
-;;; [hl+1]: next semitone distance
-;;; OUT:
-;;;    de : prev increment (fixed-point)
-;;;    hl : prev increment (fixed-point)
-;;; bc, de, hl modified
-vibrato_setup_increments::
-        ;; bc: prev distance from current note
-        push    hl              ; +(prev distance)
-        ld      b, (hl)
-        ;; de: output prev increment, scaled by depth (a)
-        ld      a, VIBRATO_DEPTH(ix)
-        call    vibrato_scale_increment
-        ld      e, l
-        ld      d, h
+;;;   ix  : state for channel
+;;; [ hl ]: speed (4bits) and depth (4bits)
+vibrato_init::
 
-        ;; bc: next distance from current note
-        pop     hl              ; (prev distance)
+        ;; if vibrato was in use, keep the current vibrato pos
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jp      nz, _post_vibrato_pos
+        ;; reset vibrato sine pos
+        ld      VIBRATO_POS(ix), #0
+_post_vibrato_pos:
+        ;; enable vibrato FX
+        set      BIT_FX_VIBRATO, FX(ix)
+
+        ;; speed
+        ld      a, (hl)
+        rra
+        rra
+        rra
+        rra
+        and     #0xf
+        ld      VIBRATO_SPEED(ix), a
+
+        ;; depth, clamped to [1..16]
+        ld      a, (hl)
+        and     #0xf
+        inc     a
+        ld      VIBRATO_DEPTH(ix), a
+
         inc     hl
-        ld      b, (hl)
-        ;; hl: output next increment, scaled by depth (a)
-        ld      a, VIBRATO_DEPTH(ix)
-        call    vibrato_scale_increment
-
         ret
 
 
@@ -109,79 +114,100 @@ _post_bit1:
 
 
 ;;; Update the vibrato for the current channel
-;;; Vibrato oscillates the current note's frequency between the previous
-;;; and the next semitones of the current note, and follows a sine wave.
+;;; Vibrato oscillates the current fixed-point note's between the previous
+;;; and the next semitones [-1.0..+1.0], and follows a sine wave.
 ;;; This function update the frequency by one step among the 64 steps
 ;;; defined in the sine wave.
 ;;; ------
 ;;; IN:
 ;;;   ix: mirrored state of the current fm channel
-;;; OUT:
-;;;   hl: new note for step (FM: f-num, SSG: period)
 ;;; bc, de, hl modified
 vibrato_eval_step::
         ;; e: next vibrato pos
         ld      a, VIBRATO_POS(ix)
         add     a, VIBRATO_SPEED(ix)
-        and     #63
-        ld      e, a
+        and     #(VIBRATO_PRECALC_SIZE-1)
         ld      VIBRATO_POS(ix), a
-
+        ;; e: offset for sine precalc
+        sla     a
+        ld      e, a
         ;; hl: pos in sine precalc
         ld      hl, #sine
         ld      a, l
         add     e
         ld      l, a
 
-        ;; a: sine precalc (a2a1a0)
-        ld      a, (hl)
+        ;; bc: displacement from sine precalc
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
 
-        ;; bc: increment for next or previous semitone based on
-        ;; precalc's sign (a3)
-        bit     3, a
-        jr      z, _prev_semitone
-        ld      c, VIBRATO_NEXT(ix)
-        ld      b, VIBRATO_NEXT+1(ix)
-        jr      _post_increment
-_prev_semitone:
-        ld      c, VIBRATO_PREV(ix)
-        ld      b, VIBRATO_PREV+1(ix)
-_post_increment:
+        ;; hl: displacement = precalc * depth scaling
+_v_mul:
+        ld      a, #0
+        ld      l, a            ; precalc's 4 LSB
+        ld      h, a            ; precalc's 4 MSB
+        ld      e, a            ; precalc's 9th bit
+        ld      d, a            ; precalc's sign
 
-        ;; scale increment (with scale precalc)
+        ;; d: precalc sign
+        sla     b
+        rl      d
+        srl     b
 
-        ;; multiply increment by the precalc factor (0..7)
-        ld      h, b
-        ld      l, c
-        add     hl, hl
-        ld      d, h
-        ld      e, l
-        add     hl, hl
-        bit     2, a
-        jr      nz, _post_mul_a2
-        ld      h, #0
-        ld      l, h
-_post_mul_a2:
-        bit     1, a
-        jr      z, _post_mul_a1
-        add     hl, de
-_post_mul_a1:
-        bit     0, a
-        jr      z, _post_mul_a0
+        ;; a effect depth clamped to [1..16] (5 bits)
+        ld      a, VIBRATO_DEPTH(ix)
+        ;; TODO move shifts in the vibrato setup, and store bounds
+        ;; as [0..15], to avoid shifts at every tick (FM and SSG)
+        sla     a
+        sla     a
+        sla     a
+        sla     a
+        jr      nc, _v_post_bit4
         add     hl, bc
-_post_mul_a0:
-        ;; hl is now bc * magnitude(a), keep the integral part only
-        ;; and extend sign to 16bits
-        ld      a, h
-        ld      l, a
-        add     a
-        sbc     a
-        ld      h, a
+_v_post_bit4:
+        add     hl, hl
+        add     a, a
+        jr      nc, _v_post_bit3
+        add     hl, bc
+_v_post_bit3:
+        add     hl, hl
+        add     a, a
+        jr      nc, _v_post_bit2
+        add     hl, bc
+_v_post_bit2:
+        add     hl, hl
+        add     a, a
+        jr      nc, _v_post_bit1
+        add     hl, bc
+_v_post_bit1:
+        ;; this 16bit shift might overflow now if the precalc is one full
+        ;; note displacement (0x1000) and depth is full (0x10). Recall
+        ;; the potential overflow bit in e
+        add     hl, hl
+        rl      e
+        add     a, a
+        jr      nc, _v_post_bit0
+        add     hl, bc
+_v_post_bit0:
 
-        ;; de: current note freq
-        ld      e, NOTE_OFFSET(ix)
-        ld      d, NOTE_OFFSET+1(ix)
-        ;; hl: new note
-        add     hl, de
+        ;; after scaling, h holds the floating part of the displacement
+        ;; and e holds the 9th bit of the displacement
+        ld      l, h
+        ld      h, e
+
+        ;; negate the position based on the precalc's sign
+        bit     0, d
+        jr      z, _v_post_sign
+        xor     a
+        sub     l
+        ld      l, a
+        sbc     a, a
+        sub     h
+        ld      h, a
+_v_post_sign:
+
+        ld      VIBRATO_POS16(ix), l
+        ld      VIBRATO_POS16+1(ix), h
 
         ret

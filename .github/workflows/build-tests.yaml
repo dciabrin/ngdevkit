@@ -87,7 +87,9 @@ jobs:
         run: ./.github/scripts/build.sh
 
       - name: Install dependencies for ngdevkit-examples
-        run: brew install pyyaml ngdevkit-gngeo imagemagick sox glew sdl2 sdl2_image
+        run: |
+          brew install ngdevkit-gngeo imagemagick sox glew sdl2 sdl2_image
+          $(brew --prefix python)/libexec/bin/pip install pyyaml --break-system-packages
 
       - name: Test by compiling ngdevkit-examples
         run: ./.github/scripts/test.sh
