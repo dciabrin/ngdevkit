@@ -328,8 +328,9 @@ adpcm_a_off::
         push    bc
         push    de
 
-        ;; d: ADPCM-A channel
+        ;; d: ADPCM-A channel (1..6)
         ld      a, (state_adpcm_a_channel)
+        inc     a
         ld      d, a
 
         ;; a: bit channel + stop bit
