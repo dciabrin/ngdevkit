@@ -424,7 +424,7 @@ def read_ssg_macro(length, bs):
     realblocks=blocks
     blocks=deepcopy(realblocks)
     keys = sorted(list(blocks.keys()))
-    seq, offset = compile_macro_sequence(keys, blocks)
+    seq, offset = compile_macro_sequence(keys, blocks, mergedbits)
     prog = []
     prog.extend(seq)
     prog.append(255)
@@ -432,21 +432,33 @@ def read_ssg_macro(length, bs):
     return issg
 
 
-def compile_macro_sequence(keys, blocks):
-    seq = []
+def compile_macro_sequence(keys, blocks, loadbits):
+    # offset for load function
     offset = [v if i==0 else keys[i]-keys[i-1]-1 for i,v in enumerate(keys)]
-    step = [-1]
-    while step:
-        step = []
-        for k,o in zip(keys, offset):
-            if not blocks[k]:
-                continue
-            v = blocks[k].pop(0)
-            o2 = k if not step else o
-            p = [o2, v]
-            step.extend(p)
-        if step:
-            seq.extend(step+[255])
+
+    # macro data: pad all blocks sizes
+    longest_block = max([len(b) for b in blocks.values()])
+    sentinel = 1024
+    for k in blocks.keys():
+        blocks[k].extend([sentinel]*(longest_block-len(blocks[k])))
+    zipped = list(zip(*[blocks[k] for k in keys]))
+
+    dbg("MACRO %s %s"%(keys, zipped))
+    seq = []
+    for steps in zipped:
+        dbg("STEP  %s %s"%(keys, steps))
+        off = 0
+        for i, o in enumerate(keys):
+            value = steps[i]
+            dbg("[%02d] k:%d, i:%d v:%d"%(off, o, i, value))
+            if value != sentinel:
+                  macro_offset = o - off
+                  dbg("    -> %d: %d"%(macro_offset, value))
+                  seq.extend([macro_offset, value])
+                  off = o+1
+        seq.append(255)
+    dbg("RESULT %s"%seq)
+
     return seq, offset
 
 
