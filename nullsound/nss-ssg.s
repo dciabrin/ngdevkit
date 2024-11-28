@@ -35,6 +35,7 @@
         .lclequ PROPS_OFFSET,(state_mirrored_ssg_props-state_mirrored_ssg)
         .lclequ ENVELOPE_OFFSET,(state_mirrored_ssg_envelope-state_mirrored_ssg)
         .lclequ WAVEFORM_OFFSET,(state_mirrored_ssg_waveform-state_mirrored_ssg)
+        .lclequ ARPEGGIO,(state_ssg_arpeggio-state_mirrored_ssg)
         .lclequ MACRO_DATA,(state_ssg_macro_data-state_mirrored_ssg)
         .lclequ MACRO_POS,(state_ssg_macro_pos-state_mirrored_ssg)
         .lclequ MACRO_LOAD,(state_ssg_macro_load-state_mirrored_ssg)
@@ -103,7 +104,8 @@ state_mirrored_ssg_envelope:    .blkb   1       ; envelope shape
                                 .blkb   1       ; vol envelope coarse
 state_ssg_reg_vol:              .blkb   1       ; mode+volume
 state_mirrored_ssg_waveform:    .blkb   1       ; noise+tone (shifted per channel)
-state_ssg_macro_data:           .blkb   2       ; adress of the start of the macro program
+state_ssg_arpeggio:             .blkb   1       ; arpeggio (semitone shift)
+state_ssg_macro_data:           .blkb   2       ; address of the start of the macro program
 state_ssg_macro_pos:            .blkb   2       ; address of the current position in the macro program
 state_ssg_macro_load:           .blkb   2       ; function to load the SSG registers modified by the macro program
 state_ssg_vol:                  .blkb   1       ; note volume (attenuation)
@@ -404,6 +406,11 @@ compute_ssg_fixed_point_note::
         ld      l, a
         ld      h, NOTE(ix)
 
+        ;; h: current note + arpeggio shift
+        ld      a, ARPEGGIO(ix)
+        add     h
+        ld      h, a
+
         ld      a, FX(ix)
 
         ;; bc: add vibrato offset if the vibrato FX is enabled
@@ -579,6 +586,11 @@ ssg_ctx_3::
 ;;; [ hl ]: macro number
 ssg_macro::
         push    de
+
+        ;; init current state prior to loading new macro
+        ;; to clean up any unused macro state
+        ld      a, #0
+        ld      ARPEGGIO(ix), a
 
         ;; a: macro
         ld      a, (hl)

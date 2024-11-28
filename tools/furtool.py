@@ -355,6 +355,7 @@ def read_ssg_macro(length, bs):
     code_offset = {"vol": 3,
                    "wave": 4,
                    "env": 0,
+                   "arp": 5,
                    # "num": 1,
                    # "den": 2
                    }
@@ -363,6 +364,7 @@ def read_ssg_macro(length, bs):
                      "wave": 1<<3, # BIT_LOAD_WAVEFORM
                      "env": 1<<5, # BIT_LOAD_REGS
                      "noiseFreq": 1<<5, # BIT_LOAD_REGS
+                     "arp": 1<<2, # BIT_LOAD_NOTE
                      }
 
     autoenv=False
@@ -687,6 +689,9 @@ def asm_ssg_load_func(mac, fd):
     cha_map = {
         3: 0x08  # REG_SSG_A_VOLUME
     }
+    other_keys = [
+        5  # arpeggio - LOAD_REG
+    ]
 
     # the load function only take care of generic registers
     # filter out the other registers in the macro (waveform, note)
@@ -710,6 +715,8 @@ def asm_ssg_load_func(mac, fd):
             asm_ssg(ssg_map[k])
         elif k in cha_map:
             asm_cha(cha_map[k])
+        elif k in other_keys:
+            pass
         else:
             error("no ASM for SSG property: %d"%k)
     print("        ret", file=fd)
