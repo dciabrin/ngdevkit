@@ -132,3 +132,15 @@ row_speed::
         ld      (state_timer_ticks_per_row), a
         ld      a, #1
         ret
+
+
+;;; ROW_GROOVE
+;;; number of ticks to wait before processing the next row in the streams
+;;; ------
+;;; [hl]: ticks
+row_groove::
+        ld      a, (hl)
+        inc     hl
+        ld      (state_timer_ticks_per_row), a
+        ld      a, #1
+        ret

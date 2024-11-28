@@ -458,7 +458,7 @@ nss_opcodes:
         .nss_op nss_ret
         .nss_op nss_nop
         .nss_op row_speed
-        .nss_op adpcm_a_on_ext
+        .nss_op row_groove
         .nss_op adpcm_a_off_ext
         .nss_op adpcm_b_instrument
         .nss_op adpcm_b_note_on
