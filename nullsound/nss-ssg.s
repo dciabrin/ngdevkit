@@ -90,6 +90,7 @@ state_mirrored_ssg_a:
 state_ssg_pipeline:             .blkb   1       ; actions to run at every tick (eval macro, load note, vol, other regs)
 state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
 ;;; FX state trackers
+state_ssg_trigger:              .blkb   TRIGGER_SIZE
 state_ssg_fx_vol_slide:         .blkb   VOL_SLIDE_SIZE
 state_ssg_fx_slide:             .blkb   SLIDE_SIZE
 state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
@@ -124,6 +125,12 @@ state_ssg_volume_attenuation::       .blkb   1
 _state_ssg_end:
 
         .area  CODE
+
+
+;;; context: channel action functions for SSG
+state_ssg_action_funcs:
+        .dw     ssg_configure_note_on
+        .dw     ssg_configure_vol
 
 
 ;;;  Reset SSG playback state.
@@ -270,6 +277,11 @@ _ssg_pipeline_post_macro::
 
         ;; Pipeline action: evaluate one FX step for each enabled FX
 
+        bit     BIT_FX_TRIGGER, FX(ix)
+        jr      z, _ssg_post_fx_trigger
+        ld      hl, #state_ssg_action_funcs
+        call    eval_trigger_step
+_ssg_post_fx_trigger:
         bit     BIT_FX_VIBRATO, FX(ix)
         jr      z, _ssg_post_fx_vibrato
         call    eval_ssg_vibrato_step
@@ -731,32 +743,32 @@ ssg_note_off::
 ;;; ------
 ;;; [ hl ]: volume level
 ssg_vol::
-        ;; a: volume
+        ;; a: attenuation (15-volume)
         ld      a, (hl)
         inc     hl
-
-        ;; (de): substracted mix volume (15-a)
         sub     a, #15
         neg
-        ld      VOL(ix), a
 
-        ;; reload configured vol at the next pipeline run
-        set     BIT_LOAD_VOL, PIPELINE(ix)
+        ;; delay load via the trigger FX?
+        bit     BIT_TRIGGER_ACTION_DELAY, TRIGGER_ACTION(ix)
+        jr      z, _ssg_vol_immediate
+        ld      TRIGGER_VOL(ix), a
+        set     BIT_TRIGGER_LOAD_VOL, TRIGGER_ACTION(ix)
+        jr      _ssg_vol_end
+
+_ssg_vol_immediate:
+        ;; else load vol immediately
+        call    ssg_configure_vol
+
+_ssg_vol_end:
 
         ld      a, #1
         ret
 
-
-;;; SSG_NOTE_ON
-;;; Emit a specific note (frequency) on a SSG channel
+;;; Configure state for new note and trigger a load in the pipeline
 ;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
-ssg_note_on::
-        ;; b: note (0xAB: A=octave B=semitone)
-        ld      a, (hl)
+ssg_configure_note_on:
         ld      NOTE(ix), a
-        ld      b, a
-        inc     hl
 
         ;; init macro position
         ld      a, MACRO_DATA(ix)
@@ -769,6 +781,41 @@ ssg_note_on::
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
 
+        ret
+
+
+;;; Configure state for new volume and trigger a load in the pipeline
+;;; ------
+ssg_configure_vol:
+        ld      VOL(ix), a
+
+        ;; reload configured vol at the next pipeline run
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+
+        ret
+
+
+;;; SSG_NOTE_ON
+;;; Emit a specific note (frequency) on a SSG channel
+;;; ------
+;;; [ hl ]: note (0xAB: A=octave B=semitone)
+ssg_note_on::
+        ;; a: note (0xAB: A=octave B=semitone)
+        ld      a, (hl)
+        inc     hl
+
+        ;; delay load via the trigger FX?
+        bit     BIT_TRIGGER_ACTION_DELAY, TRIGGER_ACTION(ix)
+        jr      z, _ssg_note_on_immediate
+        ld      TRIGGER_NOTE(ix), a
+        set     BIT_TRIGGER_LOAD_NOTE, TRIGGER_ACTION(ix)
+        jr      _ssg_note_on_end
+
+_ssg_note_on_immediate:
+        ;; else load note immediately
+        call    ssg_configure_note_on
+
+_ssg_note_on_end:
         ;; ssg context will now target the next channel
         ld      a, (state_ssg_channel)
         inc     a
@@ -871,6 +918,18 @@ ssg_vol_slide_down::
 
         pop     de
         pop     bc
+
+        ld      a, #1
+        ret
+
+
+;;; SSG_DELAY
+;;; Enable delayed trigger for the next note and volume
+;;; (note and volume and played after a number of ticks)
+;;; ------
+;;; [ hl ]: delay
+ssg_delay::
+        call    trigger_delay_init
 
         ld      a, #1
         ret

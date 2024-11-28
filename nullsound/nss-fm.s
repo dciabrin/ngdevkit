@@ -96,6 +96,7 @@ state_fm1:
 state_fm_pipeline:              .blkb   1       ; actions to run at every tick (load note, vol, other regs)
 state_fm_fx:                    .blkb   1       ; enabled FX for this channel
 ;;; FX state trackers
+state_fm_trigger:               .blkb   TRIGGER_SIZE
 state_fm_fx_vol_slide:          .blkb   VOL_SLIDE_SIZE
 state_fm_fx_slide:              .blkb   SLIDE_SIZE
 state_fm_fx_vibrato:            .blkb   VIBRATO_SIZE
@@ -154,6 +155,12 @@ _state_fm_end:
 
 
         .area  CODE
+
+
+;;; context: channel action functions for FM
+state_fm_action_funcs:
+        .dw     fm_configure_note_on
+        .dw     fm_configure_vol
 
 
 ;;;  Reset FM playback state.
@@ -597,6 +604,11 @@ _fm_update_loop:
 
         ;; Pipeline action: evaluate one FX step for each enabled FX
 
+        bit     BIT_FX_TRIGGER, FX(ix)
+        jr      z, _fm_post_fx_trigger
+        ld      hl, #state_fm_action_funcs
+        call    eval_trigger_step
+_fm_post_fx_trigger:
         bit     BIT_FX_VIBRATO, FX(ix)
         jr      z, _fm_post_fx_vibrato
         call    eval_fm_vibrato_step
@@ -705,10 +717,18 @@ fm_vol::
         sub     (hl)
         inc     hl
 
-        ;; register pending volume configuration for channel
-        ld      VOL(ix), a
-        set     BIT_LOAD_VOL, PIPELINE(ix)
+        ;; delay load via the trigger FX?
+        bit     BIT_TRIGGER_ACTION_DELAY, TRIGGER_ACTION(ix)
+        jr      z, _fm_vol_immediate
+        ld      TRIGGER_VOL(ix), a
+        set     BIT_TRIGGER_LOAD_VOL, TRIGGER_ACTION(ix)
+        jr      _fm_vol_end
 
+_fm_vol_immediate:
+        ;; else load vol immediately
+        call    fm_configure_vol
+
+_fm_vol_end:
         ld      a, #1
         ret
 
@@ -996,25 +1016,20 @@ _end_fm_slide_load_fnum2:
         ret
 
 
-;;; FM_NOTE_ON
-;;; Emit a specific note (frequency) on an FM channel
+;;; Configure state for new note and trigger a load in the pipeline
 ;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
-fm_note_on::
+fm_configure_note_on:
         push    bc
+
+        ld      NOTE(ix), a
 
         ;; stop current FM channel (disable all OPs)
         ;; CHECK: do it in the pipeline instead?
+
         ld      a, (state_fm_ym2610_channel)
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
         call    ym2610_write_port_a
-
-        ;; record note, block and freq to FM state
-        ;; b: note (0xAB: A=octave B=semitone)
-        ld      b, (hl)
-        inc     hl
-        ld      NOTE_SEMITONE(ix), b
 
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
@@ -1022,6 +1037,42 @@ fm_note_on::
 
         pop     bc
 
+        ret
+
+
+;;; Configure state for new volume and trigger a load in the pipeline
+;;; ------
+fm_configure_vol:
+        ld      VOL(ix), a
+
+        ;; reload configured vol at the next pipeline run
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+
+        ret
+
+
+;;; FM_NOTE_ON
+;;; Emit a specific note (frequency) on an FM channel
+;;; ------
+;;; [ hl ]: note (0xAB: A=octave B=semitone)
+fm_note_on::
+        ;; a: note (0xAB: A=octave B=semitone)
+        ld      a, (hl)
+        inc     hl
+
+        ;; delay load via the trigger FX?
+        bit     BIT_TRIGGER_ACTION_DELAY, TRIGGER_ACTION(ix)
+        jr      z, _fm_note_on_immediate
+        ld      TRIGGER_NOTE(ix), a
+        set     BIT_TRIGGER_LOAD_NOTE, TRIGGER_ACTION(ix)
+        jr      _fm_note_on_end
+
+_fm_note_on_immediate:
+        ;; else load note immediately
+        ld      NOTE_SEMITONE(ix), a
+        call    fm_configure_note_on
+
+_fm_note_on_end:
         ;; fm context will now target the next channel
         ld      a, (state_fm_channel)
         inc     a
@@ -1228,6 +1279,18 @@ fm_vol_slide_down::
 
         pop     de
         pop     bc
+
+        ld      a, #1
+        ret
+
+
+;;; FM_DELAY
+;;; Enable delayed trigger for the next note and volume
+;;; (note and volume and played after a number of ticks)
+;;; ------
+;;; [ hl ]: delay
+fm_delay::
+        call    trigger_delay_init
 
         ld      a, #1
         ret

@@ -505,6 +505,8 @@ nss_opcodes:
         .nss_op fm_vol_slide_down
         .nss_op ssg_vol_slide_down
         .nss_op fm_pitch_slide_down
+        .nss_op ssg_delay
+        .nss_op fm_delay
 
 
 

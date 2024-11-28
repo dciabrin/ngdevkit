@@ -277,6 +277,8 @@ def register_nss_ops():
         ("s_vol_slide_d", ["speed"]),
         # 0x40
         ("fm_pitch_slide_d", ["speed"]),
+        ("s_delay" , ["delay"]),
+        ("fm_delay", ["delay"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -309,10 +311,12 @@ def convert_fm_row(row, channel):
                 pan_l = 0x80 if (fxval & 0xf0) else 0
                 pan_r = 0x40 if (fxval & 0x0f) else 0
                 opcodes.append(fm_pan(pan_l|pan_r))
-            if fx == 0x80:  # old pan
+            elif fx == 0x80:  # old pan
                 pan_l = 0x80 if fxval in [0x00, 0x80] else 0
                 pan_r = 0x40 if fxval in [0x80, 0xff] else 0
                 opcodes.append(fm_pan(pan_l|pan_r))
+            elif fx == 0xed:  # note delay
+                opcodes.append(fm_delay(fxval))
         # instrument
         if row.ins != -1:
             opcodes.append(fm_instr(row.ins))
@@ -380,6 +384,10 @@ def convert_s_row(row, channel):
     if not is_empty(row):
         # context
         opcodes.append(ctx_t[channel]())
+        # pre note/vol effects
+        for fx, fxval in row.fx:
+            if fx == 0xed:  # note delay
+                opcodes.append(s_delay(fxval))
         # instrument
         if row.ins != -1:
             opcodes.append(s_macro(row.ins))
