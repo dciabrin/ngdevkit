@@ -99,6 +99,10 @@ def to_ssg_note(furnace_note):
     return fm_note
 
 
+#
+# Debugging functions
+#
+
 def dbg_row(r, cols):
     semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
     if r.note == -1:
@@ -127,6 +131,12 @@ def dbg_pattern(p, m):
         print(dbg_row(r, cols))
 
         
+unknown_fx = {}
+def add_unknown_fx(channel, fx):
+    global unknown_fx
+    s = unknown_fx.get(channel, set())
+    s.add("%02x"%fx)
+    unknown_fx[channel] = s
 
 #
 # Furnace parsers
@@ -325,6 +335,8 @@ def convert_fm_row(row, channel):
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
                 pass
+            elif fx in [0x08, 0x80, 0xed]: # pre-instrument FX
+                pass
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
             elif fx == 0x0d:  # Jump to next order
@@ -361,6 +373,8 @@ def convert_fm_row(row, channel):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(fm_pitch_slide_d(fxval))
+            else:
+                add_unknown_fx('FM', fx)
 
         # note
         if row.note != -1:
@@ -401,6 +415,8 @@ def convert_s_row(row, channel):
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
                 pass
+            elif fx in [0xed]: # pre-instrument FX
+                pass
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
             elif fx == 0x0d:  # Jump to next order
@@ -423,6 +439,8 @@ def convert_s_row(row, channel):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(s_vol_slide_d(fxval))
+            else:
+                add_unknown_fx('SSG', fx)
 
         # note
         if row.note != -1:
@@ -454,6 +472,8 @@ def convert_a_row(row, channel):
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
                 pass
+            elif fx in [0xed]: # pre-instrument FX
+                pass
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
             elif fx == 0x0d:  # Jump to next order
@@ -462,6 +482,9 @@ def convert_a_row(row, channel):
                 jmp_to_order = 257
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            else:
+                add_unknown_fx('ADPCM-A', fx)
+
         # note
         if row.note != -1:
             if row.note == 180:
@@ -493,6 +516,9 @@ def convert_b_row(row, channel):
                 jmp_to_order = 257
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            else:
+                add_unknown_fx('ADPCM-B', fx)
+
         # note
         if row.note != -1:
             if row.note == 180:
@@ -1192,6 +1218,10 @@ def main():
         asm_header(stream, m, name, size, outfd)
         nss_inline_header(channels, name, outfd)
         nss_to_asm(stream, m, False, outfd)
+
+    # warn about any unknown FX during the conversion to NSS
+    for ch in unknown_fx.keys():
+        dbg("unknown FX for %s: %s" % (ch, ", ".join(sorted(unknown_fx[ch]))))
 
 
 
