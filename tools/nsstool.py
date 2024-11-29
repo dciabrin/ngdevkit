@@ -279,6 +279,7 @@ def register_nss_ops():
         ("fm_pitch_slide_d", ["speed"]),
         ("s_delay" , ["delay"]),
         ("fm_delay", ["delay"]),
+        ("a_delay",  ["delay"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -439,6 +440,10 @@ def convert_a_row(row, channel):
     if not is_empty(row):
         # context
         opcodes.append(ctx_t[channel]())
+        # pre-instrument effects
+        for fx, fxval in row.fx:
+            if fx == 0xed:  # note delay
+                opcodes.append(a_delay(fxval))
         # instrument
         if row.ins != -1:
             opcodes.append(a_instr(row.ins))

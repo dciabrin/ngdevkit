@@ -29,6 +29,7 @@
         ;; TODO remove bitmask hardcodes
         .lclequ FM_BIT_LOAD_VOL,       3
         .lclequ SSG_BIT_LOAD_VOL,      4
+        .lclequ ADPCM_A_BIT_LOAD_VOL,  3
 
 
 ;;;
@@ -236,7 +237,7 @@ _fade_post_bit1:
 ;;; Update currently playing notes in the YM2610 to reflect the how
 ;;; the channels' output levels are currently configured in nullsound
 ;;; ------
-;;; [a, de, bc, hl, iy modified]
+;;; [a, de, bc, hl, modified]
 volume_update_stream_state:
         push    iy
         ;; d: FM + SSG channels in use
@@ -288,23 +289,20 @@ _vol_upd_post_ssg_c:
         ld      d, a
 
         ;; Loop over all the ADPCM-A channels that need to be updated
-        ;; e: total number of FM channels to process
+        ;; e: total number of ADPCM-A channels
         ld      e, #6
-        ld      hl, #state_adpcm_a_vol
+        ld      iy, #state_a1
+        ld      a, #<state_a2
+        sub     a, #<state_a1
+        ld      b, #0
+        ld      c, a
 _vol_adpcm_a_loop:
         ;; channel used in the music?
         bit     0, d
         jr      z, _vol_adpcm_a_next
-        ld      a, (hl)
-        or      #0xc0           ; default pan (L+R)
-        call    adpcm_a_scale_output
-        ld      c, a
-        ld      a, #(REG_ADPCM_A1_PAN_VOLUME+6)
-        sub     e
-        ld      b, a
-        call    ym2610_write_port_b
+        set     ADPCM_A_BIT_LOAD_VOL, PIPELINE(iy)
 _vol_adpcm_a_next:
-        inc     hl
+        add     iy, bc
         sra     d
         dec     e
         jr      nz, _vol_adpcm_a_loop

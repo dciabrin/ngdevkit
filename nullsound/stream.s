@@ -238,6 +238,7 @@ _check_update_stream_pipeline:
         ;; the next processing will take place once a new tick is reached
         call    run_fm_pipeline
         call    run_ssg_pipeline
+        call    run_adpcm_a_pipeline
         res     TIMER_CONSUMER_STREAM_BIT, a
         ld      (state_timer_tick_reached), a
 _end_update_stream:
@@ -459,7 +460,7 @@ nss_opcodes:
         .nss_op nss_nop
         .nss_op row_speed
         .nss_op row_groove
-        .nss_op adpcm_a_off_ext
+        .nss_op nss_nop2
         .nss_op adpcm_b_instrument
         .nss_op adpcm_b_note_on
         .nss_op adpcm_b_note_off
@@ -507,6 +508,7 @@ nss_opcodes:
         .nss_op fm_pitch_slide_down
         .nss_op ssg_delay
         .nss_op fm_delay
+        .nss_op adpcm_a_delay
 
 
 
@@ -681,5 +683,6 @@ nss_ret::
 ;;; Empty operation
 ;;; ------
 nss_nop::
+nss_nop2::
         ld      a, #1
         ret
