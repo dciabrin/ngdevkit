@@ -30,6 +30,7 @@
 
         ;; getters for SSG state
         .lclequ NOTE,(state_ssg_note-state_mirrored_ssg)
+        .lclequ DETUNE,(state_ssg_detune-state_mirrored_ssg)
         .lclequ NOTE_POS16,(state_ssg_note_pos16-state_mirrored_ssg)
         .lclequ NOTE_FINE_COARSE,(state_ssg_note_fine_coarse-state_mirrored_ssg)
         .lclequ PROPS_OFFSET,(state_mirrored_ssg_props-state_mirrored_ssg)
@@ -51,6 +52,7 @@
         .lclequ STATE_LOAD_VOL,         0x10
         .lclequ STATE_LOAD_REGS,        0x20
         .lclequ STATE_STOP_NOTE,        0x40
+        .lclequ STATE_NOTE_STARTED,     0x80
         .lclequ BIT_PLAYING,            0
         .lclequ BIT_EVAL_MACRO,         1
         .lclequ BIT_LOAD_NOTE,          2
@@ -58,7 +60,7 @@
         .lclequ BIT_LOAD_VOL,           4
         .lclequ BIT_LOAD_REGS,          5
         .lclequ BIT_STOP_NOTE,          6
-
+        .lclequ BIT_NOTE_STARTED,       7
 
 
         .area  DATA
@@ -98,6 +100,7 @@ state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
 ;;; Note
 state_ssg_note_pos16:           .blkb   2       ; fixed-point note after the FX pipeline
 state_ssg_note:                 .blkb   1       ; NSS note to be played on the FM channel
+state_ssg_detune:               .blkb   2       ; fixed-point semitone detune
 state_ssg_note_fine_coarse:     .blkb   2       ; YM2610 note factors (fine+coarse)
 state_mirrored_ssg_props:
 state_mirrored_ssg_envelope:    .blkb   1       ; envelope shape
@@ -288,10 +291,11 @@ _ssg_post_fx_trigger:
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _ssg_post_fx_vibrato:
         bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _ssg_post_fx_side
+        jr      z, _ssg_post_fx_slide
+        ld      hl, #NOTE
         call    eval_ssg_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
-_ssg_post_fx_side:
+_ssg_post_fx_slide:
         bit     BIT_FX_VOL_SLIDE, FX(ix)
         jr      z, _ssg_post_fx_vol_slide
         call    eval_vol_slide_step
@@ -381,12 +385,15 @@ _post_load_ssg_vol:
         call    waveform_for_channel
 
         ;; start note
+        bit     BIT_NOTE_STARTED, PIPELINE(ix)
+        jr      nz, _post_load_waveform
         ld      a, (state_mirrored_enabled)
         and     c
         ld      (state_mirrored_enabled), a
         ld      b, #REG_SSG_ENABLE
         ld      c, a
         call    ym2610_write_port_a
+        set     BIT_NOTE_STARTED, PIPELINE(ix)
 _post_load_waveform:
 
 _end_ssg_channel_pipeline:
@@ -417,6 +424,11 @@ compute_ssg_fixed_point_note::
         ld      a, #0
         ld      l, a
         ld      h, NOTE(ix)
+
+        ;; hl: detuned semitone
+        ld      c, DETUNE(ix)
+        ld      b, DETUNE+1(ix)
+        add     hl, bc
 
         ;; h: current note + arpeggio shift
         ld      a, ARPEGGIO(ix)
@@ -466,23 +478,24 @@ compute_ym2610_ssg_note::
         ld      d, (hl)
         push    de              ; +base tune
 
-        ;; b: next semitone distance from current note
+        ;; e: half-distance SSG tune to next semitone
         ld      hl, #ssg_semitone_distance
         ld      l, b
-        ld      b, (hl)
-
+        ld      e, (hl)
         ;; c: SSG: intermediate frequency is negative
         ld      c, #1
-
-        ;; e: current position (fractional part)
-        ld      e, NOTE_POS16(ix)
-
-        ;; de: current intermediate frequency f_dist
+        ;; e: intermediate note position (fractional part)
+        ld      b, NOTE_POS16(ix)
+        ;; de: current intermediate SSG tune
         call    slide_intermediate_freq
+        push    hl
+        pop     de
 
-        ;; hl: final ym2610 tune
+        ;; hl: ym2610 tune (coarse | fine tune)
         pop     hl              ; -base tune
         add     hl, de
+
+        ;; save ym2610 fine and coarse tune
         ld      NOTE_FINE_COARSE(ix), l
         ld      NOTE_FINE_COARSE+1(ix), h
         ret
@@ -644,6 +657,11 @@ ssg_macro::
         or      #STATE_EVAL_MACRO
         ld      PIPELINE(ix), a
 
+        ;; setting a new instrument/macro always trigger a note start,
+        ;; register it for the next pipeline run
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+
         pop     hl
         pop     de
 
@@ -734,6 +752,10 @@ ssg_note_off::
         inc     a
         call    fm_ctx_set_current
 
+        ;; record that playback is stopped
+        xor     a
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
+
         ld      a, #1
         ret
 
@@ -765,11 +787,34 @@ _ssg_vol_end:
         ld      a, #1
         ret
 
+
 ;;; Configure state for new note and trigger a load in the pipeline
 ;;; ------
 ssg_configure_note_on:
+        push    bc
+        push    af              ; +note
+        ;; if portamento is ongoing, this is treated as an update
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _ssg_cfg_note_update
+        ld      a, SLIDE_PORTAMENTO(ix)
+        cp      #0
+        jr      z, _ssg_cfg_note_update
+        ;; update the portamento now
+        pop     af              ; -note
+        ld      SLIDE_PORTAMENTO(ix), a
+        ld      b, NOTE(ix)
+        call    slide_portamento_finish_init
+        ;; if a note is currently playing, do nothing else, the
+        ;; portamento will be updated at the next pipeline run...
+        bit     BIT_NOTE_STARTED, PIPELINE(ix)
+        jr      nz, _ssg_cfg_note_end
+        ;; ... else a new instrument was loaded, reload this note as well
+        jr      _ssg_cfg_note_prepare_ym2610
+_ssg_cfg_note_update:
+        ;; update the current note and prepare the ym2610
+        pop     af              ; -note
         ld      NOTE(ix), a
-
+_ssg_cfg_note_prepare_ym2610:
         ;; init macro position
         ld      a, MACRO_DATA(ix)
         ld      MACRO_POS(ix), a
@@ -777,9 +822,13 @@ ssg_configure_note_on:
         ld      MACRO_POS+1(ix), a
 
         ;; reload all registers at the next pipeline run
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
+
+_ssg_cfg_note_end:
+        pop     bc
 
         ret
 
@@ -886,9 +935,12 @@ _post_ssg_setup:
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 ssg_slide_up::
-        ld      a, #0
+        push    bc
+        ld      b, #0
+        ld      c, #NOTE
         call    slide_init
         ld      a, #1
+        pop     bc
         ret
 
 
@@ -897,8 +949,53 @@ ssg_slide_up::
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 ssg_slide_down::
-        ld      a, #1
+        push    bc
+        ld      b, #1
+        ld      c, #NOTE
         call    slide_init
+        ld      a, #1
+        pop     bc
+        ret
+
+
+;;; SSG_PITCH_SLIDE_UP
+;;; Enable slide up effect for the current SSG channel
+;;; ------
+;;; [ hl ]: speed (8bits)
+ssg_pitch_slide_up::
+        push    bc
+        ld      b, #0
+        ld      c, #NOTE
+        call    slide_pitch_init
+        ld      a, #1
+        pop     bc
+        ret
+
+
+;;; SSG_PITCH_SLIDE_DOWN
+;;; Enable slide up effect for the current SSG channel
+;;; ------
+;;; [ hl ]: speed (8bits)
+ssg_pitch_slide_down::
+        push    bc
+        ld      b, #1
+        ld      c, #NOTE
+        call    slide_pitch_init
+        ld      a, #1
+        pop     bc
+        ret
+
+
+;;; SSG_PORTAMENTO
+;;; Enable slide to the next note to be loaded into the pipeline
+;;; ------
+;;; [ hl ]: speed
+ssg_portamento::
+        ;; current note (start of portamento)
+        ld      a, NOTE_POS16+1(ix)
+
+        call    slide_portamento_init
+
         ld      a, #1
         ret
 
@@ -931,5 +1028,19 @@ ssg_vol_slide_down::
 ssg_delay::
         call    trigger_delay_init
 
+        ld      a, #1
+        ret
+
+
+;;; SSG_PITCH
+;;; Detune up to -+1 semitone for the current channel
+;;; ------
+;;; [ hl ]: detune
+ssg_pitch::
+        push    bc
+        call    common_pitch
+        ld      DETUNE(ix), c
+        ld      DETUNE+1(ix), b
+        pop     bc
         ld      a, #1
         ret

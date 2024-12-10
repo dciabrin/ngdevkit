@@ -34,9 +34,6 @@
         .equ    NSS_ADPCM_A_INSTRUMENT_PROPS,   4
         .equ    NSS_ADPCM_A_NEXT_REGISTER,      8
 
-        .equ    NSS_ADPCM_B_INSTRUMENT_PROPS,   4
-        .equ    NSS_ADPCM_B_NEXT_REGISTER,      8
-
 
         ;; pipeline state for ADPCM-A channel
         .lclequ STATE_PLAYING,      0x01
@@ -93,17 +90,9 @@ state_a6_end:
 state_adpcm_a_channel::
         .db     0
 
-;;; current ADPCM-B instrumment play command (with loop)
-state_adpcm_b_start_cmd::
-        .db     0
-
-;;; current volumes for ADPCM-B channel
-state_adpcm_b_vol::     .blkb   1
 
 ;;; Global volume attenuation for all ADPCM-A channels
 state_adpcm_a_volume_attenuation::   .blkb   1
-;;; Global volume attenuation for ADPCM-B channel
-state_adpcm_b_volume_attenuation::   .blkb   1
 
 
 _state_adpcm_end:
@@ -132,8 +121,6 @@ init_nss_adpcm_state_tracker::
         ;; init flags
         ld      a, #0
         ld      (state_adpcm_a_channel), a
-        ld      a, #0x80       ; start flag
-        ld      (state_adpcm_b_start_cmd), a
         ;; set default
         ld      ix, #state_a1
         ld      d, #6
@@ -142,8 +129,6 @@ _a_init:
         ld      VOL(ix), a
         dec     d
         jr      nz, _a_init
-        ld      a, #0xff
-        ld      (state_adpcm_b_vol), a
         ;; global ADPCM volumes are initialized in the volume state tracker
         ret
 
@@ -544,82 +529,6 @@ _adpcm_a_clamp_level:
         ret
 
 
-;;; adpcm_b_scale_output
-;;; adjust ADPCM-B volume to match configured ADPCM-B output level
-;;; output volume = [0..1] * input volume, where the scale factor
-;;; is the currently configured ADPCM-B output level [0x00..0xff]
-;;; ------
-;;; a: input level [0x00..0x1f]
-;;; modified: bc
-adpcm_b_scale_output::
-        push    hl
-
-        ;; bc: note volume fraction 000000fff fffff00
-        ld      l, a
-        ld      h, #0
-        add     hl, hl
-        add     hl, hl
-        ld      c, l
-        ld      b, h
-
-        ;; init result
-        ld      hl, #0
-
-        ;; e: attenuation factor -> volume factor
-        ld      a, (state_adpcm_b_volume_attenuation)
-        neg
-        add     #64
-        ld      e, a
-
-_b_level_bit0:
-        bit     0, e
-        jr      z, _b_level_bit1
-        ;; add this bit's value to the result
-        add     hl, bc
-_b_level_bit1:
-        ;; bc: bc * 2
-        sla     c
-        rl      b
-        bit     1, e
-        jr      z, _b_level_bit2
-        add     hl, bc
-_b_level_bit2:
-        sla     c
-        rl      b
-        bit     2, e
-        jr      z, _b_level_bit3
-        add     hl, bc
-_b_level_bit3:
-        sla     c
-        rl      b
-        bit     3, e
-        jr      z, _b_level_bit4
-        add     hl, bc
-_b_level_bit4:
-        sla     c
-        rl      b
-        bit     4, e
-        jr      z, _b_level_bit5
-        add     hl, bc
-_b_level_bit5:
-        sla     c
-        rl      b
-        bit     5, e
-        jr      z, _b_level_bit6
-        add     hl, bc
-_b_level_bit6:
-        sla     c
-        rl      b
-        bit     6, e
-        jr      z, _b_level_post
-        add     hl, bc
-_b_level_post:
-        ;; keep the 8 MSB from hl, this is the scaled volume
-        ld      a, h
-        pop     hl
-        ret
-
-
 ;;; Compute the YM2610 output volume from the current channel
 ;;; ------
 ;;; modified: c
@@ -662,219 +571,6 @@ _a_vol_immediate:
         call    adpcm_a_configure_vol
 
 _a_vol_end:
-        ld      a, #1
-        ret
-
-
-;;; ADPCM_B_INSTRUMENT
-;;; Configure the ADPCM-B channel based on an instrument's data
-;;; ------
-;;; [ hl ]: instrument number
-adpcm_b_instrument::
-        ;; a: instrument
-        ld      a, (hl)
-        inc     hl
-
-        push    bc
-        push    hl
-        push    de
-
-        ;; hl: instrument address in ROM
-        sla     a
-        ld      c, a
-        ld      b, #0
-        ld      hl, (state_stream_instruments)
-        add     hl, bc
-        ld      e, (hl)
-        inc     hl
-        ld      d, (hl)
-        inc     hl
-        push    de
-        pop     hl
-
-        ;; d: all ADPCM-B properties
-        ld      d, #4
-
-        ;; a: start of ADPCM-B property registers
-        ld      a, #REG_ADPCM_B_ADDR_START_LSB
-        add     b
-
-_adpcm_b_loop:
-        ld      b, a
-        ld      c, (hl)
-        call    ym2610_write_port_a
-        add     a, #1
-        inc     hl
-        dec     d
-        jp      nz, _adpcm_b_loop
-
-        ;; play command, with/without loop bit
-        ld      a, #0x80
-        bit     0, (hl)
-        jr      z, _adpcm_b_post_loop_chk
-        set     4, a
-_adpcm_b_post_loop_chk:
-        ld      (state_adpcm_b_start_cmd), a
-
-        ;; set a default pan
-        ld      b, #REG_ADPCM_B_PAN
-        ld      c, #0xc0        ; default pan (L+R)
-        call    ym2610_write_port_a
-
-        ;;  current volume
-        ld      b, #REG_ADPCM_B_VOLUME
-        ld      a, (state_adpcm_b_vol)
-        call    adpcm_b_scale_output
-        ld      c, a
-        call    ym2610_write_port_a
-
-        pop     de
-        pop     hl
-        pop     bc
-        ld      a, #1
-        ret
-
-
-;;; Semitone frequency table
-;;; ------
-;;; A note in nullsound is represented as a tuple <octave, semitone>,
-;;; which is translated into YM2610's register representation
-;;; `Delta-N`. nullsounds decomposes Delta-N as `2^octave * base`,
-;;; where base is a factor of the semitone's frequency, and the
-;;; result is multiplied by a power of 2 (handy for octaves)
-adpcm_b_note_base_delta_n:
-        .db     0x0c, 0xb7	; 3255 - C
-        .db     0x0d, 0x78	; 3448 - C#
-        .db     0x0e, 0x45	; 3653 - D
-        .db     0x0f, 0x1f	; 3871 - D#
-        .db     0x10, 0x05	; 4101 - E
-        .db     0x10, 0xf9	; 4345 - F
-        .db     0x11, 0xfb	; 4603 - F#
-        .db     0x13, 0x0d	; 4877 - G
-        .db     0x14, 0x2f	; 5167 - G#
-        .db     0x15, 0x62	; 5474 - A
-        .db     0x16, 0xa8	; 5800 - A#
-        .db     0x18, 0x00	; 6144 - B
-
-
-;;; ADPCM_B_NOTE_ON
-;;; Emit a specific note (sample frequency) on the ADPCM-B channel
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
-adpcm_b_note_on::
-        push    bc
-        push    de
-
-        ;; d: note  (0xAB: A=octave B=semitone)
-        ld      d, (hl)
-        inc     hl
-
-        push    hl
-
-        ;; stop the ADPCM-B channel
-        ld      b, #REG_ADPCM_B_START_STOP
-        ld      c, #1           ; reset flag (clears start and repeat in YM2610)
-        call    ym2610_write_port_a
-
-        ;; a: semitone
-        ld      a, d
-        and     #0xf
-
-        ;; d: octave
-        srl     d
-        srl     d
-        srl     d
-        srl     d
-
-        ;; lh: semitone -> delta_n address
-        ld      hl, #adpcm_b_note_base_delta_n
-        sla     a
-        ld      b, #0
-        ld      c, a
-        add     hl, bc
-
-        ;; bc: base delta_n
-        ld      b, (hl)
-        inc     hl
-        ld      c, (hl)
-        inc     hl
-
-        ;; hl: delta_n (base << octave)
-        ;; d: octave
-        push    bc
-        pop     hl
-
-        ld      a, d
-        cp      #0
-        jp      z, _no_delta_shift
-_delta_shift:
-        add     hl, hl
-        dec     d
-        jp      nz, _delta_shift
-_no_delta_shift:
-
-        ;; de: delta_n
-        push    hl
-        pop     de
-
-        ;; configure delta_n into the YM2610
-        ld      b, #REG_ADPCM_B_DELTA_N_LSB
-        ld      c, e
-        call    ym2610_write_port_a
-        ld      b, #REG_ADPCM_B_DELTA_N_MSB
-        ld      c, d
-        call    ym2610_write_port_a
-
-        ;; start the ADPCM-B channel
-        ld      b, #REG_ADPCM_B_START_STOP
-        ;; start command (with loop when configured)
-        ld      a, (state_adpcm_b_start_cmd)
-        ld      c, a
-        call    ym2610_write_port_a
-
-        pop     hl
-        pop     de
-        pop     bc
-        ld      a, #1
-        ret
-
-
-;;; ADPCM_B_NOTE_OFF
-;;; Stop sample playback on the ADPCM-B channel
-;;; ------
-adpcm_b_note_off::
-        push    bc
-
-        ;; stop the ADPCM-B channel
-        ld      b, #REG_ADPCM_B_START_STOP
-        ld      c, #1           ; reset flag (clears start and repeat in YM2610)
-        call    ym2610_write_port_a
-
-        pop     bc
-        ld      a, #1
-        ret
-
-
-;;; ADPCM_B_VOL
-;;; Set playback volume of the ADPCM-B channel
-;;; ------
-adpcm_b_vol::
-        push    bc
-
-        ;; a: volume
-        ld      a, (hl)
-        inc     hl
-
-        ;; new configured volume for ADPCM-B
-        ld      (state_adpcm_b_vol), a
-        call    adpcm_b_scale_output
-
-        ;; set volume in the YM2610
-        ld      b, #REG_ADPCM_B_VOLUME
-        ld      c, a
-        call    ym2610_write_port_a
-
-        pop     bc
         ld      a, #1
         ret
 

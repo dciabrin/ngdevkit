@@ -30,6 +30,7 @@
         .lclequ FM_BIT_LOAD_VOL,       3
         .lclequ SSG_BIT_LOAD_VOL,      4
         .lclequ ADPCM_A_BIT_LOAD_VOL,  3
+        .lclequ ADPCM_B_BIT_LOAD_VOL,  3
 
 
 ;;;
@@ -318,11 +319,7 @@ _vol_adpcm_a_next:
         ;; update ADPCM-B if it is used in the music
         bit     0, d
         jr      z, _vol_post_adpcm_b
-        ld      a, (state_adpcm_b_vol)
-        call    adpcm_b_scale_output
-        ld      c, a
-        ld      b, #REG_ADPCM_B_VOLUME
-        call    ym2610_write_port_a
+        set     ADPCM_B_BIT_LOAD_VOL, PIPELINE(iy)
 _vol_post_adpcm_b:
 
         pop     iy

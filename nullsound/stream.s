@@ -239,6 +239,7 @@ _check_update_stream_pipeline:
         call    run_fm_pipeline
         call    run_ssg_pipeline
         call    run_adpcm_a_pipeline
+        call    run_adpcm_b_pipeline
         res     TIMER_CONSUMER_STREAM_BIT, a
         ld      (state_timer_tick_reached), a
 _end_update_stream:
@@ -255,6 +256,7 @@ stream_reset_state::
         call    init_nss_fm_state_tracker
         call    init_nss_ssg_state_tracker
         call    init_nss_adpcm_state_tracker
+        call    init_nss_adpcm_b_state_tracker
         ld      a, #1
         ld      (state_stream_in_use), a
 
@@ -356,7 +358,7 @@ stream_all_ctx_switch::
         .db     op_id_ssg_ctx_1, op_id_ssg_ctx_2, op_id_ssg_ctx_3, op_id_nss_nop
         .db     op_id_adpcm_a_ctx_1, op_id_adpcm_a_ctx_2, op_id_adpcm_a_ctx_3
         .db     op_id_adpcm_a_ctx_4, op_id_adpcm_a_ctx_5, op_id_adpcm_a_ctx_6
-        .db     op_id_nss_nop
+        .db     op_id_adpcm_b_ctx
 
 
 ;;; Play music or sfx from a pre-compiled list of NSS opcodes,
@@ -509,6 +511,15 @@ nss_opcodes:
         .nss_op ssg_delay
         .nss_op fm_delay
         .nss_op adpcm_a_delay
+        .nss_op adpcm_b_ctx
+        .nss_op fm_portamento
+        .nss_op fm_pitch_slide_up
+        .nss_op ssg_pitch
+        .nss_op b_pitch_slide_up
+        .nss_op ssg_pitch_slide_up
+        .nss_op adpcm_b_portamento
+        .nss_op ssg_pitch_slide_down
+        .nss_op ssg_portamento
 
 
 

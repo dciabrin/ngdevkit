@@ -70,40 +70,17 @@ def is_empty(r):
     return r.note==-1 and r.ins==-1 and r.vol==-1 and all([f==-1 for f,v in r.fx])
 
 
-def to_fm_note(furnace_note):
-    # we count octave from C-0 (furnace starts from C--5)
-    fm_note = furnace_note - 5*12
-    return fm_note
-
 def to_nss_note(furnace_note):
-    octave = (furnace_note // 12) - 5
-    note = furnace_note % 12
-    nss_note = (octave << 4) + note
-    return nss_note
-
-def to_nss_b_note(furnace_note):
-    octave = (furnace_note // 12) - 5
-    note = furnace_note % 12
-    nss_note = (octave << 4) + note
-    return nss_note
-
-def make_ssg_note(furnace_note):
-    octave = (furnace_note // 12) - 5
-    note = furnace_note % 12
-    nss_note = (octave << 4) + note
-    return s_note(nss_note)
-
-def to_ssg_note(furnace_note):
     # we count octave from C-0 (furnace starts from C--5)
-    fm_note = furnace_note - 5*12
-    return fm_note
+    nss_note = furnace_note - 5*12
+    return nss_note
 
 
 #
 # Debugging functions
 #
 
-def dbg_row(r, cols):
+def row_str(r, cols):
     semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
     if r.note == -1:
         notestr = "..."
@@ -124,13 +101,18 @@ def dbg_row(r, cols):
         fxstr += " %s%s" % (sf, sv)
     return "%s %s %s%s"%(notestr,insstr,volstr,fxstr)
 
-    
+
+dbg_order = 0
+dbg_row = 0
+dbg_channel = 0
+dbg_fxs = 0
+
 def dbg_pattern(p, m):
     cols = m.fxcolumns[p.channel]
     for r in p.rows:
-        print(dbg_row(r, cols))
+        print(row_str(r, cols))
 
-        
+
 unknown_fx = {}
 def add_unknown_fx(channel, fx):
     global unknown_fx
@@ -140,7 +122,7 @@ def add_unknown_fx(channel, fx):
 
 #
 # Furnace parsers
-#    
+#
 
 def read_pattern(m, bs):
     assert bs.read(4) == b"PATN"
@@ -289,7 +271,17 @@ def register_nss_ops():
         ("fm_pitch_slide_d", ["speed"]),
         ("s_delay" , ["delay"]),
         ("fm_delay", ["delay"]),
-        ("a_delay",  ["delay"]),
+        ("a_delay" , ["delay"]),
+        ("b_ctx"   , ),
+        ("fm_porta", ["speed"]),
+        ("fm_pitch_slide_u", ["speed"]),
+        ("s_pitch" , ["pitch"]),
+        # 0x50
+        ("b_pitch_slide_u", ["speed"]),
+        ("s_pitch_slide_u", ["speed"]),
+        ("b_porta", ["speed"]),
+        ("s_pitch_slide_d", ["speed"]),
+        ("s_porta", ["speed"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -358,7 +350,7 @@ def convert_fm_row(row, channel):
             elif fx == 0x15:  # OP4 level
                 opcodes.append(op4_lvl(fxval))
             elif fx == 0xe5:  # pitch
-                opcodes.append(fm_pitch((fxval-0x80)//3))
+                opcodes.append(fm_pitch(fxval))
             elif fx == 0xe1:  # slide up
                 assert fxval != -1
                 opcodes.append(fm_note_slide_u(fxval))
@@ -373,6 +365,12 @@ def convert_fm_row(row, channel):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(fm_pitch_slide_d(fxval))
+            elif fx == 0x01:  # pitch slide up
+                # fxval == -1 means disable vibrato
+                fxval = max(fxval, 0)
+                opcodes.append(fm_pitch_slide_u(fxval))
+            elif fx == 0x03:  # portamento
+                opcodes.append(fm_porta(fxval))
             else:
                 add_unknown_fx('FM', fx)
 
@@ -381,15 +379,21 @@ def convert_fm_row(row, channel):
             if row.note == 180:
                 opcodes.append(fm_stop())
             else:
-                opcodes.append(fm_note(to_fm_note(row.note)))
+                opcodes.append(fm_note(to_nss_note(row.note)))
     return jmp_to_order, opcodes
+
+def row_warn(row, msg):
+    ch_str = ['F1','F2','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
+    loc = "order %02X, row %3d (%s)"%(dbg_order, dbg_row,ch_str[dbg_channel])
+    warn("%s: %s: %s"%(loc, msg, row_str(row, dbg_fxs)))
 
 def s_vol_clamp(row):
     # TODO report proper location
     newvol = max(0, min(15, row.vol))
     if row.vol != newvol:
-        rowstr = dbg_row(row, 2)
-        warn("clamped volume to %02X for SSG row: %s"%(newvol, rowstr))
+        rowstr = row_str(row, dbg_fxs)
+        # warn("clamped volume to %02X: %s"%(newvol, rowstr))
+        row_warn(row, "volume clamped to %02X"%newvol)
     return newvol
 
 def convert_s_row(row, channel):
@@ -417,6 +421,8 @@ def convert_s_row(row, channel):
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
+            elif fx == 0x08:  # panning
+                row_warn(row, "panning FX invalid for SSG")
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
             elif fx == 0x0d:  # Jump to next order
@@ -435,10 +441,22 @@ def convert_s_row(row, channel):
             elif fx == 0xe2:  # slide down
                 assert fxval != -1
                 opcodes.append(s_slide_d(fxval))
+            elif fx == 0xe5:  # set pitch (tune)
+                opcodes.append(s_pitch(fxval))
             elif fx == 0x0a:  # volume slide down
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(s_vol_slide_d(fxval))
+            elif fx == 0x01:  # pitch slide up
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(s_pitch_slide_u(fxval))
+            elif fx == 0x02:  # pitch slide down
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(s_pitch_slide_d(fxval))
+            elif fx == 0x03:  # pitch slide down
+                opcodes.append(s_porta(fxval))
             else:
                 add_unknown_fx('SSG', fx)
 
@@ -447,7 +465,7 @@ def convert_s_row(row, channel):
             if row.note == 180:
                 opcodes.append(s_stop())
             else:
-                opcodes.append(s_note(to_ssg_note(row.note)))
+                opcodes.append(s_note(to_nss_note(row.note)))
     return jmp_to_order, opcodes
 
 
@@ -516,6 +534,12 @@ def convert_b_row(row, channel):
                 jmp_to_order = 257
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            elif fx == 0x01:  # pitch slide up
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(b_pitch_slide_u(fxval))
+            elif fx == 0x03:  # portamento
+                opcodes.append(b_porta(fxval))
             else:
                 add_unknown_fx('ADPCM-B', fx)
 
@@ -524,11 +548,24 @@ def convert_b_row(row, channel):
             if row.note == 180:
                 opcodes.append(b_stop())
             else:
-                opcodes.append(b_note(to_nss_b_note(row.note)))
+                opcodes.append(b_note(to_nss_note(row.note)))
     return jmp_to_order, opcodes
 
 
+cached_nss = {}
 def raw_nss(m, p, bs, channels, compact):
+    global dbg_order, dbg_row
+
+    # a cache of already parsed rows data
+    def row_to_nss(func, pat, pos):
+        global cached_nss, dbg_channel, dbg_fxs
+        idx=(pat.channel, pat.index, pos)
+        if idx not in cached_nss:
+            dbg_channel = pat.channel
+            dbg_fxs = m.fxcolumns[pat.channel]
+            cached_nss[idx] = func(pat.rows[pos], pat.channel)
+        return cached_nss[idx]
+
     # unoptimized nss opcodes generated from the Furnace song
     nss = []
 
@@ -541,7 +578,7 @@ def raw_nss(m, p, bs, channels, compact):
     selected_a = [x for x in a_channels if x in channels]
     selected_b = [x for x in b_channel if x in channels]
 
-    # initialize stream speed from module 
+    # initialize stream speed from module
     tick = m.speed
 
     # -- structures
@@ -560,7 +597,7 @@ def raw_nss(m, p, bs, channels, compact):
     # the beginning of another order, for example to avoid playing the
     # remaining rows of an order. any jump to a previously played order
     # is essentially equivalent to looping the song playback.
-    
+
     seen_orders=[]
     seen_patterns=[]
     order=0
@@ -594,32 +631,38 @@ def raw_nss(m, p, bs, channels, compact):
         for index in range(pattern_length):
             # nss opcodes to add at the end of each processed Furnace row
             opcodes = []
+            dbg_order, dbg_row = order, index
 
             # FM channels
             for channel in f_channels:
-                row = order_patterns[channel].rows[index]
-                j, f_opcodes = convert_fm_row(row, channel)
+                j, f_opcodes = row_to_nss(convert_fm_row, order_patterns[channel], index)
                 if channel in selected_f:
                     opcodes.extend(f_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
             # SSG channels
             for channel in s_channels:
-                row = order_patterns[channel].rows[index]
-                j, s_opcodes = convert_s_row(row, channel)
+                # dbg_channel = channel
+                # row = order_patterns[channel].rows[index]
+                # j, s_opcodes = convert_s_row(row, channel)
+                j, s_opcodes = row_to_nss(convert_s_row, order_patterns[channel], index)
                 if channel in selected_s:
                     opcodes.extend(s_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
             # ADPCM-A channels
             for channel in a_channels:
-                row = order_patterns[channel].rows[index]
-                j, a_opcodes = convert_a_row(row, channel)
+                # dbg_channel = channel
+                # row = order_patterns[channel].rows[index]
+                # j, a_opcodes = convert_a_row(row, channel)
+                j, a_opcodes = row_to_nss(convert_a_row, order_patterns[channel], index)
                 if channel in selected_a:
                     opcodes.extend(a_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
             # ADPCM-B channel
             for channel in b_channel:
-                row = order_patterns[channel].rows[index]
-                j, b_opcodes = convert_b_row(row, channel)
+                # dbg_channel = channel
+                # row = order_patterns[channel].rows[index]
+                # j, b_opcodes = convert_b_row(row, channel)
+                j, b_opcodes = row_to_nss(convert_b_row, order_patterns[channel], index)
                 if channel in selected_b:
                     opcodes.extend(b_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
@@ -781,15 +824,6 @@ def tune_adpcm_b_notes(nss, ins):
     # nullsound note from current sample's frequency
     sample_note = c4
 
-    def to_direct_note(note):
-        semitone = note & 0xf
-        octave = (note>>4) & 0xf
-        return (octave*12)+semitone
-
-    def to_b_note(direct):
-        octave, semitone = direct // 12, direct % 12
-        return (octave<<4) | semitone
-
     def note_str(note):
         octave, semitone = note // 12, note % 12
         return semitones[semitone].ljust(2, '-')+str(octave)
@@ -816,16 +850,11 @@ def tune_adpcm_b_notes(nss, ins):
                 out.append(op)
         elif type(op) == b_note:
             # get the semitone offset from c4
-            dnote = to_direct_note(op.note)
-            semitone_offset = dnote - c4
+            semitone_offset = op.note - c4
             # the "tuned" note is the note to use in nullsound to configure the
             # right frequency in the YM2610 (i.e. the semitone offset from the
             # sample's base frequency)
-            tuned = to_b_note(sample_note + semitone_offset)
-            # fmt_off = "%s %2d"%("+" if semitone_offset>=0 else "-", abs(semitone_offset))
-            # print("B NOTE: %s (= C-4 %s)"%(note_str(dnote), fmt_off),
-            #       "-> TUNED: %s %s = %s"%(note_str(sample_note),
-            #       fmt_off, note_str(to_direct_note(tuned))))
+            tuned = sample_note + semitone_offset
             out.append(b_note(tuned))
         else:
             out.append(op)
@@ -1227,6 +1256,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-

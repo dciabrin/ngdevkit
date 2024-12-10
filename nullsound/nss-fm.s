@@ -45,6 +45,7 @@
         ;; getters for FM state
         .lclequ NOTE,(state_fm_note_semitone-state_fm)
         .lclequ NOTE_SEMITONE,(state_fm_note_semitone-state_fm)
+        .lclequ DETUNE,(state_fm_detune-state_fm)
         .lclequ NOTE_POS16,(state_fm_note_pos16-state_fm)
         .lclequ NOTE_FNUM,(state_fm_note_fnum-state_fm)
         .lclequ NOTE_BLOCK,(state_fm_note_block-state_fm)
@@ -65,12 +66,14 @@
         .lclequ STATE_LOAD_REGS,    0x10
         .lclequ STATE_LOAD_ALL,     0x1e
         .lclequ STATE_CONFIG_VOL,   0x20
+        .lclequ STATE_NOTE_STARTED, 0x80
         .lclequ BIT_PLAYING,        0
         .lclequ BIT_EVAL_MACRO,     1
         .lclequ BIT_LOAD_NOTE,      2
         .lclequ BIT_LOAD_VOL,       3
         .lclequ BIT_LOAD_REGS,      4
         .lclequ BIT_CONFIG_VOL,     5
+        .lclequ BIT_NOTE_STARTED,   7
 
 
         .area  DATA
@@ -105,6 +108,7 @@ state_fm_fx_vibrato:            .blkb   VIBRATO_SIZE
 state_fm_note:
 state_fm_instrument:            .blkb    1      ; instrument
 state_fm_note_semitone:         .blkb    1      ; NSS note (octave+semitone) to be played on the FM channel
+state_fm_detune:                .blkb    2      ; channel's fixed-point semitone detune
 state_fm_note_pos16:            .blkb    2      ; channel's fixed-point note after the FX pipeline
 state_fm_note_fnum:             .blkb    2      ; channel's f-num after the FX pipeline
 state_fm_note_block:            .blkb    1      ; channel's FM block (multiplier) after the FX pipeline
@@ -131,14 +135,6 @@ state_fm3:
 state_fm4:
 .blkb   FM_STATE_SIZE
 
-
-;;; detune per FM channel
-;;; TODO move to the state struct
-state_fm_detune::
-        .db     0
-        .db     0
-        .db     0
-        .db     0
 
 ;;; current pan (and instrument's AMS PMS) per FM channel
 ;;; TODO move to the state struct
@@ -416,6 +412,11 @@ compute_fm_fixed_point_note::
         ld      l, a
         ld      h, NOTE_SEMITONE(ix)
 
+        ;; hl: detuned semitone
+        ld      c, DETUNE(ix)
+        ld      b, DETUNE+1(ix)
+        add     hl, bc
+
         ;; bc: slide offset if the slide FX is enabled
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _fm_post_add_slide
@@ -551,21 +552,24 @@ compute_ym2610_fm_note::
         ld      l, c
         push    hl              ; + f-num
 
-        ;; b: next semitone distance from current note
-        ;; TODO 8bit add or aligned add
+        ;; e: half-distance f-num to next semitone (8bit add)
         ld      a, d
         and     #0xf
-        ld      hl, #fm_semitone_distance
+        ld      hl, #fm_f_num_half_distance
         add     l
-        inc     a
         ld      l, a
-        ld      b, (hl)
+        adc     a, h
+        sub     l
+        ld      h, a
+        ld      e, (hl)
         ;; c: FM: intermediate frequency is positive
         ld      c, #0
-        ;; e: intermediate note position (fractional part)
-        ld      e, NOTE_POS16(ix)
-        ;; de: current intermediate frequency f_dist
+        ;; b: intermediate note position (fractional part)
+        ld      b, NOTE_POS16(ix)
+        ;; de: current intermediate f-num
         call    slide_intermediate_freq
+        push    hl
+        pop     de
 
         pop     hl              ; - f-num
         add     hl, de
@@ -616,6 +620,7 @@ _fm_post_fx_trigger:
 _fm_post_fx_vibrato:
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _fm_post_fx_slide
+        ld      hl, #NOTE_SEMITONE
         call    eval_fm_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _fm_post_fx_slide:
@@ -678,12 +683,15 @@ _post_load_fm_vol:
         ld      c, NOTE_BLOCK(ix)
         call    fm_set_fnum_registers
 
-        ;; start current FM channel (enable all OPs)
+        ;; start current FM channel (enable all OPs) if not already done
+        bit     BIT_NOTE_STARTED, PIPELINE(ix)
+        jr      nz, _post_load_fm_note
         ld      a, (state_fm_ym2610_channel)
         or      #0xf0
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
         call    ym2610_write_port_a
+        set     BIT_NOTE_STARTED, PIPELINE(ix)
 _post_load_fm_note:
 
 _end_fm_channel_pipeline:
@@ -822,6 +830,11 @@ _fm_end:
 
         set     BIT_LOAD_VOL, PIPELINE(ix)
 
+        ;; setting a new instrument always trigger a note start,
+        ;; register it for the next pipeline run
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+
 _fm_instr_end:
         pop     de
         pop     hl
@@ -863,26 +876,47 @@ fm_set_pan_ams_pms::
         ret
 
 
+;;; build the 16bit signed detune displacement
+;;; ------
+;;; IN
+;;;   [ hl ]: detune
+;;; OUT:
+;;;     bc  : 16bits signed displacement
+;;; bc, hl modified
+common_pitch::
+        ;; a: detune [0..255]
+        ld      a, (hl)
+        inc     hl
+
+        ;; bc: detune [-128..127]
+        sub     #0x80
+        ld      c, a
+        add     a, a
+        sbc     a
+        ld      b, a
+
+        ;; bc: 2*detune, semitone range in ]-1..1[
+        push    hl
+        ld      hl, #0
+        add     hl, bc
+        add     hl, bc
+        ld      b, h
+        ld      c, l
+        pop     hl
+
+        ld      a, #1
+        ret
+
+
 ;;; FM_PITCH
-;;; Configure note detune for the current FM channel
+;;; Detune up to -+1 semitone for the current FM channel
 ;;; ------
 ;;; [ hl ]: detune
 fm_pitch::
         push    bc
-        ;; bc: address of detune for current FM channel
-        ld      bc, #state_fm_detune
-        ld      a, (state_fm_channel)
-        add     a, c
-        ld      c, a
-        add     a, b
-        sub     c
-        ld      b, a
-
-        ;; a: detune
-        ld      a, (hl)
-        inc     hl
-        ld      (bc), a
-
+        call    common_pitch
+        ld      DETUNE(ix), c
+        ld      DETUNE+1(ix), b
         pop     bc
         ld      a, #1
         ret
@@ -910,60 +944,13 @@ fm_note_f_num:
         .db      0x04, 0xd1  ; 1233 - C+1
 
 
-;;; Vibrato - semitone distance table
+;;; F-num half-distance table
 ;;; ------
-;;; The distance between a semitone's f-num and the previous semitone's f-num.
-;;; This is the same for all octaves.
-;;; The vibrato effect oscillate between one semi-tone up and down of the
-;;; current note of the FM channel.
-fm_semitone_distance::
-        ;;        C ,   C#,   D ,   D#,   E ,   F ,   F#,   G ,   G#,   A ,   A#,   B ,  C+1
-        .db     0x25, 0x27, 0x29, 0x2b, 0x2f, 0x31, 0x34, 0x37, 0x3a, 0x3e, 0x41, 0x44, 0x4a
-
-
-;;; Get the effective F-num from the current FM channel
-;;; ------
-;;;   hl  : F-Num position in the semitone frequency table
-;;; OUT:
-;;;   hl  : detuned F-num based on current detune context
-fm_get_f_num:
-        push    bc
-        ld      a, (hl)
-        inc     hl
-        ld      b, a
-        ld      a, (hl)
-        ld      c, a
-        ;; hl: 10bits f-num
-        ld      h, b
-        ld      l, c
-
-        ;; bc: address of detune for current FM channel
-        ld      bc, #state_fm_detune
-        ld      a, (state_fm_channel)
-        add     a, c
-        ld      c, a
-        add     a, b
-        sub     c
-        ld      b, a
-
-        ;; a: detune
-        ld      a, (bc)
-
-        ;; hl += a (16bits + signed 8bits)
-        cp      #0x80
-        jr      c, _detune_positive
-        dec     h
-_detune_positive:
-        ; Then do addition as usual
-        ; (to handle the "lower byte")
-        add     a, l
-        ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
-
-        pop     bc
-        ret
+;;; The half-distance between a semitone's f-num and the next semitone's f-num.
+;;; This is used to compute fractional f-num values from fixed-point note.
+fm_f_num_half_distance::
+        ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B,  C+1
+        .db     0x12, 0x13, 0x14, 0x15, 0x17, 0x18, 0x1a, 0x1b, 0x1d, 0x1f, 0x20, 0x22, 0x25
 
 
 ;;; Update the vibrato for the current FM channel
@@ -1020,21 +1007,39 @@ _end_fm_slide_load_fnum2:
 ;;; ------
 fm_configure_note_on:
         push    bc
-
-        ld      NOTE(ix), a
-
-        ;; stop current FM channel (disable all OPs)
-        ;; CHECK: do it in the pipeline instead?
-
+        push    af              ; +note
+        ;; if portamento is ongoing, this is treated as an update
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _fm_cfg_note_update
+        ld      a, SLIDE_PORTAMENTO(ix)
+        cp      #0
+        jr      z, _fm_cfg_note_update
+        ;; update the portamento now
+        pop     af              ; -note
+        ld      SLIDE_PORTAMENTO(ix), a
+        ld      b, NOTE_SEMITONE(ix)
+        call    slide_portamento_finish_init
+        ;; if a note is currently playing, do nothing else, the
+        ;; portamento will be updated at the next pipeline run...
+        bit     BIT_NOTE_STARTED, PIPELINE(ix)
+        jr      nz, _fm_cfg_note_end
+        ;; ... else a new instrument was loaded, reload this note as well
+        jr      _fm_cfg_note_prepare_ym2610
+_fm_cfg_note_update:
+        ;; update the current note and prepare the ym2610
+        pop     af              ; -note
+        ld      NOTE_SEMITONE(ix), a
+_fm_cfg_note_prepare_ym2610:
+        ;; stop playback on the channel, and let the pipeline restart it
         ld      a, (state_fm_ym2610_channel)
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
         call    ym2610_write_port_a
-
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
-
+_fm_cfg_note_end:
         pop     bc
 
         ret
@@ -1069,7 +1074,6 @@ fm_note_on::
 
 _fm_note_on_immediate:
         ;; else load note immediately
-        ld      NOTE_SEMITONE(ix), a
         call    fm_configure_note_on
 
 _fm_note_on_end:
@@ -1095,7 +1099,7 @@ fm_note_off::
         call    ym2610_write_port_a
         pop     bc
 
-        ;; disable playback in the pipeline, any note lod_note bit
+        ;; disable playback in the pipeline, any load_note bit
         ;; will get cleaned during the next pipeline run
         res     BIT_PLAYING, PIPELINE(ix)
 
@@ -1103,6 +1107,10 @@ fm_note_off::
         ld      a, (state_fm_channel)
         inc     a
         call    fm_ctx_set_current
+
+        ;; record that playback is stopped
+        xor     a
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
 
         ld      a, #1
         ret
@@ -1195,9 +1203,12 @@ _post_fm_vibrato_setup:
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 fm_note_slide_up::
-        ld      a, #0
+        push    bc
+        ld      b, #0
+        ld      c, #NOTE_SEMITONE
         call    slide_init
         ld      a, #1
+        pop     bc
         ret
 
 
@@ -1206,9 +1217,26 @@ fm_note_slide_up::
 ;;; ------
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 fm_note_slide_down::
-        ld      a, #1
+        push    bc
+        ld      b, #1
+        ld      c, #NOTE_SEMITONE
         call    slide_init
         ld      a, #1
+        pop     bc
+        ret
+
+
+;;; FM_PITCH_SLIDE_UP
+;;; Enable slide up effect for the current FM channel
+;;; ------
+;;; [ hl ]: speed (8bits)
+fm_pitch_slide_up::
+        push    bc
+        ld      b, #0
+        ld      c, #NOTE_SEMITONE
+        call    slide_pitch_init
+        ld      a, #1
+        pop     bc
         ret
 
 
@@ -1217,8 +1245,25 @@ fm_note_slide_down::
 ;;; ------
 ;;; [ hl ]: speed (8bits)
 fm_pitch_slide_down::
-        ld      a, #1
+        push    bc
+        ld      b, #1
+        ld      c, #NOTE_SEMITONE
         call    slide_pitch_init
+        ld      a, #1
+        pop     bc
+        ret
+
+
+;;; FM_PORTAMENTO
+;;; Enable slide to the next note to be loaded into the pipeline
+;;; ------
+;;; [ hl ]: speed
+fm_portamento::
+        ;; current note (start of portamento)
+        ld      a, NOTE_POS16+1(ix)
+
+        call    slide_portamento_init
+
         ld      a, #1
         ret
 
