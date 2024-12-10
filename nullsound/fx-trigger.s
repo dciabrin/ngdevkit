@@ -50,6 +50,28 @@ trigger_delay_init::
         ret
 
 
+;;; Enable delayed cut for the note currently playing
+;;; (note is stopped after a defined number of steps)
+;;; ------
+;;;   ix  : state for channel
+;;; [ hl ]: delay
+;;; [ hl modified ]
+trigger_cut_init::
+        ;; a: delay
+        ld      a, (hl)
+        inc     a
+        inc     hl
+
+        ;; configure trigger FX for delay
+        ld      TRIGGER_CUT(ix), a
+        xor     a
+        set     BIT_TRIGGER_ACTION_CUT, a
+        ld      TRIGGER_ACTION(ix), a
+        set     BIT_FX_TRIGGER, FX(ix)
+
+        ret
+
+
 ;;; Call an function from the action lookup table
 ;;; ------
 ;;; hl: function lookup table
@@ -89,6 +111,15 @@ eval_trigger_step::
         jr      nz, _trigger_end
         jr      _trigger_load_and_clear
 _trigger_post_delay:
+
+        ;; is the trigger a cut?
+        bit     BIT_TRIGGER_ACTION_CUT, TRIGGER_ACTION(ix)
+        jr      z, _trigger_post_cut
+        ;; check whether delay is reached
+        dec     TRIGGER_CUT(ix)
+        jr      nz, _trigger_end
+        jr      _trigger_cut_note
+_trigger_post_cut:
 _trigger_end:
         ret
 
@@ -115,3 +146,13 @@ _trigger_post_load_vol:
         res     BIT_FX_TRIGGER, FX(ix)
 
         ret
+
+_trigger_cut_note:
+        ld      bc, #TRIGGER_STOP_NOTE_FUNC
+        call    trigger_action_function
+        xor     a
+        ld      TRIGGER_ACTION(ix), a
+        res     BIT_FX_TRIGGER, FX(ix)
+
+        ret
+

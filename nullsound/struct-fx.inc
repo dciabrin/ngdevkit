@@ -105,7 +105,9 @@ _vibrato_size:
 
         .lclequ TRIGGER_LOAD_NOTE_FUNC,         0
         .lclequ TRIGGER_LOAD_VOL_FUNC,          2
+        .lclequ TRIGGER_STOP_NOTE_FUNC,         4
 
         .lclequ BIT_TRIGGER_ACTION_DELAY,       0
+        .lclequ BIT_TRIGGER_ACTION_CUT,         1
         .lclequ BIT_TRIGGER_LOAD_NOTE,          4
         .lclequ BIT_TRIGGER_LOAD_VOL,           5

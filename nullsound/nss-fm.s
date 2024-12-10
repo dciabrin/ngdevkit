@@ -157,6 +157,7 @@ _state_fm_end:
 state_fm_action_funcs:
         .dw     fm_configure_note_on
         .dw     fm_configure_vol
+        .dw     fm_stop_playback
 
 
 ;;;  Reset FM playback state.
@@ -1086,13 +1087,11 @@ _fm_note_on_end:
         ret
 
 
-;;; FM_NOTE_OFF
-;;; Release the note on an FM channel. The sound will decay according
-;;; to the current configuration of the FM channel's operators.
+;;; Release the note on an FM channel and update the pipeline state
 ;;; ------
-fm_note_off::
-        push    bc
+fm_stop_playback:
         ;; stop all OPs of FM channel
+        push    bc
         ld      a, (state_fm_ym2610_channel)
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
@@ -1103,14 +1102,24 @@ fm_note_off::
         ;; will get cleaned during the next pipeline run
         res     BIT_PLAYING, PIPELINE(ix)
 
+        ;; record that playback is stopped
+        xor     a
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
+
+        ret
+
+
+;;; FM_NOTE_OFF
+;;; Release the note on an FM channel. The sound will decay according
+;;; to the current configuration of the FM channel's operators.
+;;; ------
+fm_note_off::
+        call    fm_stop_playback
+
         ;; FM context will now target the next channel
         ld      a, (state_fm_channel)
         inc     a
         call    fm_ctx_set_current
-
-        ;; record that playback is stopped
-        xor     a
-        res     BIT_NOTE_STARTED, PIPELINE(ix)
 
         ld      a, #1
         ret
@@ -1336,6 +1345,17 @@ fm_vol_slide_down::
 ;;; [ hl ]: delay
 fm_delay::
         call    trigger_delay_init
+
+        ld      a, #1
+        ret
+
+
+;;; FM_CUT
+;;; Record that the note being played must be stopped after some steps
+;;; ------
+;;; [ hl ]: delay
+fm_cut::
+        call    trigger_cut_init
 
         ld      a, #1
         ret

@@ -134,6 +134,7 @@ _state_ssg_end:
 state_ssg_action_funcs:
         .dw     ssg_configure_note_on
         .dw     ssg_configure_vol
+        .dw     ssg_stop_playback
 
 
 ;;;  Reset SSG playback state.
@@ -713,10 +714,9 @@ _end_ssg_slide_step:
         ret
 
 
-;;; SSG_NOTE_OFF
-;;; Release (stop) the note on the current SSG channel.
+;;; Release the note on a SSG channel and update the pipeline state
 ;;; ------
-ssg_note_off::
+ssg_stop_playback:
         push    bc
 
         ;; c: disable mask (shifted for channel)
@@ -747,14 +747,23 @@ ssg_note_off::
         ;; will get cleaned during the next pipeline run
         res     BIT_PLAYING, PIPELINE(ix)
 
+        ;; record that playback is stopped
+        xor     a
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
+
+        ret
+
+
+;;; SSG_NOTE_OFF
+;;; Release (stop) the note on the current SSG channel.
+;;; ------
+ssg_note_off::
+        call    ssg_stop_playback
+
         ;; SSG context will now target the next channel
         ld      a, (state_ssg_channel)
         inc     a
         call    fm_ctx_set_current
-
-        ;; record that playback is stopped
-        xor     a
-        res     BIT_NOTE_STARTED, PIPELINE(ix)
 
         ld      a, #1
         ret
@@ -1042,5 +1051,16 @@ ssg_pitch::
         ld      DETUNE(ix), c
         ld      DETUNE+1(ix), b
         pop     bc
+        ld      a, #1
+        ret
+
+
+;;; SSG_CUT
+;;; Record that the note being played must be stopped after some steps
+;;; ------
+;;; [ hl ]: delay
+ssg_cut::
+        call    trigger_cut_init
+
         ld      a, #1
         ret

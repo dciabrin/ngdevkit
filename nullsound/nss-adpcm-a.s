@@ -103,6 +103,7 @@ _state_adpcm_end:
 state_a_action_funcs::
         .dw     adpcm_a_configure_on
         .dw     adpcm_a_configure_vol
+        .dw     adpcm_a_stop_playback
 
 
 ;;;  Reset ADPCM playback state.
@@ -456,10 +457,9 @@ _a_on_end:
         ret
 
 
-;;; ADPCM_A_OFF
-;;; Stop the playback on a ADPCM-A channel
+;;; Release the note on a ADPCM-A channel and update the pipeline state
 ;;; ------
-adpcm_a_off::
+adpcm_a_stop_playback:
         push    bc
         push    de
 
@@ -484,6 +484,15 @@ _off_bit:
 
         pop     de
         pop     bc
+
+        ret
+
+
+;;; ADPCM_A_OFF
+;;; Stop the playback on a ADPCM-A channel
+;;; ------
+adpcm_a_off::
+        call    adpcm_a_stop_playback
 
         ;; ADPCM-A context will now target the next channel
         ld      a, (state_adpcm_a_channel)
@@ -582,6 +591,17 @@ _a_vol_end:
 ;;; [ hl ]: delay
 adpcm_a_delay::
         call    trigger_delay_init
+
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_CUT
+;;; Record that the note being played must be stopped after some steps
+;;; ------
+;;; [ hl ]: delay
+adpcm_a_cut::
+        call    trigger_cut_init
 
         ld      a, #1
         ret

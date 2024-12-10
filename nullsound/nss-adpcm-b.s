@@ -101,6 +101,7 @@ _state_adpcm_b_end:
 state_b_action_funcs::
         .dw     adpcm_b_configure_note_on
         .dw     adpcm_b_configure_vol
+        .dw     adpcm_b_note_off
 
 
 ;;;  Reset ADPCM playback state.
@@ -752,6 +753,29 @@ adpcm_b_portamento::
         ld      a, NOTE_POS16+1(ix)
 
         call    slide_portamento_init
+
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_B_DELAY
+;;; Enable delayed trigger for the next note and volume
+;;; (note and volume and played after a number of ticks)
+;;; ------
+;;; [ hl ]: delay
+adpcm_b_delay::
+        call    trigger_delay_init
+
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_B_CUT
+;;; Record that the note being played must be stopped after some steps
+;;; ------
+;;; [ hl ]: delay
+adpcm_b_cut::
+        call    trigger_cut_init
 
         ld      a, #1
         ret

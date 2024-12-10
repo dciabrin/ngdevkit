@@ -520,6 +520,11 @@ nss_opcodes:
         .nss_op adpcm_b_portamento
         .nss_op ssg_pitch_slide_down
         .nss_op ssg_portamento
+        .nss_op fm_cut
+        .nss_op ssg_cut
+        .nss_op adpcm_a_cut
+        .nss_op adpcm_b_cut
+        .nss_op adpcm_b_delay
 
 
 
