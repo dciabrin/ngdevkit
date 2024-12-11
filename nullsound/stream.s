@@ -525,6 +525,7 @@ nss_opcodes:
         .nss_op adpcm_a_cut
         .nss_op adpcm_b_cut
         .nss_op adpcm_b_delay
+        .nss_op adpcm_a_retrigger
 
 
 

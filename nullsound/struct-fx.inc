@@ -27,7 +27,7 @@
         .area   struct
 
         .local  pipeline, fx_fx, fx_trigger, fx_vol_slide, fx_slide, fx_vibrato
-        .local  _trigger_action, _trigger_note, _trigger_vol, _trigger_cut, _trigger_delay, _trigger_size
+        .local  _trigger_action, _trigger_note, _trigger_vol, _trigger_arg, _trigger_cur, _trigger_size
         .local  _vol_slide_inc16, _vol_slide_pos16, _vol_slide_end, _vol_slide_size
         .local  _slide_speed, _slide_depth, _slide_inc16, _slide_pos16, _slide_portamento, _slide_end, _slide_size
         .local _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
@@ -37,11 +37,11 @@ pipeline:               .blkb 1
 ;;; enabled FX. This must be the second field of a channel's state
 fx_fx:                  .blkb 1
 fx_trigger:
-_trigger_action:        .blkb 1
-_trigger_note:          .blkb 1
-_trigger_vol:           .blkb 1
-_trigger_cut:           .blkb 1
-_trigger_delay:         .blkb 1
+_trigger_action:        .blkb 1         ; trigger action (cut, delay, retrigger)
+_trigger_note:          .blkb 1         ; trigger delayed note
+_trigger_vol:           .blkb 1         ; trigger delayed volume
+_trigger_arg:           .blkb 1         ; per-action argument
+_trigger_cur:           .blkb 1         ; per-action current accumulator
 _trigger_size:
 ;;; FX: volume slide
 fx_vol_slide:
@@ -75,8 +75,8 @@ _vibrato_size:
         .lclequ TRIGGER_ACTION, (_trigger_action - pipeline)
         .lclequ TRIGGER_NOTE,   (_trigger_note - pipeline)
         .lclequ TRIGGER_VOL,    (_trigger_vol - pipeline)
-        .lclequ TRIGGER_CUT,    (_trigger_cut - pipeline)
-        .lclequ TRIGGER_DELAY,  (_trigger_delay - pipeline)
+        .lclequ TRIGGER_ARG,    (_trigger_arg - pipeline)
+        .lclequ TRIGGER_CUR,    (_trigger_cur - pipeline)
         .lclequ TRIGGER_SIZE,   (_trigger_size - fx_trigger)
         .lclequ VOL_SLIDE,      (fx_vol_slide - pipeline)
         .lclequ VOL_SLIDE_INC16, (_vol_slide_inc16 - pipeline)
@@ -109,5 +109,6 @@ _vibrato_size:
 
         .lclequ BIT_TRIGGER_ACTION_DELAY,       0
         .lclequ BIT_TRIGGER_ACTION_CUT,         1
+        .lclequ BIT_TRIGGER_ACTION_RETRIGGER,   2
         .lclequ BIT_TRIGGER_LOAD_NOTE,          4
         .lclequ BIT_TRIGGER_LOAD_VOL,           5

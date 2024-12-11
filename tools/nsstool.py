@@ -282,6 +282,13 @@ def register_nss_ops():
         ("b_porta", ["speed"]),
         ("s_pitch_slide_d", ["speed"]),
         ("s_porta", ["speed"]),
+        ("fm_cut",   ["delay"]),
+        ("s_cut",    ["delay"]),
+        ("a_cut",    ["delay"]),
+        # 0x60
+        ("b_cut",    ["delay"]),
+        ("b_delay",  ["delay"]),
+        ("a_retrigger", ["delay"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -371,6 +378,8 @@ def convert_fm_row(row, channel):
                 opcodes.append(fm_pitch_slide_u(fxval))
             elif fx == 0x03:  # portamento
                 opcodes.append(fm_porta(fxval))
+            elif fx == 0xec:  # cut
+                opcodes.append(fm_cut(fxval))
             else:
                 add_unknown_fx('FM', fx)
 
@@ -457,6 +466,8 @@ def convert_s_row(row, channel):
                 opcodes.append(s_pitch_slide_d(fxval))
             elif fx == 0x03:  # pitch slide down
                 opcodes.append(s_porta(fxval))
+            elif fx == 0xec:  # cut
+                opcodes.append(s_cut(fxval))
             else:
                 add_unknown_fx('SSG', fx)
 
@@ -498,8 +509,12 @@ def convert_a_row(row, channel):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x0c:  # retrigger
+                opcodes.append(a_retrigger(fxval))
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            elif fx == 0xec:  # cut
+                opcodes.append(a_cut(fxval))
             else:
                 add_unknown_fx('ADPCM-A', fx)
 
@@ -516,6 +531,10 @@ def convert_b_row(row, channel):
     jmp_to_order = -1
     opcodes = []
     if not is_empty(row):
+        # pre note/vol/instrument effects
+        for fx, fxval in row.fx:
+            if fx == 0xed:  # note delay
+                opcodes.append(b_delay(fxval))
         # instrument
         if row.ins != -1:
             opcodes.append(b_instr(row.ins))
@@ -525,6 +544,8 @@ def convert_b_row(row, channel):
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
+                pass
+            elif fx in [0xed]: # pre-instrument FX
                 pass
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
@@ -540,6 +561,8 @@ def convert_b_row(row, channel):
                 opcodes.append(b_pitch_slide_u(fxval))
             elif fx == 0x03:  # portamento
                 opcodes.append(b_porta(fxval))
+            elif fx == 0xec:  # cut
+                opcodes.append(b_cut(fxval))
             else:
                 add_unknown_fx('ADPCM-B', fx)
 

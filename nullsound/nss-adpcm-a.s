@@ -605,3 +605,14 @@ adpcm_a_cut::
 
         ld      a, #1
         ret
+
+
+;;; ADPCM_A_RETRIGGER
+;;; Enable another trigger of the current note after a number of steps
+;;; ------
+;;; [ hl ]: delay
+adpcm_a_retrigger::
+        call    trigger_retrigger_init
+
+        ld      a, #1
+        ret
