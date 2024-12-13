@@ -230,6 +230,7 @@ update_stream_state_tracker::
         call    process_streams_opcodes
         ld      a, #0
         ld      (state_timer_ticks_count), a
+        call    timer_update_ticks_for_next_row
 _check_update_stream_pipeline:
         ld      a, (state_timer_tick_reached)
         bit     TIMER_CONSUMER_STREAM_BIT, a
@@ -387,9 +388,12 @@ stream_play_multi::
         ld      (state_ch_bits), bc
         call    snd_configure_stream_ctx_switches
 
+        ;; setup speed and groove
+        inc     iy
+        inc     iy
+        call    timer_init_ticks
+
         ;; hl: stream data from NSS
-        inc     iy
-        inc     iy
         push    iy
         pop     hl
 

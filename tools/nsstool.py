@@ -216,7 +216,7 @@ def register_nss_ops():
         # 0x08
         ("nop"     , ),
         ("speed"   , ["ticks"]),
-        None,
+        ("groove",   ["ticks"]),
         None,
         ("b_instr" , ["inst"]),
         ("b_note"  , ["note"]),
@@ -344,6 +344,8 @@ def convert_fm_row(row, channel):
                 jmp_to_order = 257
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            elif fx == 0x09:  # Groove
+                opcodes.append(groove(fxval))
             elif fx == 0x04:  # vibrato
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
@@ -440,6 +442,8 @@ def convert_s_row(row, channel):
                 jmp_to_order = 257
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            elif fx == 0x09:  # Groove
+                opcodes.append(groove(fxval))
             elif fx == 0x04:  # vibrato
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
@@ -513,6 +517,8 @@ def convert_a_row(row, channel):
                 opcodes.append(a_retrigger(fxval))
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            elif fx == 0x09:  # Groove
+                opcodes.append(groove(fxval))
             elif fx == 0xec:  # cut
                 opcodes.append(a_cut(fxval))
             else:
@@ -555,6 +561,8 @@ def convert_b_row(row, channel):
                 jmp_to_order = 257
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
+            elif fx == 0x09:  # Groove
+                opcodes.append(groove(fxval))
             elif fx == 0x01:  # pitch slide up
                 # fxval == -1 means disable slide
                 fxval = max(fxval, 0)
@@ -602,7 +610,7 @@ def raw_nss(m, p, bs, channels, compact):
     selected_b = [x for x in b_channel if x in channels]
 
     # initialize stream speed from module
-    tick = m.speed
+    tick = m.speeds[0]
 
     # -- structures
     # a song is composed of a sequence of orders
@@ -1116,12 +1124,14 @@ def stream_name(prefix, channel):
     return prefix+"_%s"%stream_type[channel]
 
 
-def nss_compact_header(channels, streams, name, fd):
+def nss_compact_header(mod, channels, streams, name, fd):
     bitfield, comment = channels_bitfield(channels)
     if name:
         print("%s::" % name, file=fd)
     print(("        .db     0x%02x"%len(streams)).ljust(40)+" ; number of streams", file=fd)
     print(("        .dw     0x%04x"%bitfield).ljust(40)+" ; channels: %s"%comment, file=fd)
+    speeds=", ".join(["0x%02x"%x for x in mod.speeds])
+    print(("        .db     0x%02x, %s"%(len(mod.speeds), speeds)).ljust(40)+" ; speeds", file=fd)
     for i, c in enumerate(channels):
         comment = "stream %i: NSS data"%i
         print(("        .dw     %s"%(stream_name(name,c))).ljust(40)+" ; "+comment, file=fd)
@@ -1163,7 +1173,6 @@ def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
     if stream_idx <= 0:
         tb = round(256 - (4000000 / (1152 * m.frequency)))
         nss.insert(0, tempo(tb))
-        nss.insert(0, speed(m.speed))
 
     dbg("Transformation passes:")
     dbg(" - remove unreference NSS labels")
@@ -1256,11 +1265,14 @@ def main():
         streams = [generate_nss_stream(m, p, bs, ins, [c], i) for i, c in enumerate(channels)]
         channels, streams = remove_empty_streams(channels, streams)
         # NSS compact header (number of streams, channels bitfield, stream pointers)
-        size = 1 + 2 + (2 * len(streams))
+        size = (1 +                  # number of streams
+                2 +                  # channels bitfield
+                1 + len(m.speeds) +  # speeds
+                (2 * len(streams)))  # stream pointers
         # all streams sizes
         size += sum([stream_size(s) for s in streams])
         asm_header(streams, m, name, size, outfd)
-        nss_compact_header(channels, streams, name, outfd)
+        nss_compact_header(m, channels, streams, name, outfd)
         for i, ch, stream in zip(range(len(channels)), channels, streams):
             nss_to_asm(stream, m, stream_name(name, ch), outfd)
     else:
@@ -1273,7 +1285,7 @@ def main():
 
     # warn about any unknown FX during the conversion to NSS
     for ch in unknown_fx.keys():
-        dbg("unknown FX for %s: %s" % (ch, ", ".join(sorted(unknown_fx[ch]))))
+        warn("unknown FX for %s: %s" % (ch, ", ".join(sorted(unknown_fx[ch]))))
 
 
 

@@ -53,6 +53,10 @@
 
 ;;; ADPCM playback state tracker
 ;;; ------
+        ;; This padding ensures the entire _state_ssg data sticks into
+        ;; a single 256 byte boundary to make 16bit arithmetic faster
+        .blkb   42
+
 _state_adpcm_start:
 
 ;;; ADPCM-A mirrored state

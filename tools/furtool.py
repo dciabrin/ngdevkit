@@ -134,9 +134,10 @@ def ebit(data, msb, lsb):
 class fur_module:
     name: str = ""
     author: str = ""
-    speed: int = 0
+    speeds: list[int] = field(default_factory=list)
     arpeggio: int = 0
     frequency: float = 0.0
+    fxcolumns: list[int] = field(default_factory=list)
     instruments: list[int] = field(default_factory=list)
     samples: list[int] = field(default_factory=list)
 
@@ -151,8 +152,8 @@ def read_module(bs):
     assert bs.read(4) == b"INFO"
     bs.read(4) # skip size
     bs.u1() # skip timebase
-    mod.speed = bs.u1()
-    bs.u1() # skip speed2
+    bs.u1() # skip speed 1, use info from speed patterns later
+    bs.u1() # skip speed 2, use info from speed patterns later
     mod.arpeggio = bs.u1()
     mod.frequency = bs.uf4()
     pattern_len = bs.u2()
@@ -180,6 +181,39 @@ def read_module(bs):
         for o in range(nb_orders):
             mod.orders[o][i] = bs.u1()
     mod.fxcolumns = [bs.u1() for x in range(14)]
+    bs.read(14) # skip channel hide status (UI)
+    bs.read(14) # skip channel collapse status (UI)
+    for i in range(14): bs.ustr() # skip channel names
+    for i in range(14): bs.ustr() # skip channel short names
+    mod.comment = bs.ustr()
+    bs.uf4() # skip master volume
+    bs.read(28) # skip extended compatibity flags
+    bs.u2() # skip virtual tempo numerator
+    bs.u2() # skip virtual tempo denominator
+    # right now, subsongs are not supported
+    subsong_name = bs.ustr()
+    subsong_comment = bs.ustr()
+    subsongs = bs.u1()
+    assert subsongs == 0, "subsongs in a single Furnace file is unsupported"
+    bs.read(3) # skip reserved
+    # song's additional metadata
+    system_name = bs.ustr()
+    game_name = bs.ustr()
+    song_name_jp = bs.ustr()
+    song_author_jp = bs.ustr()
+    system_name_jp = bs.ustr()
+    game_name_jp = bs.ustr()
+    bs.read(12) # skip 1 "extra chip output setting"
+    # patchbay
+    bs.read(4*bs.u4()) # skip information
+    bs.u1() # skip auto patchbay
+    # more compat flags
+    bs.read(8) # skip compat flags
+    # speed pattern data
+    speed_length = bs.u1()
+    assert 1 <= speed_length <= 16
+    mod.speeds = [bs.u1() for i in range(speed_length)]
+    # TODO: grove patterns
     return mod
 
 
