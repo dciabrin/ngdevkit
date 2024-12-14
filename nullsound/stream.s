@@ -532,6 +532,7 @@ nss_opcodes:
         .nss_op adpcm_a_retrigger
         .nss_op adpcm_a_pan
         .nss_op adpcm_b_pan
+        .nss_op adpcm_b_vibrato
 
 
 

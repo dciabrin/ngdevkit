@@ -956,7 +956,7 @@ fm_f_num_half_distance::
 
 ;;; Update the vibrato for the current FM channel
 ;;; ------
-;;; hl: mirrored state of the current fm channel
+;;; ix: mirrored state of the current fm channel
 eval_fm_vibrato_step::
         push    hl
         push    de

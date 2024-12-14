@@ -74,6 +74,7 @@ state_b_fx:                     .blkb   1       ; enabled FX for this channel
 state_b_trigger:                .blkb   TRIGGER_SIZE
 state_b_fx_vol_slide:           .blkb   VOL_SLIDE_SIZE
 state_b_fx_slide:               .blkb   SLIDE_SIZE
+state_b_fx_vibrato:             .blkb   VIBRATO_SIZE
 ;;; ADPCM-B-specific state
 ;;; Note
 state_b_note:
@@ -157,6 +158,11 @@ run_adpcm_b_pipeline::
         ld      hl, #state_b_action_funcs
         call    eval_trigger_step
 _b_post_fx_trigger:
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _b_post_fx_vibrato
+        call    eval_b_vibrato_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_b_post_fx_vibrato:
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _b_post_fx_slide
         ld      hl, #NOTE_SEMITONE
@@ -409,6 +415,24 @@ adpcm_b_delta_n_base:
 adpcm_b_delta_n_half_distance::
         ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B
         .db     0x60, 0x66, 0x6d, 0x73, 0x7a, 0x81, 0x89, 0x91, 0x99, 0xa3, 0xac, 0xb7
+
+
+;;; Update the vibrato for the ADPCM-B channel
+;;; ------
+;;; ix: mirrored state of the ADPCM-B channel
+eval_b_vibrato_step::
+        push    hl
+        push    de
+        push    bc
+
+        call    vibrato_eval_step
+
+        pop     bc
+        pop     de
+        pop     hl
+
+        ret
+
 
 ;;; Update the slide for the current channel
 ;;; Slide moves up or down by 1/8 of semitone increments * slide depth.
@@ -802,6 +826,36 @@ adpcm_b_pan::
         inc     hl
         ld      PAN(ix), a
         set     BIT_LOAD_PAN, PIPELINE(ix)
+
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_B_VIBRATO
+;;; Enable vibrato for the channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+adpcm_b_vibrato::
+        ;; TODO: move this part to common vibrato_init
+
+        ;; hl == 0 means disable vibrato
+        ld      a, (hl)
+        cp      #0
+        jr      nz, _setup_b_vibrato
+
+        ;; disable vibrato fx
+        res     BIT_FX_VIBRATO, FX(ix)
+
+        ;; reload configured note at the next pipeline run
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+
+        inc     hl
+        jr      _post_b_vibrato_setup
+
+_setup_b_vibrato:
+        call    vibrato_init
+
+_post_b_vibrato_setup:
 
         ld      a, #1
         ret

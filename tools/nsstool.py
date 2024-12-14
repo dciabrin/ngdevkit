@@ -291,6 +291,7 @@ def register_nss_ops():
         ("a_retrigger", ["delay"]),
         ("a_pan",    ["pan_mask"]),
         ("b_pan",    ["pan_mask"]),
+        ("b_vibrato", ["speed_depth"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -583,7 +584,12 @@ def convert_b_row(row, channel):
             elif fx in [0x08, 0x80]: # panning
                 pan_mask = convert_pan(fx, fxval)
                 opcodes.append(b_pan(pan_mask))
+            elif fx == 0x04:  # vibrato
+                # fxval == -1 means disable vibrato
+                fxval = max(fxval, 0)
+                opcodes.append(b_vibrato(fxval))
             else:
+                row_warn(row, "VIBRATO")
                 add_unknown_fx('ADPCM-B', fx)
 
         # note
