@@ -30,6 +30,7 @@
         ;; getters for ADPCM-A state
         .lclequ VOL, (state_a_vol-state_a)
         .lclequ OUT_VOL, (state_a_out_vol-state_a)
+        .lclequ PAN, (state_a_pan-state_a)
 
         .equ    NSS_ADPCM_A_INSTRUMENT_PROPS,   4
         .equ    NSS_ADPCM_A_NEXT_REGISTER,      8
@@ -71,6 +72,8 @@ state_a_trigger:                .blkb   TRIGGER_SIZE
 ;;; volume
 state_a_vol:                    .blkb    1      ; configured note volume (attenuation)
 state_a_out_vol:                .blkb    1      ; ym2610 volume after the FX pipeline
+;;; pan
+state_a_pan:                    .blkb    1      ; configured pan (b7: left, b6: right)
 ;;;
 state_a_end:
 ;;; ADPCM-A2
@@ -128,10 +131,15 @@ init_nss_adpcm_state_tracker::
         ld      (state_adpcm_a_channel), a
         ;; set default
         ld      ix, #state_a1
+        ld      bc, #ADPCM_A_STATE_SIZE
         ld      d, #6
 _a_init:
         ld      a, #0x1f
         ld      VOL(ix), a
+        ld      a, #0xc0
+        ld      PAN(ix), a
+
+        add     ix, bc
         dec     d
         jr      nz, _a_init
         ;; global ADPCM volumes are initialized in the volume state tracker
@@ -228,17 +236,17 @@ _post_load_a_vol:
 
         ;; Pipeline action: load pan+volume register when it is modified
         ld      a, PIPELINE(ix)
-        or      a, #(STATE_LOAD_VOL|STATE_LOAD_PAN)
+        and     a, #(STATE_LOAD_VOL|STATE_LOAD_PAN)
         jr      z, _post_load_a_pan_vol
         res     BIT_LOAD_VOL, PIPELINE(ix)
         res     BIT_LOAD_PAN, PIPELINE(ix)
 
-        ;; c: volume + default pan (L/R)
+        ;; c: volume + pan
         ld      a, OUT_VOL(ix)
-        or      #0xc0
+        add     PAN(ix)
         ld      c, a
 
-        ;; set pan+volume for channel in the YM2610
+        ;; set volume + pan for channel in the YM2610
         ;; b: ADPCM-A channel
         ld      a, (state_adpcm_a_channel)
         add     a, #REG_ADPCM_A1_PAN_VOLUME
@@ -617,6 +625,20 @@ adpcm_a_cut::
 ;;; [ hl ]: delay
 adpcm_a_retrigger::
         call    trigger_retrigger_init
+
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_A_PAN
+;;; Set the pan (l/r) for the current ADPCM-A channel
+;;; ------
+;;; [ hl ]: pan (b7: left, b6: right)
+adpcm_a_pan::
+        ld      a, (hl)
+        inc     hl
+        ld      PAN(ix), a
+        set     BIT_LOAD_PAN, PIPELINE(ix)
 
         ld      a, #1
         ret

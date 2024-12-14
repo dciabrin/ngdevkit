@@ -289,6 +289,8 @@ def register_nss_ops():
         ("b_cut",    ["delay"]),
         ("b_delay",  ["delay"]),
         ("a_retrigger", ["delay"]),
+        ("a_pan",    ["pan_mask"]),
+        ("b_pan",    ["pan_mask"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -300,6 +302,15 @@ def register_nss_ops():
             fields=[(x, int) for x in args]+[cid]
             globals()[cname]=make_dataclass(cname, fields)
 
+
+def convert_pan(fx, fxval):
+    if fx == 0x08:  # pan
+        pan_l = 0x80 if (fxval & 0xf0) else 0
+        pan_r = 0x40 if (fxval & 0x0f) else 0
+    elif fx == 0x80:  # old pan
+        pan_l = 0x80 if fxval in [0x00, 0x80] else 0
+        pan_r = 0x40 if fxval in [0x80, 0xff] else 0
+    return pan_l|pan_r;
 
 
 #
@@ -317,15 +328,7 @@ def convert_fm_row(row, channel):
             opcodes.append(fm_vol(row.vol))
         # pre-instrument effects
         for fx, fxval in row.fx:
-            if fx == 0x08:  # pan
-                pan_l = 0x80 if (fxval & 0xf0) else 0
-                pan_r = 0x40 if (fxval & 0x0f) else 0
-                opcodes.append(fm_pan(pan_l|pan_r))
-            elif fx == 0x80:  # old pan
-                pan_l = 0x80 if fxval in [0x00, 0x80] else 0
-                pan_r = 0x40 if fxval in [0x80, 0xff] else 0
-                opcodes.append(fm_pan(pan_l|pan_r))
-            elif fx == 0xed:  # note delay
+            if fx == 0xed:  # note delay
                 opcodes.append(fm_delay(fxval))
         # instrument
         if row.ins != -1:
@@ -382,6 +385,9 @@ def convert_fm_row(row, channel):
                 opcodes.append(fm_porta(fxval))
             elif fx == 0xec:  # cut
                 opcodes.append(fm_cut(fxval))
+            elif fx in [0x08, 0x80]: # panning
+                pan_mask = convert_pan(fx, fxval)
+                opcodes.append(fm_pan(pan_mask))
             else:
                 add_unknown_fx('FM', fx)
 
@@ -521,6 +527,9 @@ def convert_a_row(row, channel):
                 opcodes.append(groove(fxval))
             elif fx == 0xec:  # cut
                 opcodes.append(a_cut(fxval))
+            elif fx in [0x08, 0x80]: # panning
+                pan_mask = convert_pan(fx, fxval)
+                opcodes.append(a_pan(pan_mask))
             else:
                 add_unknown_fx('ADPCM-A', fx)
 
@@ -571,6 +580,9 @@ def convert_b_row(row, channel):
                 opcodes.append(b_porta(fxval))
             elif fx == 0xec:  # cut
                 opcodes.append(b_cut(fxval))
+            elif fx in [0x08, 0x80]: # panning
+                pan_mask = convert_pan(fx, fxval)
+                opcodes.append(b_pan(pan_mask))
             else:
                 add_unknown_fx('ADPCM-B', fx)
 

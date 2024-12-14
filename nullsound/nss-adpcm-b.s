@@ -34,6 +34,7 @@
         .lclequ DELTA_N, (state_b_note_delta_n-state_b)
         .lclequ VOL, (state_b_vol-state_b)
         .lclequ OUT_VOL, (state_b_out_vol-state_b)
+        .lclequ PAN, (state_b_pan-state_b)
         .lclequ INSTR, (state_b_instr-state_b)
         .lclequ START_CMD, (state_b_instr_start_cmd-state_b)
 
@@ -85,6 +86,8 @@ state_b_instr_start_cmd:        .blkb   1       ; instrument play command (with 
 ;;; volume
 state_b_vol:                    .blkb   1       ; configured note volume (attenuation)
 state_b_out_vol:                .blkb   1       ; ym2610 volume after the FX pipeline
+;;; pan
+state_b_pan:                    .blkb    1      ; configured pan (b7: left, b6: right)
 ;;;
 state_b_end:
 
@@ -176,8 +179,17 @@ _b_post_check_playing:
         ld      b, #REG_ADPCM_B_VOLUME
         ld      c, OUT_VOL(ix)
         call    ym2610_write_port_a
-
+        res     BIT_LOAD_VOL, PIPELINE(ix)
 _post_load_b_vol:
+
+        ;; Pipeline action: load pan if requested
+        bit     BIT_LOAD_PAN, PIPELINE(ix)
+        jr      z, _post_load_b_pan
+        ld      b, #REG_ADPCM_B_PAN
+        ld      c, PAN(ix)
+        call    ym2610_write_port_a
+        res     BIT_LOAD_PAN, PIPELINE(ix)
+_post_load_b_pan:
 
         ;; Pipeline action: load note register when the note state is modified
         bit     BIT_LOAD_NOTE, PIPELINE(ix)
@@ -776,6 +788,20 @@ adpcm_b_delay::
 ;;; [ hl ]: delay
 adpcm_b_cut::
         call    trigger_cut_init
+
+        ld      a, #1
+        ret
+
+
+;;; ADPCM_B_PAN
+;;; Set the pan (l/r) for the channel
+;;; ------
+;;; [ hl ]: pan (b7: left, b6: right)
+adpcm_b_pan::
+        ld      a, (hl)
+        inc     hl
+        ld      PAN(ix), a
+        set     BIT_LOAD_PAN, PIPELINE(ix)
 
         ld      a, #1
         ret
