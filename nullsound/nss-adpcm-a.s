@@ -95,7 +95,7 @@ state_a6_end:
 
 ;;; context: current adpcm channel for opcode actions
 state_adpcm_a_channel::
-        .db     0
+        .blkb   1
 
 
 ;;; Global volume attenuation for all ADPCM-A channels

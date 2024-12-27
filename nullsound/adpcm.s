@@ -35,7 +35,7 @@
 ;;; Maintains one bit per ADPCM channel currently playing
 ;;; | B  | __ | A6 | A5 | A4 | A3 | A2 | A1 |
 state_adpcm_busy:
-        .db     0x00
+        .blkb   1
 
 
         .area  CODE

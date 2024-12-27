@@ -88,9 +88,9 @@ ym2610_write_func:
 ;;; context: current fm channel for opcode actions
 _state_fm_start:
 state_fm_channel::
-        .db     0
+        .blkb   1
 state_fm_ym2610_channel::
-        .db     0
+        .blkb   1
 
 ;;; FM mirrored state
 state_fm:
@@ -138,11 +138,7 @@ state_fm4:
 
 ;;; current pan (and instrument's AMS PMS) per FM channel
 ;;; TODO move to the state struct
-state_pan_ams_pms::
-        .db     0
-        .db     0
-        .db     0
-        .db     0
+state_pan_ams_pms::                  .blkb  4
 
 ;;; Global volume attenuation for all FM channels
 state_fm_volume_attenuation::        .blkb   1

@@ -75,7 +75,7 @@ _state_ssg_start:
 
 ;;; context: current SSG channel for opcode actions
 state_ssg_channel::
-        .db     0
+        .blkb   1
 
 ;;; YM2610 mirrored state
 ;;; ------
@@ -83,7 +83,7 @@ state_ssg_channel::
 
 ;;; merged waveforms of all SSG channels for REG_SSG_ENABLE
 state_mirrored_enabled:
-        .db     0
+        .blkb   1
 
 ;;; ssg mirrored state
 state_mirrored_ssg:

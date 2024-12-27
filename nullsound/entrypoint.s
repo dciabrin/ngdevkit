@@ -241,11 +241,11 @@ _no_pending_commands:
 ;;; size is a power of 2, and must be aligned in memory so that
 ;;; the entire buffer fits in a single MSB address
 command_fifo:
-        .ds     MAX_PENDING_COMMANDS
+        .blkb   MAX_PENDING_COMMANDS
 ;;; offset of the last processed command in the ring buffer
 command_fifo_current:
-        .db     0
+        .blkb   1
 ;;; all the offsets past current_offset up to pending_offset
 ;;; are sound requests to be processed
 command_fifo_pending:
-        .db     0
+        .blkb   1

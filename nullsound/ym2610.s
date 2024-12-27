@@ -29,7 +29,7 @@
 ;;; (the interrupt handler currently writes to the YM2610 on port A,
 ;;; so ym2610_write_port_a must be reentrant, hence this context)
 state_ym2610_context_port_a::
-        .db     0
+        .blkb   1
 
 
         .area CODE
