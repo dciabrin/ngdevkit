@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-OBJS=libsyscalls.a libngdevkit.a ngdevkit-crt0.o
+OBJS=libsyscalls.a libngdevkit.a ngdevkit-crt0.o ngdevkit-cd-crt0.o
 SYSCALL_OBJS=\
   close \
   _exit \
@@ -46,25 +46,32 @@ NGDEVKIT_OBJS=\
   ng_cls_args \
   ng_wait_vblank
 
-all: $(OBJS) ngdevkit-specs
+all: $(OBJS) ngdevkit ngdevkit-cd
 
 -include ../Makefile.config
 
 libsyscalls.a: $(SYSCALL_OBJS:%=syscall/%.o)
 	$(NGAR) cru $@ $^ && $(NGRANLIB) $@
 
-libngdevkit.a: $(NGDEVKIT_OBJS:%=ngdevkit/%.o)
+libngdevkit.a: $(NGDEVKIT_OBJS:%=libngdevkit/%.o)
 	$(NGAR) cru $@ $^ && $(NGRANLIB) $@
 
-ngdevkit-specs:
+ngdevkit:
 	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls \1/' | \
 	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit.ld%s \1/' > $@
+
+ngdevkit-cd:
+	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls \1/' | \
+	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit-cd.ld%s \1/' > $@
 
 %.o: %.c
 	$(NGGCC) -std=c99 -fomit-frame-pointer -I../include -c $< -o $@
 
 %.o: %.S
 	$(NGGCC) -I../include -c $< -o $@
+
+ngdevkit-cd-crt0.o: ngdevkit-crt0.S
+	$(NGGCC) -I../include -D__NEO_GEO_CD__ -c $< -o $@
 
 install: install-objs install-specs
 
@@ -73,15 +80,15 @@ install-dirs:
 	SPECSDIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-libgcc-file-name) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
 	$(INSTALL) -d $$OBJDIR && $(INSTALL) -d $$SPECSDIR
 
-install-objs: install-dirs $(OBJS) ngdevkit.ld
+install-objs: install-dirs $(OBJS) ngdevkit.ld ngdevkit-cd.ld
 	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-file-name=crt0.o) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
 	$(INSTALL) $(filter-out install-dirs,$^) $$DIR
 
-install-specs: install-dirs ngdevkit-specs
+install-specs: install-dirs ngdevkit ngdevkit-cd
 	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-libgcc-file-name) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
 	$(INSTALL) $(filter-out install-dirs,$^) $$DIR
 
 clean:
-	rm -f *.o ngdevkit/*.o syscall/*.o *~ *.a ngdevkit-specs
+	rm -f *.o libngdevkit/*.o syscall/*.o *~ *.a ngdevkit ngdevkit-cd
 
 .PHONY: install clean

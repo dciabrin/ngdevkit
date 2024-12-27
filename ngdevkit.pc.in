@@ -14,5 +14,5 @@ Description: Opensource development for the Neo-Geo
 Version: @PACKAGE_VERSION@
 Requires:
 Conflicts:
-Libs: -L${libdir} @NGDK_GCC_SEARCH_PATH@ -specs ngdevkit-specs -lngdevkit
+Libs: -L${libdir} @NGDK_GCC_SEARCH_PATH@ -specs ngdevkit -lngdevkit
 Cflags: -I${includedir}

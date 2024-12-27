@@ -1,6 +1,6 @@
 /*
  * Bootstrap code for Neo-Geo
- * Copyright (c) 2015-2020 Damien Ciabrini
+ * Copyright (c) 2015-2024 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -21,6 +21,9 @@
 #include <ngdevkit/asm/bios-ram.h>
 #include <ngdevkit/asm/bios-calls.h>
 
+#define VBLANK_IRQ 4
+#define TIMER_IRQ  2
+
 	.global rom_handler_VBlank_default
 	.global rom_handler_Timer_default
 	.global rom_mvs_startup_init_default
@@ -33,7 +36,7 @@ _start:
          * Common exceptions point to handlers implemented in the BIOS
          */
    	dc.l	0x10f300		/* Reset: Initial SSP		  */
-	dc.l	BIOS_INIT_PC        	/* Reset: Initial PC		  */
+        dc.l	BIOS_INIT_HARDWARE      /* Reset: Initial PC		  */
 	dc.l	BIOS_EXC_BUS_ERROR    	/* Bus error			  */
 	dc.l	BIOS_EXC_ADDR_ERROR     /* Address error		  */
 	dc.l	BIOS_EXC_ILLEGAL_OP     /* Illegal instruction		  */
@@ -46,17 +49,28 @@ _start:
 	dc.l	BIOS_EXC_FPU_EMU	/* Line 1111 - FPU opcode emu     */
 	.fill	3,  4, 0xffffffff 	/* -- unassigned, reserved -- 	  */
 	dc.l	BIOS_UNINITIALIZED_INT  /* Uninitialized interrupt vector */
+#ifndef __NEO_GEO_CD__
 	.fill	8,  4, 0xffffffff	/* -- unassigned, reserved --	  */
-	dc.l	BIOS_SPURIOUS_INT	/* Spurious interrupt		  */
+#else
+        .fill	5,  4, 0xffffffff	/* -- unassigned, reserved --	  */
+        dc.l    CD_DATA_READY           /* Vector 21: CD data ready       */
+        dc.l    CD_DATA_TRANSFER        /* Vector 22: CD data transfer    */
+        dc.l    CD_UNKNOWN              /* Vector 23: unknown?            */
+#endif
+        dc.l	BIOS_SPURIOUS_INT	/* Spurious interrupt             */
+#ifndef __NEO_GEO_CD__
 	dc.l	rom_handler_VBlank     	/* Lvl 1 autovector (VBlank IRQ)  */
 	dc.l	rom_handler_Timer     	/* Lvl 2 autovector (Timer IRQ)   */
- 	dc.l	0x00000000		/* Lvl 3 autovector (Cold reset)  */
+#else
+        dc.l	rom_handler_Timer     	/* Lvl 1 autovector (Timer IRQ)   */
+        dc.l	rom_handler_VBlank     	/* Lvl 2 autovector (VBlank IRQ)  */
+#endif
+        dc.l	0x00000000		/* Lvl 3 autovector (unused?)     */
 	.fill	4,  4, 0x00000000	/* Lvl 4..7 autovectors (unused)  */
 	.fill	16, 4, 0xffffffff	/* TRAP #n instruction (unused)   */
-	.fill	7,  4, 0xffffffff	/* FPU errors (unused)	          */
-	dc.l	0xffffffff	        /* -- unassigned, reserved -- 	  */
-	.fill	3,   4, 0xffffffff	/* MMU errors (unused)	          */
-	.fill	5,   4, 0xffffffff	/* -- unassigned, reserved -- 	  */
+        .fill	8,  4, 0xffffffff	/* FPU errors (unused)	          */
+        .fill	3,  4, 0xffffffff	/* MMU errors (unused)	          */
+        .fill	5,  4, 0xffffffff	/* -- unassigned, reserved -- 	  */
 
 	/* NEO-GEO Rom Header */
 	.ascii	"NEO-GEO\0"		/* Magic bytes */
@@ -101,20 +115,19 @@ SCODE:
  * Used when no user function has been provided at link time
  */
 rom_handler_VBlank_default:
-	/* If BIOS is booting, forward to the BIOS VBlank handler */
+        /* If BIOS is booting, do a tail call to the BIOS VBlank handler */
 	btst    #7, BIOS_SYSTEM_MODE
-	bne     .Ldisplayed.l
-	move.l  #SYSTEM_INT1, %a0
-	jmp     (%a0)
+        bne     .Lpost_bios_init.l
+        jmp     SYSTEM_INT1.l
+.Lpost_bios_init:
 
         /* This part is only called once BIOS init has ended and the C
 	 * runtime has been loaded into memory (.Lboot). Calling C user
          * code below is thus safe.
          */
-.Ldisplayed:
         /* Ack IRQ and rearm watchdog timer */
 
-	move.w  #4, REG_IRQACK
+        move.w  #VBLANK_IRQ, REG_IRQACK
 	move.b  %d0, REG_WATCHDOGW
 
 	/* If user handler exists for Vblank, call it */
@@ -136,7 +149,7 @@ rom_handler_VBlank_default:
  */
 rom_handler_Timer_default:
         /* Ack IRQ and rearm watchdog timer */
-	move.w  #2, REG_IRQACK
+        move.w  #TIMER_IRQ, REG_IRQACK
 	move.b  %d0, REG_WATCHDOGW
 	/* If user handler exists for Hblank, call it */
 	movem.l	%d0-%d7/%a0-%a7, -(%sp)

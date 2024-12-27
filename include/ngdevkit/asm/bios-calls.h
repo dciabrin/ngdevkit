@@ -22,7 +22,7 @@
 
 
 /* ROM entry point at reset */
-#define BIOS_INIT_PC 0xc00402
+#define BIOS_INIT_HARDWARE 0xc00402
 
 /* BIOS exception routines */
 #define BIOS_EXC_BUS_ERROR     0xc00408
@@ -34,7 +34,7 @@
 #define BIOS_UNINITIALIZED_INT 0xc0042c
 #define BIOS_SPURIOUS_INT      0xc00432
 
-/* BIOS interrupt functions */
+/* BIOS auto-interrupt handlers */
 #define SYSTEM_INT1 0xc00438
 #define SYSTEM_INT2 0xc0043e
 
@@ -71,6 +71,11 @@
 
 /* Controller setup */
 #define CONTROLLER_SETUP 0xc004d4
+
+/* CD interrupt handlers */
+#define CD_DATA_READY    0xc004f2
+#define CD_DATA_TRANSFER 0xc004ec
+#define CD_UNKNOWN       0xc004e6
 
 
 #endif /* __NGDEVKIT_ASM_BIOS_CALLS_H__ */
