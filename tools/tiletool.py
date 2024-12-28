@@ -328,6 +328,110 @@ class sprite_converter(converter):
                 surf_off += 8
 
 
+class cd_sprite_converter(converter):
+    """Specialization for sprite tile SPR format (CD)
+
+    A 16x16 sprite tile takes 16 * 16 * 4bits = 1024bits = 128bytes.
+    It's split into 4 8x8 blocks, stored as sequences of horizontal rows.
+    Each row is encoded in 4 successive bitplanes of 8 bits
+    (plane 2; plane 1; plane 4; plane 3).
+    """
+
+    def __init__(self, args):
+        self.args = args
+        self.multiple = 128
+        self.edge = 16
+
+    def open_rom(self, mode):
+        """I/O for ROM file xxx.SPR"""
+        self.fd1 = open(self.in1 if mode == 'rb' else self.out1, mode)
+
+    def close_rom(self):
+        if self.size:
+            padding=self.size-self.fd1.tell();
+            if padding>0:
+                self.fd1.write('\0'*padding)
+        self.fd1.close()
+
+    def validate_extract(self):
+        """SPR tile checks for extract command"""
+        if len(self.args.FILE) != 1:
+            sys.exit("error: expected one SPR file, given: %s" %
+                     " ".join(self.args.FILE))
+        self.in1 = self.args.FILE[0]
+
+        self.size = self.args.size
+        if not self.size:
+            sizein1 = os.path.getsize(self.in1)
+            self.size = sizein1
+
+        super(cd_sprite_converter, self).validate_extract()
+
+    def validate_create(self):
+        """SPR tile checks for create command"""
+        if not self.args.output:
+            self.args.output = ['none']
+        if len(self.args.output) != 1:
+            sys.exit("error: expected one SPR file, given: %s" %
+                     " ".join(self.args.output))
+        self.out1 = self.args.output[0]
+
+        super(cd_sprite_converter, self).validate_create()
+
+    def read_tile_from_rom(self):
+        """SPR tile loader"""
+        surf_buf = bytearray(256)
+
+        for tile8x8_off in (8, 136, 0, 128):
+            surf_off = tile8x8_off
+
+            for y in range(8):
+                row_bitplane1 = ord(self.fd1.read(1))
+                row_bitplane2 = ord(self.fd1.read(1))
+                row_bitplane3 = ord(self.fd2.read(1))
+                row_bitplane4 = ord(self.fd2.read(1))
+
+                for x in range(8):
+                    bp1 = (row_bitplane1 >> x) & 1
+                    bp2 = (row_bitplane2 >> x) & 1
+                    bp3 = (row_bitplane3 >> x) & 1
+                    bp4 = (row_bitplane4 >> x) & 1
+                    col = (bp4 << 3) + (bp3 << 2) + (bp2 << 1) + bp1
+                    surf_buf[surf_off] = col
+
+                    surf_off += 1
+                surf_off += 8
+        t = pygame.image.fromstring(bytes(surf_buf), (16, 16), "P")
+        return t
+
+    def write_tile_to_rom(self, t):
+        """SPR tile writer"""
+        surf_buf = t.get_buffer().raw
+        for tile8x8_off in (8, 136, 0, 128):
+            surf_off = tile8x8_off
+
+            for y in range(8):
+                row_bitplane1 = 0
+                row_bitplane2 = 0
+                row_bitplane3 = 0
+                row_bitplane4 = 0
+
+                for x in range(8):
+                    col = surf_buf[surf_off]
+                    row_bitplane1 += ((col >> 0) & 1) << x
+                    row_bitplane2 += ((col >> 1) & 1) << x
+                    row_bitplane3 += ((col >> 2) & 1) << x
+                    row_bitplane4 += ((col >> 3) & 1) << x
+                    surf_off += 1
+
+                self.fd1.write(struct.pack('4B',
+                                           row_bitplane2,
+                                           row_bitplane1,
+                                           row_bitplane4,
+                                           row_bitplane3))
+                surf_off += 8
+
+
 def main():
     pygame.display.init()
 
@@ -346,6 +450,8 @@ def main():
                        help='8x8 fix tile mode')
     ptype.add_argument('--sprite', action='store_true',
                        help='16x16 sprite tile mode [default]')
+    ptype.add_argument('--cd-sprite', action='store_true',
+                       help='16x16 CD sprite tile mode')
 
     parser.add_argument('FILE', nargs='+', help='file to process')
     parser.add_argument('-o', '--output', nargs='+',
@@ -363,6 +469,8 @@ def main():
 
     if arguments.fix:
         conv = fix_converter(arguments)
+    elif arguments.cd_sprite:
+        conv = cd_sprite_converter(arguments)
     else:
         conv = sprite_converter(arguments)
 
