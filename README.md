@@ -81,13 +81,14 @@ packages, available in the ngdevkit tap:
     brew install ngdevkit ngdevkit-gngeo
     # make sure you use brew's python3 in your shell
     export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
-    pip3 install pygame --break-system-packages
+    pip3 install pygame pyyaml --break-system-packages
     # the remaining packages are only required for the examples
     brew install pkg-config autoconf automake zip imagemagick sox
 
-Some macOS versions are not currently pre-built (macOS 11 Intel and
-M1), as our CI provider doesn't currently offer free hosted agents
-yet, so it might take some time to install the packages.
+Brew bottles are available for the last two versions of macOS for ARM.
+Intel brew bottles are no longer prebuilt. Older versions of macOS are
+still supported, although - as for the Intel architecture - brew will
+build the entire devkit during installation, so it might take some time.
 
 #### Windows
 
