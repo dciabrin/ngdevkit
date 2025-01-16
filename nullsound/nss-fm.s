@@ -1083,6 +1083,20 @@ _fm_note_on_end:
         ret
 
 
+;;; FM_NOTE_ON_AND_WAIT
+;;; Emit a specific note (frequency) on an FM channel and
+;;; immediately wait as many rows as the last wait
+;;; ------
+;;; [ hl ]: note (0xAB: A=octave B=semitone)
+fm_note_on_and_wait::
+        ;; process a regular note opcode
+        call    fm_note_on
+
+        ;; wait rows
+        call    wait_last_rows
+        ret
+
+
 ;;; Release the note on an FM channel and update the pipeline state
 ;;; ------
 fm_stop_playback:

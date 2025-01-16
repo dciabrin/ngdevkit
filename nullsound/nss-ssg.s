@@ -883,6 +883,20 @@ _ssg_note_on_end:
         ret
 
 
+;;; SSG_NOTE_ON_AND_WAIT
+;;; Emit a specific note (frequency) on a SSG channel and
+;;; immediately wait as many rows as the last wait
+;;; ------
+;;; [ hl ]: note (0xAB: A=octave B=semitone)
+ssg_note_on_and_wait::
+        ;; process a regular note opcode
+        call    ssg_note_on
+
+        ;; wait rows
+        call    wait_last_rows
+        ret
+
+
 ;;; SSG_ENV_PERIOD
 ;;; Set the period of the SSG envelope generator
 ;;; ------

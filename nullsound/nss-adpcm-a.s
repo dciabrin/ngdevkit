@@ -445,7 +445,6 @@ adpcm_a_configure_vol:
 ;;; ADPCM_A_ON
 ;;; Start sound playback on the current ADPCM-A channel
 ;;; ------
-;;; [ hl ]: ADPCM-A channel [0..5]
 adpcm_a_on::
         ;; delay the start via the trigger FX?
         bit     BIT_TRIGGER_ACTION_DELAY, TRIGGER_ACTION(ix)
@@ -466,6 +465,19 @@ _a_on_end:
         ld      (state_adpcm_a_channel), a
 
         ld      a, #1
+        ret
+
+
+;;; ADPCM_A_ON_AND_WAIT
+;;; Start sound playback on the current ADPCM-A channel and
+;;; immediately wait as many rows as the last wait
+;;; ------
+adpcm_a_on_and_wait::
+        ;; process a regular note opcode
+        call    adpcm_a_on
+
+        ;; wait rows
+        call    wait_last_rows
         ret
 
 

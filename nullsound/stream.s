@@ -27,6 +27,7 @@
         .equ    CH_STREAM_SAVED, (state_ch_stream_saved_pos-state_ch_stream)
         .equ    CH_STREAM_START, (state_ch_stream_start-state_ch_stream)
         .equ    CH_STREAM_POS, (state_ch_stream_pos-state_ch_stream)
+        .equ    CH_STREAM_ENTRIES, (state_ch_stream_entries-state_ch_stream)
         .equ    CH_STREAM_SIZE, (state_ch_stream_end-state_ch_stream)
         .equ    NB_YM2610_CHANNELS, 14
 
@@ -75,6 +76,13 @@ state_ch_ctx_switch::           .blkb   NB_YM2610_CHANNELS
 ;;; the NSS data gets a dedicated wait state
 state_ch_wait_rows::           .blkb   NB_YM2610_CHANNELS
 
+;;; per-channel wait opcode cache
+;;; ---
+;;; Wait value used by the last wait opcode.
+;;; When multiple streams are used, each YM2610 channel used in
+;;; the NSS data gets a dedicated wait state
+state_ch_wait_op_val::         .blkb   NB_YM2610_CHANNELS
+
 ;;; per-channel playback state
 ;;; ---
 ;;; Keep track of positional information for streams.
@@ -87,14 +95,23 @@ state_ch_stream:
 state_ch_stream_saved_pos::     .blkb   2
 state_ch_stream_start::         .blkb   2
 state_ch_stream_pos::           .blkb   2
+state_ch_stream_entries::       .blkb   1
 state_ch_stream_end:
         .blkb   CH_STREAM_SIZE*(NB_YM2610_CHANNELS-1)
 
 ;;; addresses/indices that points to state of the currently processed stream
 state_current_ch_ctx::          .blkb   2
 state_current_ch_wait_rows::    .blkb   2
+state_current_ch_wait_op_val::  .blkb   2
 state_current_ch_stream::       .blkb   2
 state_stream_idx::              .blkb   1
+
+;;; generic function pointer for current NSS processing function
+state_nss_process::
+        .blkb   1         ; jp
+state_nss_process_func::
+        .blkb   2         ; func offset in ROM
+
 
         ;; FIXME: temporary padding to ensures the next data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
@@ -109,6 +126,8 @@ init_stream_state_tracker::
         ld      (state_stream_in_use), a
         ld      bc, #0
         ld      (state_stream_instruments), bc
+        ld      a, #0xc3        ; jp
+        ld      (state_nss_process), a
         ;; init nss subsystems that may get called prior to playing music
         call    init_nss_fm_state_tracker
         ret
@@ -151,6 +170,8 @@ process_streams_opcodes::
         ld      (state_stream_idx), a
         ld      bc, #state_ch_wait_rows
         ld      (state_current_ch_wait_rows), bc
+        ld      bc, #state_ch_wait_op_val
+        ld      (state_current_ch_wait_op_val), bc
         ld      bc, #state_ch_ctx_switch
         ld      (state_current_ch_ctx), bc
         ld      bc, #state_ch_stream
@@ -175,7 +196,7 @@ _loop_chs:
         ld      l, CH_STREAM_POS(iy)
         ld      h, CH_STREAM_POS+1(iy)
 _loop_opcode:
-        call    process_nss_opcode
+        call    state_nss_process
         or      a
         jp      nz, _loop_opcode
         ;; no more opcodes can be processed, save stream's new pos
@@ -193,6 +214,9 @@ _post_ch_process:
         ld      hl, (state_current_ch_wait_rows)
         inc     hl
         ld      (state_current_ch_wait_rows), hl
+        ld      hl, (state_current_ch_wait_op_val)
+        inc     hl
+        ld      (state_current_ch_wait_op_val), hl
         ld      hl, (state_current_ch_ctx)
         inc     hl
         ld      (state_current_ch_ctx), hl
@@ -397,6 +421,10 @@ stream_play_multi::
         push    iy
         pop     hl
 
+        ;; setup the generic NSS processing function
+        ld      bc, #process_nss_opcode
+        ld      (state_nss_process_func), bc
+
         ;; init streams state
         ld      iy, #state_ch_stream
         ld      de, #CH_STREAM_SIZE
@@ -460,13 +488,13 @@ nss_opcodes:
         .nss_op nss_jmp
         .nss_op nss_end
         .nss_op timer_tempo
-        .nss_op wait_rows
+        .nss_op wait_n_rows
         .nss_op nss_call
         .nss_op nss_ret
         .nss_op nss_nop
         .nss_op row_speed
         .nss_op row_groove
-        .nss_op nss_nop2
+        .nss_op wait_last_rows
         .nss_op adpcm_b_instrument
         .nss_op adpcm_b_note_on
         .nss_op adpcm_b_note_off
@@ -533,6 +561,10 @@ nss_opcodes:
         .nss_op adpcm_a_pan
         .nss_op adpcm_b_pan
         .nss_op adpcm_b_vibrato
+        .nss_op nss_call_table
+        .nss_op fm_note_on_and_wait
+        .nss_op ssg_note_on_and_wait
+        .nss_op adpcm_a_on_and_wait
 
 
 
@@ -630,16 +662,19 @@ nss_end::
         ret
 
 
-;;; WAIT_ROWS
+;;; WAIT_N_ROWS
 ;;; Suspend stream playback, resume after a number of rows
 ;;; worth of time has passed (Timer B interrupts * speed).
 ;;; ------
 ;;; [hl]: number of interrupts until playback resumes
-wait_rows::
+wait_n_rows::
         push    bc
         ;;  how many interrupts to wait for before moving on
         ld      a, (hl)
         inc     hl
+        ;; recall this wait value for this channel
+        ld      bc, (state_current_ch_wait_op_val)
+        ld      (bc), a
         ;; register the wait for this channel
         ld      bc, (state_current_ch_wait_rows)
         ld      (bc), a
@@ -652,6 +687,22 @@ _post_wait_rows:
         pop     bc
         ld      a, #0
         ret
+
+
+;;; WAIT_LAST_ROWS
+;;; Suspend stream playback, resume after a number of rows
+;;; worth of time has passed (same as the last wait_n_rows)
+;;; ------
+wait_last_rows::
+        push    bc
+        ;; last wait for this channel
+        ld      bc, (state_current_ch_wait_op_val)
+        ld      a, (bc)
+        ;; register the wait for this channel
+        ld      bc, (state_current_ch_wait_rows)
+        ld      (bc), a
+
+        jp      _post_wait_rows
 
 
 ;;; NSS_CALL
@@ -687,6 +738,82 @@ nss_call::
         ret
 
 
+;;; NSS_CALL_TABLE
+;;; Set up a series of calls to different locations in the stream
+;;; ------
+;;; [ hl ]: number of calls
+nss_call_table::
+        ;; bc: number of calls
+        ld      a, (hl)
+        inc     hl
+
+        ;; recall the number of entries in the call table
+        ld      iy, (state_current_ch_stream)
+        ld      CH_STREAM_ENTRIES(iy), a
+
+        push    bc
+        ld      bc, #process_table_entry
+        ld      (state_nss_process_func), bc
+        pop     bc
+
+        ld      a, #1
+        ret
+
+
+;;; Continue playback to a new position in the stream
+;;; Recall the current position so that a NSS_RET opcode
+;;; continues execution from there.
+;;; Note: no CALL entry can be processed again before a NSS_RET
+;;; ------
+;;; [ hl ]: pattern offset in the entry table
+process_table_entry::
+        push    bc
+
+        ;; a: entry
+        ld      a, (hl)
+        inc     hl
+
+        ld      iy, (state_current_ch_stream)
+
+        ;; save current stream pos
+        ld      CH_STREAM_SAVED(iy), l
+        ld      CH_STREAM_SAVED+1(iy), h
+
+        ;; hl: start of stream
+        ld      l, CH_STREAM_START(iy)
+        ld      h, CH_STREAM_START+1(iy)
+
+        ;; hl: offset in entry table
+        ld      b, #0xff
+        ld      c, a
+        add     hl, bc
+        add     hl, bc
+
+        ;; bc: pattern offset
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
+
+        ;; hl: start of stream
+        ld      l, CH_STREAM_START(iy)
+        ld      h, CH_STREAM_START+1(iy)
+
+        ;; hl: new pos (call offset)
+        add     hl, bc
+        ld      CH_STREAM_POS(iy), l
+        ld      CH_STREAM_POS+1(iy), h
+
+        ;; record that one call entry has been processed
+        dec     CH_STREAM_ENTRIES(iy)
+
+        ld      bc, #process_nss_opcode
+        ld      (state_nss_process_func), bc
+
+        pop     bc
+        ld      a, #1
+        ret
+
+
 ;;; NSS_RET
 ;;; Continue playback past the previous NSS_CALL statement
 ;;; ------
@@ -698,6 +825,16 @@ nss_ret::
         ;; hl: restore new stream pos
         ld      CH_STREAM_POS(iy), l
         ld      CH_STREAM_POS+1(iy), h
+
+        push    bc
+        ld      bc, #process_nss_opcode
+        xor     a
+        cp      CH_STREAM_ENTRIES(iy)
+        jr      z, _ret_set_process
+        ld      bc, #process_table_entry
+_ret_set_process:
+        ld      (state_nss_process_func), bc
+        pop     bc
 
         ld      a, #1
         ret
