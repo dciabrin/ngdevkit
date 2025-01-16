@@ -68,10 +68,10 @@ jobs:
 
   macos:
     name: "macOS build"
-    runs-on: macos-13
+    runs-on: macos-15
     env:
-      PREFIX: "/usr/local"
-      PY3PATH: "/usr/local/opt/python3/bin"
+      PREFIX: "/opt/homebrew"
+      PY3PATH: "/opt/homebrew/bin"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
