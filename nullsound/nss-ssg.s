@@ -485,7 +485,7 @@ compute_ym2610_ssg_note::
         ld      e, (hl)
         ;; c: SSG: intermediate frequency is negative
         ld      c, #1
-        ;; e: intermediate note position (fractional part)
+        ;; b: intermediate note position (fractional part)
         ld      b, NOTE_POS16(ix)
         ;; de: current intermediate SSG tune
         call    slide_intermediate_freq
