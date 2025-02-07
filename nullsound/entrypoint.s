@@ -102,18 +102,22 @@
 init_z80_and_wait:
         ;; Configure the Z80 for interrupt mode 1 (fixed handler @ 0x0038)
         im      1
-        ;; On the platform, the Z80 only receives NMIs once the Z80 ports
-        ;; mapped to bankswitching have been written to.
-        xor     a
-        out     (PORT_ENABLE_NMI), a
-        ;; Mute sound
-        call ym2610_reset
-        ;; At this point, prepare to stay idle in RAM. This allows multi-slot
+
+        ;; Before init, the Z80 must stay idle in RAM. This allows multi-slot
         ;; MVS cabinets to switch game and map the game's sound ROM in the
         ;; Z80 address space.
-        prepare_wait_in_ram_opcodes
+        ;; The real init starts when the Z80 receives a NMI from the 68k
+        ;; (it will only receive NMIs once the Z80 ports mapped to
+        ;; bankswitching have been written to)
+        xor     a
+        out     (PORT_ENABLE_NMI), a
+
+        ;; We don't have time to run much code before the 68k fire a NMI,
+        ;; so do not try to mute YM2610 here
+
         ;; Returns to RAM and busy-loop until a NMI is triggered and proceeds
         ;; with the rest of the driver initialization
+        prepare_wait_in_ram_opcodes
         ret
 
 
@@ -130,6 +134,10 @@ init_z80_and_wait:
 snd_start_driver::
         ;; mute the YM2610
         call    ym2610_reset
+
+        ;; reset Z80 memory layout to map the first 64KB of ROM
+        ld      bc, #bank_64k_linear
+        call    bank_switch
 
         ;; init the state trackers
         call    init_timer_state_tracker

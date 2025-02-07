@@ -25,6 +25,11 @@
         .equ    PORT_FROM_68K,               0x00
         .equ    PORT_YM2610_STATUS,          0x04
         .equ    PORT_PLAYBACK_FINISHED,      0x06
+        .equ    PORT_BANK_WINDOW_0,          0x08
+        .equ    PORT_BANK_WINDOW_1,          0x09
+        .equ    PORT_BANK_WINDOW_2,          0x0A
+        .equ    PORT_BANK_WINDOW_3,          0x0B
+
         ;; write ports
         .equ    PORT_YM2610_A_ADDR,          0x04
         .equ    PORT_YM2610_A_VALUE,         0x05
