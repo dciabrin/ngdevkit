@@ -62,6 +62,14 @@
         ;; a single 256 byte boundary to make 16bit arithmetic faster
         .blkb   16
 
+;;; Semitone Delta-N table in use (MVS or AES)
+state_b_delta_n_base::
+        .blkw   1
+
+;;; Semitone Delta-N half-distance table in use (MVS or AES)
+state_b_delta_n_half_distance::
+        .blkw   1
+
 ;;; ADPCM playback state tracker
 ;;; ------
 _state_adpcm_b_start:
@@ -127,6 +135,11 @@ init_nss_adpcm_b_state_tracker::
         ld      START_CMD(ix), a
         ld      a, #0xff        ; default volume
         ld      VOL(ix), a
+        ;; set up current F-num and half distance tables
+        ld      bc, #adpcm_b_delta_n_base_aes
+        ld      (state_b_delta_n_base), bc
+        ld      bc, #adpcm_b_delta_n_half_distance_aes
+        ld      (state_b_delta_n_half_distance), bc
 
         ;; global ADPCM volumes are initialized in the volume state tracker
         ret
@@ -393,28 +406,46 @@ _adpcm_b_instr_end:
 ;;; `Delta-N`. nullsounds decomposes Delta-N as `2^octave * base`,
 ;;; where base is a factor of the semitone's frequency, and the
 ;;; result is multiplied by a power of 2 (handy for octaves)
-adpcm_b_delta_n_base:
-        .db     0x0c, 0xb7	; 3255 - C
-        .db     0x0d, 0x78	; 3448 - C#
-        .db     0x0e, 0x45	; 3653 - D
-        .db     0x0f, 0x1f	; 3871 - D#
-        .db     0x10, 0x05	; 4101 - E
-        .db     0x10, 0xf9	; 4345 - F
-        .db     0x11, 0xfb	; 4603 - F#
-        .db     0x13, 0x0d	; 4877 - G
-        .db     0x14, 0x2f	; 5167 - G#
-        .db     0x15, 0x62	; 5474 - A
-        .db     0x16, 0xa8	; 5800 - A#
-        .db     0x18, 0x00	; 6144 - B
+adpcm_b_delta_n_base_mvs:
+        .db     0x0c, 0xb7	; 3255
+        .db     0x0d, 0x78	; 3448
+        .db     0x0e, 0x45	; 3653
+        .db     0x0f, 0x1f	; 3871
+        .db     0x10, 0x05	; 4101
+        .db     0x10, 0xf9	; 4345
+        .db     0x11, 0xfb	; 4603
+        .db     0x13, 0x0d	; 4877
+        .db     0x14, 0x2f	; 5167
+        .db     0x15, 0x62	; 5474
+        .db     0x16, 0xa8	; 5800
+        .db     0x18, 0x00	; 6144
+
+adpcm_b_delta_n_base_aes:
+        .db     0x0c, 0xc4      ; 3268
+        .db     0x0d, 0x86      ; 3462
+        .db     0x0e, 0x55      ; 3669
+        .db     0x0f, 0x2e      ; 3886
+        .db     0x10, 0x16      ; 4118
+        .db     0x11, 0x0b      ; 4363
+        .db     0x12, 0x0e      ; 4622
+        .db     0x13, 0x21      ; 4897
+        .db     0x14, 0x45      ; 5189
+        .db     0x15, 0x79      ; 5497
+        .db     0x16, 0xc0      ; 5824
+        .db     0x18, 0x1b      ; 6171
 
 
 ;;; Delta-N half-distance table
 ;;; ------
 ;;; The half-distance between a semitone's base delta-n and the next semitone's base delta-n.
 ;;; This is used to compute fractional delta-n values from fixed-point note.
-adpcm_b_delta_n_half_distance::
+adpcm_b_delta_n_half_distance_mvs::
         ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B
         .db     0x60, 0x66, 0x6d, 0x73, 0x7a, 0x81, 0x89, 0x91, 0x99, 0xa3, 0xac, 0xb7
+
+adpcm_b_delta_n_half_distance_aes::
+        ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B
+        .db     0x61, 0x67, 0x6c, 0x74, 0x7a, 0x81, 0x89, 0x92, 0x9a, 0xa3, 0xad, 0xb7
 
 
 ;;; Update the vibrato for the ADPCM-B channel
@@ -609,7 +640,7 @@ compute_ym2610_adpcm_b_note::
         and     #0xf
 
         ;; lh: semitone -> delta_n address
-        ld      hl, #adpcm_b_delta_n_base
+        ld      hl, (state_b_delta_n_base)
         sla     a
         ld      b, #0
         ld      c, a
@@ -625,7 +656,7 @@ compute_ym2610_adpcm_b_note::
         ;; e: half-distance (base delta-n) to next semitone (8bit add)
         ld      a, d
         and     #0xf
-        ld      hl, #adpcm_b_delta_n_half_distance
+        ld      hl, (state_b_delta_n_half_distance)
         add     l
         ld      l, a
         adc     a, h

@@ -85,6 +85,14 @@
 ym2610_write_func:
         .blkb   3               ; space for `jp 0x....`
 
+;;; Semitone F-num table in use (MVS or AES)
+state_fm_note_f_num::
+        .blkw   1
+
+;;; Semitone half-distance table in use (MVS or AES)
+state_fm_f_num_half_distance::
+        .blkw   1
+
 ;;; context: current fm channel for opcode actions
 _state_fm_start:
 state_fm_channel::
@@ -190,6 +198,11 @@ init_nss_fm_state_tracker::
         ld      a, #0xc3        ; jp 0x....
         ld      (ym2610_write_func), a
         call    fm_ctx_reset
+        ;; set up current F-num and half distance tables
+        ld      bc, #fm_note_f_num_aes
+        ld      (state_fm_note_f_num), bc
+        ld      bc, #fm_f_num_half_distance_aes
+        ld      (state_fm_f_num_half_distance), bc
         ret
 
 
@@ -535,7 +548,7 @@ compute_ym2610_fm_note::
         ld      a, d
         and     #0xf
         ;; hl: base f-num for current semitone (8bit-add)
-        ld      hl, #fm_note_f_num
+        ld      hl, (state_fm_note_f_num)
         sla     a
         add     a, l
         ld      l, a
@@ -552,7 +565,7 @@ compute_ym2610_fm_note::
         ;; e: half-distance f-num to next semitone (8bit add)
         ld      a, d
         and     #0xf
-        ld      hl, #fm_f_num_half_distance
+        ld      hl, (state_fm_f_num_half_distance)
         add     l
         ld      l, a
         adc     a, h
@@ -925,12 +938,12 @@ fm_pitch::
 ;;; which is translated into YM2610's register representation
 ;;; `block * F-number`, where F-number is a factor of the semitone's
 ;;; frequency, and block is a power of 2 (handy for octaves)
-fm_note_f_num:
+fm_note_f_num_mvs:
         .db      0x02, 0x69  ;  617 - C
         .db      0x02, 0x8e  ;  654 - C#
         .db      0x02, 0xb5  ;  693 - D
         .db      0x02, 0xde  ;  734 - D#
-        .db      0x03, 0x09  ;  777 - E
+        .db      0x03, 0x0a  ;  778 - E
         .db      0x03, 0x38  ;  824 - F
         .db      0x03, 0x69  ;  873 - F#
         .db      0x03, 0x9d  ;  925 - G
@@ -940,14 +953,33 @@ fm_note_f_num:
         .db      0x04, 0x8d  ; 1165 - B
         .db      0x04, 0xd1  ; 1233 - C+1
 
+fm_note_f_num_aes:
+        .db     0x02, 0x65  ;  613 - C
+        .db     0x02, 0x89  ;  649 - C#
+        .db     0x02, 0xb0  ;  688 - D
+        .db     0x02, 0xd9  ;  729 - D#
+        .db     0x03, 0x04  ;  772 - E
+        .db     0x03, 0x32  ;  818 - F
+        .db     0x03, 0x63  ;  867 - F#
+        .db     0x03, 0x96  ;  918 - G
+        .db     0x03, 0xcd  ;  973 - G#
+        .db     0x04, 0x07  ; 1031 - A
+        .db     0x04, 0x44  ; 1092 - A#
+        .db     0x04, 0x85  ; 1157 - B
+        .db     0x04, 0xca  ; 1224 - C+1
+
 
 ;;; F-num half-distance table
 ;;; ------
 ;;; The half-distance between a semitone's f-num and the next semitone's f-num.
 ;;; This is used to compute fractional f-num values from fixed-point note.
-fm_f_num_half_distance::
+fm_f_num_half_distance_mvs::
         ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B,  C+1
-        .db     0x12, 0x13, 0x14, 0x15, 0x17, 0x18, 0x1a, 0x1b, 0x1d, 0x1f, 0x20, 0x22, 0x25
+        .db     0x12, 0x13, 0x14, 0x16, 0x17, 0x18, 0x1a, 0x1b, 0x1d, 0x1f, 0x20, 0x22, 0x24
+
+fm_f_num_half_distance_aes::
+        ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B,  C+1
+        .db     0x12, 0x13, 0x14, 0x15, 0x17, 0x18, 0x19, 0x1b, 0x1d, 0x1e, 0x20, 0x21, 0x24
 
 
 ;;; Update the vibrato for the current FM channel

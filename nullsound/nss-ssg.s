@@ -69,7 +69,15 @@
 ;;; ------
         ;; This padding ensures the entire _state_ssg data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   117
+        .blkb   110
+
+;;; SSG tune table in use (MVS or AES)
+state_ssg_tune::
+        .blkw   1
+
+;;; SSG half-distance table in use (MVS or AES)
+state_ssg_semitone_distance::
+        .blkw   1
 
 _state_ssg_start:
 
@@ -152,6 +160,11 @@ init_nss_ssg_state_tracker::
         ;; global SSG volume is initialized in the volume state tracker
         ld      a, #0xff
         ld      (state_mirrored_enabled), a
+        ;; set up current tune and half distance tables
+        ld      bc, #ssg_tune_aes
+        ld      (state_ssg_tune), bc
+        ld      bc, #ssg_semitone_distance_aes
+        ld      (state_ssg_semitone_distance), bc
         ret
 
 
@@ -470,7 +483,7 @@ compute_ym2610_ssg_note::
         ld      b, (hl)
 
         ;; de: ym2610 base tune for note
-        ld      hl, #ssg_tune
+        ld      hl, (state_ssg_tune)
         ld      a, b
         sla     a
         ld      l, a
@@ -480,8 +493,10 @@ compute_ym2610_ssg_note::
         push    de              ; +base tune
 
         ;; e: half-distance SSG tune to next semitone
-        ld      hl, #ssg_semitone_distance
-        ld      l, b
+        ld      hl, (state_ssg_semitone_distance)
+        ld      a, l
+        add     b
+        ld      l, a
         ld      e, (hl)
         ;; c: SSG: intermediate frequency is negative
         ld      c, #1
