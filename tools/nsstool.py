@@ -614,7 +614,7 @@ def convert_b_row(row, channel):
                 fxval = max(fxval, 0)
                 opcodes.append(b_vibrato(fxval))
             else:
-                row_warn(row, "VIBRATO")
+                row_warn(row, "UNKNOWN")
                 add_unknown_fx('ADPCM-B', fx)
 
         # note
