@@ -135,6 +135,8 @@ init_nss_adpcm_b_state_tracker::
         ld      START_CMD(ix), a
         ld      a, #0xff        ; default volume
         ld      VOL(ix), a
+        ld      a, #0xff        ; default non-existing instrument
+        ld      INSTR(ix), a
         ;; set up current F-num and half distance tables
         ld      bc, #adpcm_b_delta_n_base_aes
         ld      (state_b_delta_n_base), bc
