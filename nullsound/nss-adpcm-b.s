@@ -36,6 +36,7 @@
         .lclequ OUT_VOL, (state_b_out_vol-state_b)
         .lclequ PAN, (state_b_pan-state_b)
         .lclequ INSTR, (state_b_instr-state_b)
+        .lclequ FINE_TUNE, (state_b_instr_fine_tune-state_b)
         .lclequ START_CMD, (state_b_instr_start_cmd-state_b)
 
         .equ    NSS_ADPCM_B_INSTRUMENT_PROPS,   4
@@ -91,6 +92,7 @@ state_b_note_pos16:             .blkb   2       ; fixed-point note after the FX 
 state_b_note_delta_n:           .blkb   2       ; ym2610 delta-N after the FX pipeline
 ;;; instrument
 state_b_instr:                  .blkb   1       ; instrument in use
+state_b_instr_fine_tune:        .blkb   2       ; instrument fixed-point fine tuning for C-4 frequency
 state_b_instr_start_cmd:        .blkb   1       ; instrument play command (with loop)
 ;;; volume
 state_b_vol:                    .blkb   1       ; configured note volume (attenuation)
@@ -383,6 +385,14 @@ _adpcm_b_loop:
 _adpcm_b_post_loop_chk:
         ld      START_CMD(ix), a
 
+        ;; instrument fine-tune for matching C-4 frequency
+        inc     hl
+        ld      a, (hl)
+        ld      FINE_TUNE(ix), a
+        inc     hl
+        ld      a, (hl)
+        ld      FINE_TUNE+1(ix), a
+
         ;; set a default pan
         ld      b, #REG_ADPCM_B_PAN
         ld      c, #0xc0        ; default pan (L+R)
@@ -599,6 +609,11 @@ compute_adpcm_b_fixed_point_note::
         ld      a, #0
         ld      l, a
         ld      h, NOTE_SEMITONE(ix)
+
+        ;; bc: instrument fine tune
+        ld      c, FINE_TUNE(ix)
+        ld      b, FINE_TUNE+1(ix)
+        add     hl, bc
 
         ;; bc: slide offset if the slide FX is enabled
         bit     BIT_FX_SLIDE, FX(ix)

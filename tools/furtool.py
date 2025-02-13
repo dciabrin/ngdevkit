@@ -19,9 +19,11 @@
 
 import argparse
 import base64
+import os
 import re
 import sys
 import zlib
+from math import log
 from dataclasses import dataclass, field
 from struct import pack, unpack, unpack_from
 from adpcmtool import ym2610_adpcma, ym2610_adpcmb
@@ -286,8 +288,23 @@ class adpcm_a_instrument:
 class adpcm_b_instrument:
     name: str = ""
     sample: adpcm_b_sample = None
+    c4_delta_n_idx: int = 0
     tuned: int = 0
+    fine_tune: int = 0
     loop: bool = False
+
+
+# pre-defined ADPCM-B playback frequencies for all semitones (MVS frequencies)
+b_base_freqs = [int(2759*(2**(x/12))) for x in range(5*12)]
+
+def adpcm_b_fixed_point_semitone(freq):
+    assert 1461 <= freq <= 55555, "frequency out of allowed ranges (%d Hz)"%freq
+    integer_pos = next(x for x in range(len(b_base_freqs)) if b_base_freqs[x]<freq<b_base_freqs[x+1])
+    float_pos = 12 * log(freq/2759, 2)
+    if float_pos-integer_pos >= 0.5:
+        integer_pos += 1
+    fract_pos = int(256*(float_pos - integer_pos))
+    return (integer_pos, fract_pos)
 
 
 def read_fm_instrument(bs):
@@ -498,6 +515,31 @@ def compile_macro_sequence(keys, blocks, loadbits):
     return seq, offset
 
 
+def get_sample_format(smp, sample, itype):
+    if isinstance(smp[sample],pcm_sample):
+        # the sample is encoded in PCM, so it has to be converted
+        # to be played back on the hardware.
+        warning("sample '%s' is encoded in PCM, converting to ADPCM-%s"%\
+                (smp[sample].name, "A" if itype==37 else "B"))
+        converted = convert_sample(smp[sample], itype)
+        smp[sample] = converted
+    return smp[sample]
+
+
+def make_adpcm_a_instrument(smp, sample):
+    ins = adpcm_a_instrument()
+    ins.sample = get_sample_format(smp, sample, 37)
+    return ins
+
+
+def make_adpcm_b_instrument(smp, sample):
+    ins = adpcm_b_instrument()
+    ins.loop = smp[sample].loop
+    ins.sample = get_sample_format(smp, sample, 38)
+    ins.c4_delta_n_idx, ins.fine_tune = adpcm_b_fixed_point_semitone(ins.sample.frequency)
+    return ins
+
+
 def read_instrument(nth, bs, smp):
     def asm_ident(x):
         return re.sub(r"\W|^(?=\d)", "_", x).lower()
@@ -541,19 +583,8 @@ def read_instrument(nth, bs, smp):
             bs.read(length)
     # for ADPCM sample, populate sample data
     if itype in [37, 38]:
-        ins = {37: adpcm_a_instrument,
-               38: adpcm_b_instrument}[itype]()
-        # ADPCM-B loop information
-        if itype == 38:
-            ins.loop = smp[sample].loop
-        if isinstance(smp[sample],pcm_sample):
-            # the sample is encoded in PCM, so it has to be converted
-            # to be played back on the hardware.
-            warning("sample '%s' is encoded in PCM, converting to ADPCM-%s"%\
-                (smp[sample].name, "A" if itype==37 else "B"))
-            converted = convert_sample(smp[sample], itype)
-            smp[sample] = converted
-        ins.sample = smp[sample]
+        ins = {37: make_adpcm_a_instrument,
+               38: make_adpcm_b_instrument}[itype](smp, sample)
     # generate a ASM name for the instrument or macro
     if itype == 6:
         mac.name = asm_ident("macro_%02x_%s"%(nth, name))
@@ -768,7 +799,9 @@ def asm_adpcm_instrument(ins, fd):
     print("        .db     %s_START_LSB, %s_START_MSB  ; start >> 8" % (name, name), file=fd)
     print("        .db     %s_STOP_LSB,  %s_STOP_MSB   ; stop  >> 8" % (name, name), file=fd)
     if isinstance(ins, adpcm_b_instrument):
-        print("        .db     0x%02x  ; loop" % (ins.loop,), file=fd)
+        fine_tune = unpack("H", pack("h", ins.fine_tune))[0]
+        print("        .db     0x%02x      ; loop" % (ins.loop,), file=fd)
+        print("        .dw     0x%04x    ; fine tune" % (fine_tune,), file=fd)
     print("", file=fd)
 
 

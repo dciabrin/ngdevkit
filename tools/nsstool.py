@@ -980,36 +980,34 @@ def compact_calls(nss):
 
 
 def tune_adpcm_b_notes(nss, ins):
-    # idea: all b-notes in the b channels are seen as an offset from C-4
-    # the playback freq is also a an offset, but from the current instrument's sample freq
-    # for convenience, each playback freq of the B-channel is given a note notation
-    # we have to find the note `i_note` corresponding the the current intrument's sample freq
-    # and from there, each note played will be an offset from `i_note`.
-    # this is the note that must be effectively stored in the NSS bytecode for correct playback
+    # for ADPCM-B, the playback frequency depends on the instrument in use:
+    #   . the C-4 note is played back at the current instrument's sample frequency
+    #   . every other semitone has a frequency that is based on the instrument's C-4 frequency
+    #   . each frequency must be converted to Delta-N for the YM2610
+    # nullsound does not work with Delta-N nor frequencies directly, it has to reason
+    # with fixed-point semitones to implements FX
+    #   . internally, nullsound has a table of possible Delta-N (one Delta-N per semitone)
+    #   . a given frequency lies between two consecutive entries in the Delta-N table (fixed point)
+    #   . for each ADPCM-B instrument parsed, furtool maps the C-4 note to an entry in the Delta-N
+    #     table, plus a fractional displacement to the closest Delta-N to get the desired frequency
 
     semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
-    # lowest frequency playback for 12 semitones (can be seen as octave 0)
-    base_delta = [3255, 3448, 3653, 3871, 4101, 4345, 4603, 4877, 5167, 5474, 5800, 6144]
-    # all the frequencies for each supported octaves (up to 55Khz)
-    freqs = [[int(55555*x/65536)*(2**o) for x in base_delta] for o in range(5)]
-    # each octave's frequency bounds (with a 2.9% uncertainty/tolerance)
-    octaves_freqs = [(int(f[0]/1.029), int(f[-1]*1.029)) for f in freqs]
 
     # all notes in the ADPCM-B channel are relative to C-4
     c4 = (4*12)+0
     # current instrument for ADPCM-B
     current_inst = -1
-    # nullsound note from current sample's frequency
-    sample_note = c4
+    # instrument's Delta-N index for C-4 frequency
+    inst_delta_n_idx = 0
 
     def note_str(note):
         octave, semitone = note // 12, note % 12
         return semitones[semitone].ljust(2, '-')+str(octave)
 
     def tune_adpcm_b_pass(op, out):
-        nonlocal current_inst
-        nonlocal sample_note
         nonlocal c4
+        nonlocal current_inst
+        nonlocal inst_delta_n_idx
 
         if type(op) == nss_label:
             current_inst = -1
@@ -1017,14 +1015,9 @@ def tune_adpcm_b_notes(nss, ins):
         elif type(op) == b_instr:
             if current_inst != op.inst:
                 current_inst = op.inst
-                sample_freq = ins[current_inst].sample.frequency
-                # determine nullsound note based on sample frequency
-                i_octave = next((i for i, f in enumerate(octaves_freqs) if f[0] < sample_freq < f[-1]), -1)
-                assert i_octave != -1
-                i_semitone = next((i for i, f in enumerate(freqs[i_octave]) if f/1.029 < sample_freq < f *1.029))
-                sample_note = (i_octave * 12) + i_semitone
+                inst_delta_n_idx = ins[current_inst].c4_delta_n_idx
                 # temporary workaround to support arpeggio tweak from macro
-                sample_note += ins[current_inst].tuned
+                inst_delta_n_idx += ins[current_inst].tuned
                 out.append(op)
         elif type(op) == b_note:
             # get the semitone offset from c4
@@ -1032,8 +1025,8 @@ def tune_adpcm_b_notes(nss, ins):
             # the "tuned" note is the note to use in nullsound to configure the
             # right frequency in the YM2610 (i.e. the semitone offset from the
             # sample's base frequency)
-            tuned = sample_note + semitone_offset
-            out.append(b_note(tuned))
+            idx_offset = inst_delta_n_idx + semitone_offset
+            out.append(b_note(idx_offset))
         else:
             out.append(op)
 
