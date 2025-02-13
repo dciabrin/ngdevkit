@@ -363,7 +363,7 @@ def convert_fm_row(row, channel):
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
                 pass
-            elif fx in [0x08, 0x80, 0xed]: # pre-instrument FX
+            elif fx in [0xed]: # pre-instrument FX
                 pass
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
