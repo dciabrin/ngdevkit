@@ -578,7 +578,7 @@ def read_instruments(ptrs, smp, bs):
     return ins
 
 
-def read_sample(bs, sample_idx):
+def read_sample(prefix, bs, sample_idx):
     assert bs.read(4) == b"SMP2"
     _ = bs.u4()  # endblock
     name = bs.ustr()
@@ -605,7 +605,7 @@ def read_sample(bs, sample_idx):
     bs.read(16)  # unused rom allocation
     data = bs.read(data_bytes) + bytearray(data_padding)
     # generate a ASM name for the instrument
-    insname = "s%02x_%s"%(sample_idx, re.sub(r"\W|^(?=\d)", "_", name).lower())
+    insname = "%s_%02x_%s"%(prefix, sample_idx, re.sub(r"\W|^(?=\d)", "_", name).lower())
     ins = {5: adpcm_a_sample,
            6: adpcm_b_sample,
            16: pcm_sample}[stype](insname, data)
@@ -627,11 +627,16 @@ def convert_sample(pcm_sample, totype):
     return converted
 
 
-def read_samples(ptrs, bs):
+def module_id_from_path(p):
+    f = os.path.splitext(os.path.basename(p))[0]
+    return re.sub(r"\W|^(?=\d)", "_", f).lower()
+
+
+def read_samples(name_prefix, ptrs, bs):
     smp = []
     for i, p in enumerate(ptrs):
         bs.seek(p)
-        smp.append(read_sample(bs, i))
+        smp.append(read_sample(name_prefix, bs, i))
     return smp
 
 def check_for_unused_samples(smp, bs):
@@ -822,7 +827,7 @@ def load_module(modname):
 def samples_from_module(modname):
     bs = load_module(modname)
     m = read_module(bs)
-    smp = read_samples(m.samples, bs)
+    smp = read_samples(module_id_from_path(modname), m.samples, bs)
     ins = read_instruments(m.instruments, smp, bs)
     check_for_unused_samples(smp, bs)
     return smp
@@ -863,7 +868,7 @@ def main():
     # load all samples data in memory from the map file
     bs = load_module(arguments.FILE)
     m = read_module(bs)
-    smp = read_samples(m.samples, bs)
+    smp = read_samples(module_id_from_path(arguments.FILE), m.samples, bs)
     ins = read_instruments(m.instruments, smp, bs)
     check_for_unused_samples(smp, bs)
 

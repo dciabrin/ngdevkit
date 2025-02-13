@@ -24,7 +24,7 @@ import sys
 import zlib
 from dataclasses import dataclass, field, astuple, make_dataclass
 from struct import pack, unpack_from
-from furtool import binstream, load_module, read_module, read_samples, read_instruments
+from furtool import binstream, load_module, read_module, read_samples, read_instruments, module_id_from_path
 
 VERBOSE = False
 
@@ -1460,7 +1460,7 @@ def main():
     dbg("Loading Furnace module %s"%arguments.FILE)
     bs = load_module(arguments.FILE)
     m = read_module(bs)
-    smp = read_samples(m.samples, bs)
+    smp = read_samples(module_id_from_path(arguments.FILE), m.samples, bs)
     ins = read_instruments(m.instruments, smp, bs)
     p = read_all_patterns(m, bs)
     channels = [int(c, 16) for c in sorted(list(arguments.channels.lower()))]
