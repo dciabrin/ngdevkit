@@ -307,12 +307,14 @@ def adpcm_b_fixed_point_semitone(freq):
     return (integer_pos, fract_pos)
 
 
-def read_fm_instrument(bs):
+def read_fm_instrument(bs, version):
     ifm = fm_instrument()
     assert bs.u1() == 0xf4  # data for all operators
     ifm.algorithm, ifm.feedback = ubits(bs.u1(), [6, 4], [2, 0])
     ifm.am_sense, ifm.fm_sense = ubits(bs.u1(), [4, 3], [2, 0])
-    bs.u1()  # unused
+    bs.u1()  # unused: am2 | _ | llpatch
+    if version>=224:
+        bs.u1()  # unused: block
     for _ in range(4):
         op = fm_operator()
         tmpdetune, op.multiply = ubits(bs.u1(), [6, 4], [3, 0])
@@ -546,7 +548,8 @@ def read_instrument(nth, bs, smp):
 
     assert bs.read(4) == b"INS2"
     endblock = bs.pos + bs.u4()
-    assert bs.u2() >= 127  # format version
+    version = bs.u2()
+    assert version >= 127  # format version
     itype = bs.u2()
     assert itype in [1, 6, 37, 38]  # FM, SSG, ADPCM-A, ADPCM-B
     # for when the instrument has no SM feature
@@ -560,7 +563,7 @@ def read_instrument(nth, bs, smp):
         if feat == b"NA":
             name = bs.ustr()
         elif feat == b"FM":
-            ins = read_fm_instrument(bs)
+            ins = read_fm_instrument(bs, version)
         elif feat == b"LD":
             # unused OPL drum data
             bs.read(length)
