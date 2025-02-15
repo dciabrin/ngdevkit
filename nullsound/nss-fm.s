@@ -453,6 +453,8 @@ _fm_post_add_vibrato::
 ;;; ------
 ;;; modified: bc, de, hl
 compute_ym2610_fm_vol::
+        push    iy
+
         ;; a: note vol (attenuation) for current channel
         ld      a, VOL(ix)
         bit     BIT_FX_VOL_SLIDE, FX(ix)
@@ -477,12 +479,12 @@ _vol_post_clamp_up:
         ld      de, #OP1
         add     hl, de
 
-        ;; de: address of computed volumes for ops register (8bit aligned add)
+        ;; iy: address of computed volumes for ops register (8bit aligned add)
         push    ix
-        pop     de
-        ld      a, #OUT_OP1
-        add     e
-        ld      e, a
+        pop     iy
+        ld      d, #0
+        ld      e, #OUT_OP1
+        add     iy, de
 
 _c_ops_loop:
         ;; a: OP level
@@ -504,9 +506,9 @@ _c_ops_post_clamp:
         ;; NOTE: YM2610's FM output level ramp follows an exponential curve,
         ;; so we implement this output level attenuation via a basic
         ;; addition, clamped to 127 (max attenuation).
-        ld      b, a
+        ld      d, a
         ld      a, (state_fm_volume_attenuation)
-        add     b
+        add     d
         bit     7, a
         jr      z, _c_ops_post_global_clamp
         ld      a, #127
@@ -514,12 +516,14 @@ _c_ops_post_global_clamp:
 
 _c_ops_result:
         ;; saved configured OP value
-        ld      (de), a
-        inc     de
+        ld      (iy), a
+        inc     iy
 _c_ops_next:
         srl     c
         bit     4, c
         jr      nz, _c_ops_loop
+
+        pop     iy
 
         ret
 
