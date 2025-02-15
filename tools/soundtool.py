@@ -312,6 +312,11 @@ def dump_makefile(desc, f):
     for group in sorted(iter(grouped_musics)):
         atype="Z80 bank %d"%group if group >= 0 else "fixed Z80 ROM"
         print("#\n# assets for %s\n#\n"%atype, file=f)
+
+        # fixed ROM: group == -1
+        if group >= 0:
+            print("Z80_LDFLAGS+=-b BANK%d=0x8000\n"%group, file=f)
+
         for mod in grouped_musics[group]:
             mtype="BANK%d"%group if group >= 0 else "FIXED"
             gtype="BANK%d_MUSIC"%group if group >= 0 else "MUSIC"
@@ -326,7 +331,6 @@ def dump_makefile(desc, f):
             print("Z80_SOUND_SRCS+=$(Z80_%s_MUSIC)"%mtype, file=f)
             if group >= 0:
                 print("Z80_MUSIC_OBJS+=$(Z80_BANK_PREFIX)%d.lib"%group, file=f)
-                print("Z80_LDFLAGS+=-b BANK%d=0x8000"%group, file=f)
                 print("$(Z80_BANK%d_MUSIC): Z80_FLAGS=-b %d"%(group, group), file=f)
                 print("$(Z80_BANK%d_MUSIC_OBJS): $(SAMPLES_INC)"%group, file=f)
                 print("$(Z80_BANK_PREFIX)%d.lib: $(Z80_BANK%d_MUSIC_OBJS)"%(group, group), file=f)
