@@ -144,7 +144,13 @@ class fur_module:
     samples: list[int] = field(default_factory=list)
 
 
+# Global tweak to compensate for default SSG output volume in Furnace
+HALF_SSG_VOL = False
+SSG_USED = False
+
+
 def read_module(bs):
+    global HALF_SSG_VOL
     mod = fur_module()
     assert bs.read(16) == b"-Furnace module-"  # magic
     bs.u2()  # version
@@ -167,7 +173,15 @@ def read_module(bs):
     nb_patterns = bs.u4()  # skip global pattern count
     chips = [x for x in bs.read(32)]
     assert chips[:chips.index(0)] == [165]  # single ym2610 chip
-    bs.read(32 + 32 + 128)  # skip chips vol, pan, flags
+    bs.read(32) # skip chips vol
+    bs.read(32) # skip chips pan
+    chip_flags = unpack("32I", bs.read(128))
+    # If the module has flags, check whether the master SSG and ADPCM/FM volumes match
+    # otherwise consider the module relies on Furnace defaults (currently half volume)
+    if chip_flags[0] != 0:
+        check_chip_flags(chip_flags[0], bs)
+    else:
+        HALF_SSG_VOL = True
     mod.name = bs.ustr()
     mod.author = bs.ustr()
     mod.pattern_len = pattern_len
@@ -218,6 +232,30 @@ def read_module(bs):
     # TODO: grove patterns
     return mod
 
+
+def check_chip_flags(ptr, bs):
+    global HALF_SSG_VOL
+    saved_pos = bs.pos
+    bs.seek(ptr)
+    assert bs.read(4) == b"FLAG"
+    size = bs.u4()
+    data = bs.read(size)
+    datastr=bytearray(data).decode("utf-8")
+    flags = {}
+    for d in datastr.split("\n")[:-1]: # last item is "\0"
+        k, v = d.split("=")
+        flags[k]=v
+    bs.seek(saved_pos)
+
+    # check if check volumes for SSG and FM/ADPCM (or the resp. Furnace defaults)
+    ssgVol = int(flags.get("ssgVol","128"))
+    HALF_SSG_VOL = (ssgVol == 128)
+
+    # warn if this moudle uses unsupported master volumes
+    fmVol = int(flags.get("fmVol","256"))
+    if (not (fmVol == 256 and ssgVol == 128)) and (not (fmVol == 256 and ssgVol == 256)):
+        print("Furnace module uses custom output volumes (FM/ADPCM: %d, SSG: %d), which is not supported in hardware.\n"
+              "Please set the volume of FM/ADPCM and SSG tracks to 256 in Furnace in the 'Chip Manager' window"%(fmVol, ssgVol))
 
 
 @dataclass
@@ -420,11 +458,18 @@ def read_ssg_macro(length, bs):
                      "arp": 1<<2, # BIT_LOAD_NOTE
                      }
 
-    autoenv=False
+    global SSG_USED
+    SSG_USED = True
+    autoenv = False
     blocks = {}
     macros, loop = read_macro_data(length, bs)
     for code in macros:
-        blocks[code_name[code]] = macros[code]
+        data = macros[code]
+        if HALF_SSG_VOL and code_name[code] == "vol":
+            # Temporary volume adjustment when SSG channel is not mixed 100%
+            # in the furnace module
+            data = [max(0, x-1) for x in data]
+        blocks[code_name[code]] = data
 
     # pass: merge waveform sequence into vol & noise_tone sequences for SSG registers
     if "wave" in blocks:
@@ -927,6 +972,10 @@ def main():
 
     if arguments.action == "instruments":
         generate_instruments(m, sample_map, name, bank, ins, outfd)
+        # warn if SSG required volume tweak
+        if SSG_USED and HALF_SSG_VOL:
+            print("Volume of SSG channel is halved in Furnace, SSG macros were tweaked to compensate.\n"
+                  "To fix that, please set the SSG volume to 256 in Furnace in the 'Chip Manager' window.")
     elif arguments.action == "samples":
         generate_sample_map(m, smp, outfd)
     else:
