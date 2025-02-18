@@ -463,6 +463,15 @@ def read_ssg_macro(length, bs):
     autoenv = False
     blocks = {}
     macros, loop = read_macro_data(length, bs)
+
+    # pass: add default values for attributes that are mandatory to output sound
+    # vol
+    if code_name.index("vol") not in macros:
+        macros[code_name.index("vol")] = [15] # max volume
+    # wave
+    if code_name.index("wave") not in macros:
+        macros[code_name.index("wave")] = [1] # tone
+
     for code in macros:
         data = macros[code]
         if HALF_SSG_VOL and code_name[code] == "vol":
