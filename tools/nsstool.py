@@ -390,10 +390,12 @@ def convert_fm_row(row, channel):
             elif fx == 0xe5:  # pitch
                 opcodes.append(fm_pitch(fxval))
             elif fx == 0xe1:  # slide up
-                assert fxval != -1
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
                 opcodes.append(fm_note_slide_u(fxval))
             elif fx == 0xe2:  # slide down
-                assert fxval != -1
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
                 opcodes.append(fm_note_slide_d(fxval))
             elif fx == 0x0a:  # volume slide down
                 # fxval == -1 means disable vibrato
