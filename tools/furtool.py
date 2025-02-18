@@ -402,7 +402,7 @@ def read_macro_data(length, bs):
         # TODO meaning?
         mode = bs.u1()
         msize, mtype = ubits(bs.u1(), [7, 6], [2, 1])
-        assert msize == 0, "macro value should be of type '8-bit unsigned'"
+        assert msize in [0, 1], "macro value should be of type '8-bit unsigned/signed'"
         assert mtype == 0, "macro should be of type 'sequence'. ADSR or LFO unsupported"
         # TODO unsupported. no delay
         delay = bs.u1()
@@ -751,15 +751,18 @@ def asm_fm_instrument(ins, fd):
 
 
 def asm_ssg_macro(mac, fd):
+    def next_sentinel(pos):
+        while(mac.prog[pos]!=255): pos+=2
+        return pos
     prev = 0
-    cur = mac.prog.index(255, 0)
+    cur = next_sentinel(0)
     lines = []
     # split macro into list of steps
     while cur != prev:
         line = mac.prog[prev:cur+1]
         lines.append(", ".join(["0x%02x"%x for x in line]))
         prev = cur+1
-        cur = mac.prog.index(255,cur+1)
+        cur = next_sentinel(prev)
     # there should be a load value for each line
     assert len(lines) == len(mac.bits)
     # macro actions
