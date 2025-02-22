@@ -185,7 +185,6 @@ init_nss_fm_state_tracker::
         ld      a, #0xff
         ld      hl, #(state_fm+INSTRUMENT)
         ld      bc, #FM_STATE_SIZE
-        add     hl, bc
         ld      (hl), a
         add     hl, bc
         ld      (hl), a
