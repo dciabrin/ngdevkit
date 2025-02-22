@@ -121,6 +121,8 @@ timer_init_ticks::
         call    timer_update_ticks_for_next_row
         ld      a, (state_timer_ticks_per_row)
         ld      (state_timer_ticks_count), a
+        ld      a, #TIMER_CONSUMER_ALL
+        ld      (state_timer_tick_reached), a
 
         pop     de
         pop     hl

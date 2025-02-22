@@ -241,13 +241,16 @@ update_stream_state_tracker::
         ld      a, (state_stream_in_use)
         or      a
         jp      z, _end_update_stream
-        ;; check whether one row has passed and any stream is ready for
-        ;; processing more NSS opcodes
+        ;; check whether one row has passed and further processing is needed
+        ld      a, (state_timer_tick_reached)
+        bit     TIMER_CONSUMER_STREAM_BIT, a
+        jp      z, _end_update_stream
+        ;; check whether any stream is ready for processing more NSS opcodes
         ld      a, (state_timer_ticks_per_row)
         ld      b, a
         ld      a, (state_timer_ticks_count)
         cp      b
-        jp      c, _check_update_stream_pipeline
+        jp      c, _post_process_nss_opcodes
         ;; process the NSS opcodes (this will update the pipeline)
         ;; the next row processing will take place once a new row is reached.
         call    update_streams_wait_rows
@@ -255,16 +258,14 @@ update_stream_state_tracker::
         ld      a, #0
         ld      (state_timer_ticks_count), a
         call    timer_update_ticks_for_next_row
-_check_update_stream_pipeline:
-        ld      a, (state_timer_tick_reached)
-        bit     TIMER_CONSUMER_STREAM_BIT, a
-        jp      z, _end_update_stream
+_post_process_nss_opcodes:
         ;; process the current stream pipeline
         ;; the next processing will take place once a new tick is reached
         call    run_fm_pipeline
         call    run_ssg_pipeline
         call    run_adpcm_a_pipeline
         call    run_adpcm_b_pipeline
+        ld      a, (state_timer_tick_reached)
         res     TIMER_CONSUMER_STREAM_BIT, a
         ld      (state_timer_tick_reached), a
 _end_update_stream:
