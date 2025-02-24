@@ -950,6 +950,61 @@ def compact_instr(nss):
     return out
 
 
+def insert_missing_vol(nss):
+    # note: we don't need to set a default volume for SSG as
+    # the SSG macro always contains a volume
+    fm_ctx_map = {fm_ctx_1: 0, fm_ctx_2: 1, fm_ctx_3: 2, fm_ctx_4: 3}
+    fm_ctx = 0
+    a_ctx_map = {a_ctx_1: 0, a_ctx_2: 1, a_ctx_3: 2, a_ctx_4: 3, a_ctx_5: 4, a_ctx_6: 5}
+    a_ctx = 0
+    vols_fm = [False, False, False, False]
+    vols_a = [False, False, False, False, False, False]
+    vol_b = False
+
+    def insert_missing_vol_pass(op, out):
+        nonlocal fm_ctx
+        nonlocal a_ctx
+        nonlocal vols_fm
+        nonlocal vols_a
+        nonlocal vol_b
+
+        if type(op) in fm_ctx_map.keys():
+            fm_ctx = fm_ctx_map[type(op)]
+            out.append(op)
+        elif type(op) in a_ctx_map.keys():
+            a_ctx = a_ctx_map[type(op)]
+            out.append(op)
+        elif type(op) == fm_vol:
+            vols_fm[fm_ctx]=True
+            out.append(op)
+        elif type(op) == fm_note:
+            if not vols_fm[fm_ctx]:
+                out.append(fm_vol(0x7f))
+                vols_fm[fm_ctx]=True
+            out.append(op)
+        elif type(op) == a_vol:
+            vols_a[a_ctx]=True
+            out.append(op)
+        elif type(op) == a_start:
+            if not vols_a[a_ctx]:
+                out.append(a_vol(0x1f))
+                vols_a[a_ctx]=True
+            out.append(op)
+        elif type(op) == b_vol:
+            vol_b=True
+            out.append(op)
+        elif type(op) == b_note:
+            if not vol_b:
+                out.append(b_vol(0xff))
+                vol_b=True
+            out.append(op)
+        else:
+            out.append(op)
+
+    out = run_control_flow_pass(insert_missing_vol_pass, nss)
+    return out
+
+
 def compact_calls(nss):
     compact = []
 
@@ -1378,6 +1433,9 @@ def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
 
     dbg(" - remove successive INSTR opcodes if they keep intrument unchanged")
     nss = compact_instr(nss)
+
+    dbg(" - insert VOL opcode if it is missing before the initial note")
+    nss = insert_missing_vol(nss)
 
     dbg(" - compact WAIT_N -> WAIT_LAST opcodes")
     nss = compact_wait_n_last(nss)
