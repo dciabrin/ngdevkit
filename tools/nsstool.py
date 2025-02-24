@@ -298,6 +298,8 @@ def register_nss_ops():
         ("s_note_w"  , ["note"]),
         ("a_start_w" , ),
         ("fm_stop_w" , ),
+        ("b_note_slide_u", ["speed_depth"]),
+        ("b_note_slide_d", ["speed_depth"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -615,6 +617,14 @@ def convert_b_row(row, channel):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(b_vibrato(fxval))
+            elif fx == 0xe1:  # slide up
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(b_note_slide_u(fxval))
+            elif fx == 0xe2:  # slide down
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(b_note_slide_d(fxval))
             else:
                 row_warn(row, "UNKNOWN")
                 add_unknown_fx('ADPCM-B', fx)

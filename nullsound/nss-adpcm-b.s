@@ -907,3 +907,31 @@ _post_b_vibrato_setup:
 
         ld      a, #1
         ret
+
+
+;;; ADPCM_B_NOTE_SLIDE_UP
+;;; Enable slide up effect for the ADPCM-B channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+adpcm_b_note_slide_up::
+        push    bc
+        ld      b, #0
+        ld      c, #NOTE_SEMITONE
+        call    slide_init
+        ld      a, #1
+        pop     bc
+        ret
+
+
+;;; ADPCM_B_NOTE_SLIDE_DOWN
+;;; Enable slide down effect for the ADPCM-B channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+adpcm_b_note_slide_down::
+        push    bc
+        ld      b, #1
+        ld      c, #NOTE_SEMITONE
+        call    slide_init
+        ld      a, #1
+        pop     bc
+        ret

@@ -566,6 +566,9 @@ nss_opcodes:
         .nss_op fm_note_on_and_wait
         .nss_op ssg_note_on_and_wait
         .nss_op adpcm_a_on_and_wait
+        .nss_op nss_nop3
+        .nss_op adpcm_b_note_slide_up
+        .nss_op adpcm_b_note_slide_down
 
 
 
@@ -846,5 +849,6 @@ _ret_set_process:
 ;;; ------
 nss_nop::
 nss_nop2::
+nss_nop3::
         ld      a, #1
         ret
