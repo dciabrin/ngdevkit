@@ -488,7 +488,8 @@ def read_ssg_macro(length, bs):
             if "vol" in blocks and i < len(blocks["vol"]):
                 new_vol = (env<<4) | (blocks["vol"][i])
                 blocks["vol"][i] = new_vol
-            new_wav=(noise<<3|tone)^0xff
+            # bits negative enabled
+            new_wav=((noise^1)<<3|(tone^1))
             blocks["wave"][i]=new_wav
 
     # pass: put auto-env information aside, it requires muls and divs

@@ -158,7 +158,7 @@ init_nss_ssg_state_tracker::
         ld      bc, #_state_ssg_end-2-_state_ssg_start
         ldir
         ;; global SSG volume is initialized in the volume state tracker
-        ld      a, #0xff
+        ld      a, #0x3f
         ld      (state_mirrored_enabled), a
         ;; set up current tune and half distance tables
         ld      bc, #ssg_tune_aes
@@ -389,12 +389,13 @@ _post_load_ssg_vol:
 
 
         ;; Pipeline action: configure waveform and start note playback
-
+        ld      c, #0xff
         bit     BIT_LOAD_WAVEFORM, PIPELINE(ix)
         jr      z, _post_load_waveform
         res     BIT_LOAD_WAVEFORM, PIPELINE(ix)
-
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ;; c: waveform (shifted for channel)
+        ;; b: waveform mask (shifted for channel)
         ld      c, WAVEFORM_OFFSET(ix)
         call    waveform_for_channel
 
@@ -402,7 +403,8 @@ _post_load_ssg_vol:
         bit     BIT_NOTE_STARTED, PIPELINE(ix)
         jr      nz, _post_load_waveform
         ld      a, (state_mirrored_enabled)
-        and     c
+        and     b
+        or      c
         ld      (state_mirrored_enabled), a
         ld      b, #REG_SSG_ENABLE
         ld      c, a
@@ -558,18 +560,19 @@ _post_ssg_vol_clamp:
 ;;;   c: waveform
 ;;; OUT
 ;;;   c: shifted waveform for the current channel
-;;; [c modified]
+;;; [b, c modified]
 waveform_for_channel:
+        ld      b, #0xf6   ; 11110110
         ld      a, (state_ssg_channel)
-        bit     0, a
-        jp      z, _w_post_s0
+        cp      #0
+        jp      z, _post_waveform_shift
+        rlc     b
         rlc     c
-_w_post_s0:
-        bit     1, a
-        jp      z, _w_post_s1
+        dec     a
+        jp      z, _post_waveform_shift
+        rlc     b
         rlc     c
-        rlc     c
-_w_post_s1:
+_post_waveform_shift:
         ret
 
 
@@ -735,10 +738,7 @@ ssg_stop_playback:
         push    bc
 
         ;; c: disable mask (shifted for channel)
-        ld      a, WAVEFORM_OFFSET(ix)
-        ld      b, #0xff
-        xor     b
-        ld      c, a
+        ld      c, #9           ; ..001001
         call    waveform_for_channel
 
         ;; stop channel
