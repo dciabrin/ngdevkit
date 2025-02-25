@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024 Damien Ciabrini
+;;; Copyright (c) 2024-2025 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -317,6 +317,7 @@ _vol_adpcm_a_next:
         call    ym2610_write_port_b
 
         ;; update ADPCM-B if it is used in the music
+        ld      iy, #state_b
         bit     0, d
         jr      z, _vol_post_adpcm_b
         set     ADPCM_B_BIT_LOAD_VOL, PIPELINE(iy)
