@@ -335,9 +335,12 @@ update_volume_state_tracker::
         ld      a, (state_volume_fade_out)
         bit     0, a
         jp      z, _post_volume_fade_out
+        ;; only update once per tick
         ld      a, (state_timer_tick_reached)
         bit     TIMER_CONSUMER_VOLUME_BIT, a
         jp      z, _post_volume_fade_out
+        res     TIMER_CONSUMER_VOLUME_BIT, a
+        ld      (state_timer_tick_reached), a
 
         push    hl
         push    bc
@@ -379,7 +382,6 @@ fade::
 next_fade::
         ld      (state_volume_fade_progress), a
 
-        res     TIMER_CONSUMER_VOLUME_BIT, a
         pop     de
         pop     bc
         pop     hl
