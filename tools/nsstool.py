@@ -1300,17 +1300,13 @@ def resolve_jmp_and_call_opcodes(nss):
     return nss
 
 
-def remove_empty_streams(channels, streams):
+def stream_size_in_effective_opcodes(stream):
     def control_flow(op):
-        return type(op) in [jmp, call, nss_ret, nss_label, nss_end, wait_n, wait_last]
-    def stream_effective_length(s):
-        return len([op for op in s if not control_flow(op)])
-    streams_lengths = [(c, s, stream_effective_length(s)) for c, s in zip(channels, streams)]
-    non_empty = [(c, s) for c, s, l in streams_lengths if l > 0]
-    return [c for c, s in non_empty], [s for c, s in non_empty]
+        return type(op) in [jmp, call, pat_offset, call_tbl, call_entry, nss_ret, nss_label, nss_end, wait_n, wait_last]
+    return len([op for op in stream if not control_flow(op)])
 
 
-def stream_size(stream):
+def stream_size_in_bytes(stream):
     def op_size(op):
         if isinstance(op, nss_label):
             return 0
@@ -1412,15 +1408,25 @@ def nss_to_asm(nss, m, name, fd):
     asm_slice(stream_ops)
 
 
+def remove_empty_streams(channels, streams):
+    streams_size = [(c, s, stream_size_in_effective_opcodes(s)) for c, s in zip(channels, streams)]
+    non_empty = [(c, s) for c, s, l in streams_size if l > 0]
+    return [c for c, s in non_empty], [s for c, s in non_empty]
+
+
+tempo_injected=False
 def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
     compact = stream_idx >= 0
 
     dbg("Convert Furnace patterns to unoptimized NSS opcodes")
     nss = raw_nss(m, p, bs, channels, compact)
 
-    if stream_idx <= 0:
+    # insert a tempo opcode on the first track that is used in the Furnace module
+    global tempo_injected
+    if not tempo_injected and stream_size_in_effective_opcodes(nss)>0:
         tb = round(256 - (4000000 / (1152 * m.frequency)))
         nss.insert(0, tempo(tb))
+        tempo_injected = True
 
     nss.insert(0, nss_label("_start"))
 
@@ -1537,7 +1543,7 @@ def main():
                 1 + len(m.speeds) +  # speeds
                 (2 * len(streams)))  # stream pointers
         # all streams sizes
-        size += sum([stream_size(s) for s in streams])
+        size += sum([stream_size_in_bytes(s) for s in streams])
         asm_header(streams, m, name, bank, size, outfd)
         nss_compact_header(m, channels, streams, name, outfd)
         for i, ch, stream in zip(range(len(channels)), channels, streams):
@@ -1545,7 +1551,7 @@ def main():
     else:
         stream = generate_nss_stream(m, p, bs, ins, channels, -1)
         # NSS inline marker + channels bitfield, stream size
-        size = 1 + 2 + stream_size(stream)
+        size = 1 + 2 + stream_size_in_bytes(stream)
         asm_header(stream, m, name, bank, size, outfd)
         nss_inline_header(channels, name, outfd)
         nss_to_asm(stream, m, False, outfd)
