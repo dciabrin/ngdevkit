@@ -197,11 +197,6 @@ init_nss_fm_state_tracker::
         ld      a, #0xc3        ; jp 0x....
         ld      (ym2610_write_func), a
         call    fm_ctx_reset
-        ;; set up current F-num and half distance tables
-        ld      bc, #fm_note_f_num_aes
-        ld      (state_fm_note_f_num), bc
-        ld      bc, #fm_f_num_half_distance_aes
-        ld      (state_fm_f_num_half_distance), bc
         ret
 
 
@@ -532,60 +527,88 @@ _c_ops_next:
 ;;; modified: bc, de, hl
 compute_ym2610_fm_note::
         ;; b: current note (integer part)
-        ld      b, NOTE_POS16+1(ix)
+        ld      l, NOTE_POS16+1(ix)
 
-        ;; d: octave and semitone from note
-        ld      hl, #note_to_octave_semitone
-        ld      a, l
-        add     b
-        ld      l, a
-        ld      d, (hl)
+        ;; c: octave and semitone from note
+        ld      h, #>note_to_octave_semitone
+        ld      c, (hl)
 
-        ;; c: block
-        ld      a, d
+        ;; configure block
+        ld      a, c
         and     #0xf0
         sra     a
         ld      NOTE_BLOCK(ix), a
 
-        ;; a: current semitone
-        ld      a, d
+        ;; c: semitone
+        ld      a, c
         and     #0xf
-        ;; hl: base f-num for current semitone (8bit-add)
-        ld      hl, (state_fm_note_f_num)
-        sla     a
-        add     a, l
-        ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
-        ld      b, (hl)
-        inc     hl
-        ld      c, (hl)
-        ld      h, b
-        ld      l, c
-        push    hl              ; + f-num
+        ld      c, a
 
-        ;; e: half-distance f-num to next semitone (8bit add)
-        ld      a, d
-        and     #0xf
-        ld      hl, (state_fm_f_num_half_distance)
+        ;; push base floating point tune for note (24bits)
+        ;; de:b : base f-num for note
+        ld      hl, #fm_fnums
+        add     c
+        add     c
         add     l
         ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
+        ld      b, (hl)
+        inc     l
         ld      e, (hl)
-        ;; c: FM: intermediate frequency is positive
-        ld      c, #0
-        ;; b: intermediate note position (fractional part)
-        ld      b, NOTE_POS16(ix)
-        ;; de: current intermediate f-num
-        call    slide_intermediate_freq
-        push    hl
-        pop     de
+        inc     l
+        ld      d, (hl)
+        push    bc              ; +base F-num __:8_
+        push    de              ; +base F-num 16:__
 
-        pop     hl              ; - f-num
-        add     hl, de
+        ;; prepare arguments for scaling distance to next tune
+        ;; c:de: distance to next f-num for note
+        ld      hl, #fm_dists
+        ld      a, c
+        add     c
+        add     c
+        add     l
+        ld      l, a
+        ld      e, (hl)
+        inc     l
+        ld      d, (hl)
+        inc     l
+        ld      c, (hl)
+
+        ;; l: current note (fractional part) to offset in delta table
+        ;; l/2 to get index in delta table
+        ;; (l/2)*2 to get offset in bytes in the delta table
+        ld      l, NOTE_POS16(ix)
+        res     0, l
+
+        ;; hl: delta factor for current fractional part
+        ld      h, #>fm_fnum_deltas
+        ld      b, (hl)
+        inc     l
+        ld      h, (hl)
+        ld      l, b
+
+        ;; de:b : scaled 24bit distance
+        call    scale_int24_by_factor16
+
+        ;; hl:a_ : base F-num
+        pop     hl              ; -base tune 16:__
+        pop     af              ; -base tune __:8_
+
+        ;; final tune = base tune + result = hl:a_ + de:b_
+        add     b
+        adc     hl, de
+
+        ;; hl: SSG final tune = hl >> 3
+        ld      a, l
+        srl     h
+        rra
+        srl     h
+        rra
+        srl     h
+        rra
+        srl     h
+        rra
+        ld      l, a
+
         ld      NOTE_FNUM(ix), l
         ld      NOTE_FNUM+1(ix), h
 
@@ -933,56 +956,6 @@ fm_pitch::
         pop     bc
         ld      a, #1
         ret
-
-
-;;; Semitone frequency table
-;;; ------
-;;; A note in nullsound is represented as a tuple <octave, semitone>,
-;;; which is translated into YM2610's register representation
-;;; `block * F-number`, where F-number is a factor of the semitone's
-;;; frequency, and block is a power of 2 (handy for octaves)
-fm_note_f_num_mvs:
-        .db      0x02, 0x69  ;  617 - C
-        .db      0x02, 0x8e  ;  654 - C#
-        .db      0x02, 0xb5  ;  693 - D
-        .db      0x02, 0xde  ;  734 - D#
-        .db      0x03, 0x0a  ;  778 - E
-        .db      0x03, 0x38  ;  824 - F
-        .db      0x03, 0x69  ;  873 - F#
-        .db      0x03, 0x9d  ;  925 - G
-        .db      0x03, 0xd4  ;  980 - G#
-        .db      0x04, 0x0e  ; 1038 - A
-        .db      0x04, 0x4c  ; 1100 - A#
-        .db      0x04, 0x8d  ; 1165 - B
-        .db      0x04, 0xd1  ; 1233 - C+1
-
-fm_note_f_num_aes:
-        .db     0x02, 0x65  ;  613 - C
-        .db     0x02, 0x89  ;  649 - C#
-        .db     0x02, 0xb0  ;  688 - D
-        .db     0x02, 0xd9  ;  729 - D#
-        .db     0x03, 0x04  ;  772 - E
-        .db     0x03, 0x32  ;  818 - F
-        .db     0x03, 0x63  ;  867 - F#
-        .db     0x03, 0x96  ;  918 - G
-        .db     0x03, 0xcd  ;  973 - G#
-        .db     0x04, 0x07  ; 1031 - A
-        .db     0x04, 0x44  ; 1092 - A#
-        .db     0x04, 0x85  ; 1157 - B
-        .db     0x04, 0xca  ; 1224 - C+1
-
-
-;;; F-num half-distance table
-;;; ------
-;;; The half-distance between a semitone's f-num and the next semitone's f-num.
-;;; This is used to compute fractional f-num values from fixed-point note.
-fm_f_num_half_distance_mvs::
-        ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B,  C+1
-        .db     0x12, 0x13, 0x14, 0x16, 0x17, 0x18, 0x1a, 0x1b, 0x1d, 0x1f, 0x20, 0x22, 0x24
-
-fm_f_num_half_distance_aes::
-        ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B,  C+1
-        .db     0x12, 0x13, 0x14, 0x15, 0x17, 0x18, 0x19, 0x1b, 0x1d, 0x1e, 0x20, 0x21, 0x24
 
 
 ;;; Update the vibrato for the current FM channel

@@ -71,14 +71,6 @@
         ;; a single 256 byte boundary to make 16bit arithmetic faster
         .blkb   110
 
-;;; SSG tune table in use (MVS or AES)
-state_ssg_tune::
-        .blkw   1
-
-;;; SSG half-distance table in use (MVS or AES)
-state_ssg_semitone_distance::
-        .blkw   1
-
 _state_ssg_start:
 
 ;;; context: current SSG channel for opcode actions
@@ -160,11 +152,6 @@ init_nss_ssg_state_tracker::
         ;; global SSG volume is initialized in the volume state tracker
         ld      a, #0x3f
         ld      (state_mirrored_enabled), a
-        ;; set up current tune and half distance tables
-        ld      bc, #ssg_tune_aes
-        ld      (state_ssg_tune), bc
-        ld      bc, #ssg_semitone_distance_aes
-        ld      (state_ssg_semitone_distance), bc
         ret
 
 
@@ -474,44 +461,83 @@ _ssg_post_add_slide::
         ret
 
 compute_ym2610_ssg_note::
-        ;; b: current note (integer part)
-        ld      b, NOTE_POS16+1(ix)
+        ;; l: current note (integer part)
+        ld      l, NOTE_POS16+1(ix)
 
-        ;; b: octave and semitone from note
-        ld      hl, #note_to_octave_semitone
-        ld      a, l
-        add     b
+        ;; c: octave and semitone from note
+        ld      h, #>note_to_octave_semitone
+        ld      c, (hl)
+
+        ;; push base floating point tune for note (24bits)
+        ;; b: ym2610 base tune for note (LSB)
+        ld      a, c
+        ld      hl, #ssg_tunes_lsb
+        add     l
         ld      l, a
         ld      b, (hl)
+        push    bc              ; +base tune __:8_
 
-        ;; de: ym2610 base tune for note
-        ld      hl, (state_ssg_tune)
-        ld      a, b
-        sla     a
-        ld      l, a
+        ;; de: ym2610 base tune for note (MSB)
+        ld      h, #>ssg_tunes_msb
+        ld      l, c
+        sla     l
         ld      e, (hl)
-        inc     hl
+        inc     l
         ld      d, (hl)
-        push    de              ; +base tune
+        push    de              ; +base tune 16:__
 
-        ;; e: half-distance SSG tune to next semitone
-        ld      hl, (state_ssg_semitone_distance)
-        ld      a, l
-        add     b
-        ld      l, a
+        ;; prepare arguments for scaling distance to next tune
+        ;; c: ym2610 distance for note (_8:__)
+        ld      a, c
+        ld      bc, #ssg_dists_msb
+        add     c
+        ld      c, a
+        ld      a, (bc)
+        ld      c, a
+
+        ;; de: ym2610 distance for note (__:16)
+        ld      h, #>ssg_dists_lsb
+        ld      d, (hl)
+        dec     l
         ld      e, (hl)
-        ;; c: SSG: intermediate frequency is negative
-        ld      c, #1
-        ;; b: intermediate note position (fractional part)
-        ld      b, NOTE_POS16(ix)
-        ;; de: current intermediate SSG tune
-        call    slide_intermediate_freq
-        push    hl
-        pop     de
 
-        ;; hl: ym2610 tune (coarse | fine tune)
-        pop     hl              ; -base tune
-        add     hl, de
+        ;; l: current note (fractional part) to offset in delta table
+        ;; l/2 to get index in delta table
+        ;; (l/2)*2 to get offset in bytes in the delta table
+        ld      l, NOTE_POS16(ix)
+        res     0, l
+
+        ;; hl: delta factor for current fractional part
+        ld      h, #>ssg_tune_deltas
+        ld      b, (hl)
+        inc     l
+        ld      h, (hl)
+        ld      l, b
+
+        ;; de:b : scaled 24bit distance
+        call    scale_int24_by_factor16
+
+        ;; SSG has decreasing value for higher semitone, so we must
+        ;; negate the result to get the new final ym2610 tune
+        ;; hl:a_ : base tune
+        pop     hl              ; -base tune 16:__
+        pop     af              ; -base tune __:8_
+
+        ;; final tune = base tune - result = hl:a_ - de:b_
+        sub     b
+        sbc     hl, de
+
+        ;; hl: SSG final tune = hl >> 4
+        ld      a, l
+        srl     h
+        rra
+        srl     h
+        rra
+        srl     h
+        rra
+        srl     h
+        rra
+        ld      l, a
 
         ;; save ym2610 fine and coarse tune
         ld      NOTE_FINE_COARSE(ix), l
