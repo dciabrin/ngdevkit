@@ -36,8 +36,9 @@
         .lclequ OUT_VOL, (state_b_out_vol-state_b)
         .lclequ PAN, (state_b_pan-state_b)
         .lclequ INSTR, (state_b_instr-state_b)
-        .lclequ FINE_TUNE, (state_b_instr_fine_tune-state_b)
         .lclequ START_CMD, (state_b_instr_start_cmd-state_b)
+        .lclequ BASE_OCTAVE, (state_b_instr_base_octave-state_b)
+        .lclequ BASE_DELTA_N, (state_b_instr_base_delta_n-state_b)
 
         .equ    NSS_ADPCM_B_INSTRUMENT_PROPS,   4
         .equ    NSS_ADPCM_B_NEXT_REGISTER,      8
@@ -63,13 +64,6 @@
         ;; a single 256 byte boundary to make 16bit arithmetic faster
         .blkb   16
 
-;;; Semitone Delta-N table in use (MVS or AES)
-state_b_delta_n_base::
-        .blkw   1
-
-;;; Semitone Delta-N half-distance table in use (MVS or AES)
-state_b_delta_n_half_distance::
-        .blkw   1
 
 ;;; ADPCM playback state tracker
 ;;; ------
@@ -92,8 +86,9 @@ state_b_note_pos16:             .blkb   2       ; fixed-point note after the FX 
 state_b_note_delta_n:           .blkb   2       ; ym2610 delta-N after the FX pipeline
 ;;; instrument
 state_b_instr:                  .blkb   1       ; instrument in use
-state_b_instr_fine_tune:        .blkb   2       ; instrument fixed-point fine tuning for C-4 frequency
 state_b_instr_start_cmd:        .blkb   1       ; instrument play command (with loop)
+state_b_instr_base_octave:      .blkb   2       ; instrument base octave
+state_b_instr_base_delta_n:     .blkb   2       ; instrument base delta-n table for all semitones
 ;;; volume
 state_b_vol:                    .blkb   1       ; configured note volume (attenuation)
 state_b_out_vol:                .blkb   1       ; ym2610 volume after the FX pipeline
@@ -139,11 +134,6 @@ init_nss_adpcm_b_state_tracker::
         ld      VOL(ix), a
         ld      a, #0xff        ; default non-existing instrument
         ld      INSTR(ix), a
-        ;; set up current F-num and half distance tables
-        ld      bc, #adpcm_b_delta_n_base_aes
-        ld      (state_b_delta_n_base), bc
-        ld      bc, #adpcm_b_delta_n_half_distance_aes
-        ld      (state_b_delta_n_half_distance), bc
 
         ;; global ADPCM volumes are initialized in the volume state tracker
         ret
@@ -385,20 +375,21 @@ _adpcm_b_loop:
 _adpcm_b_post_loop_chk:
         ld      START_CMD(ix), a
 
-        ;; instrument fine-tune for matching C-4 frequency
+        ;; instrument base octave
         inc     hl
         ld      a, (hl)
-        ld      FINE_TUNE(ix), a
+        ld      BASE_OCTAVE(ix), a
+
+        ;; instrument base Delta-N table for all semitones
         inc     hl
-        ld      a, (hl)
-        ld      FINE_TUNE+1(ix), a
+        ld      (state_b_instr_base_delta_n), hl
 
         ;; set a default pan
         ld      b, #REG_ADPCM_B_PAN
         ld      c, #0xc0        ; default pan (L+R)
         call    ym2610_write_port_a
 
-        ;; setting a new instrument always trigger a note start,
+        ;; setting a new instrument always triggers a note start,
         ;; register it for the next pipeline run
         res     BIT_NOTE_STARTED, PIPELINE(ix)
         set     BIT_LOAD_NOTE, PIPELINE(ix)
@@ -409,55 +400,6 @@ _adpcm_b_post_loop_chk:
 _adpcm_b_instr_end:
         ld      a, #1
         ret
-
-
-;;; Semitone frequency table
-;;; ------
-;;; A note in nullsound is represented as a tuple <octave, semitone>,
-;;; which is translated into YM2610's register representation
-;;; `Delta-N`. nullsounds decomposes Delta-N as `2^octave * base`,
-;;; where base is a factor of the semitone's frequency, and the
-;;; result is multiplied by a power of 2 (handy for octaves)
-adpcm_b_delta_n_base_mvs:
-        .db     0x0c, 0xb7	; 3255
-        .db     0x0d, 0x78	; 3448
-        .db     0x0e, 0x45	; 3653
-        .db     0x0f, 0x1f	; 3871
-        .db     0x10, 0x05	; 4101
-        .db     0x10, 0xf9	; 4345
-        .db     0x11, 0xfb	; 4603
-        .db     0x13, 0x0d	; 4877
-        .db     0x14, 0x2f	; 5167
-        .db     0x15, 0x62	; 5474
-        .db     0x16, 0xa8	; 5800
-        .db     0x18, 0x00	; 6144
-
-adpcm_b_delta_n_base_aes:
-        .db     0x0c, 0xc4      ; 3268
-        .db     0x0d, 0x86      ; 3462
-        .db     0x0e, 0x55      ; 3669
-        .db     0x0f, 0x2e      ; 3886
-        .db     0x10, 0x16      ; 4118
-        .db     0x11, 0x0b      ; 4363
-        .db     0x12, 0x0e      ; 4622
-        .db     0x13, 0x21      ; 4897
-        .db     0x14, 0x45      ; 5189
-        .db     0x15, 0x79      ; 5497
-        .db     0x16, 0xc0      ; 5824
-        .db     0x18, 0x1b      ; 6171
-
-
-;;; Delta-N half-distance table
-;;; ------
-;;; The half-distance between a semitone's base delta-n and the next semitone's base delta-n.
-;;; This is used to compute fractional delta-n values from fixed-point note.
-adpcm_b_delta_n_half_distance_mvs::
-        ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B
-        .db     0x60, 0x66, 0x6d, 0x73, 0x7a, 0x81, 0x89, 0x91, 0x99, 0xa3, 0xac, 0xb7
-
-adpcm_b_delta_n_half_distance_aes::
-        ;;         C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B
-        .db     0x61, 0x67, 0x6c, 0x74, 0x7a, 0x81, 0x89, 0x92, 0x9a, 0xa3, 0xad, 0xb7
 
 
 ;;; Update the vibrato for the ADPCM-B channel
@@ -610,11 +552,6 @@ compute_adpcm_b_fixed_point_note::
         ld      l, a
         ld      h, NOTE_SEMITONE(ix)
 
-        ;; bc: instrument fine tune
-        ld      c, FINE_TUNE(ix)
-        ld      b, FINE_TUNE+1(ix)
-        add     hl, bc
-
         ;; bc: slide offset if the slide FX is enabled
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _b_post_add_slide
@@ -641,14 +578,11 @@ _b_post_add_vibrato::
 ;;; ------
 ;;; modified: bc, de, hl
 compute_ym2610_adpcm_b_note::
-        ;; d: current note
-        ld      d, NOTE_POS16+1(ix)
+        ;; l: current note
+        ld      l, NOTE_POS16+1(ix)
 
         ;; d: octave and semitone from note
-        ld      hl, #note_to_octave_semitone
-        ld      a, l
-        add     d
-        ld      l, a
+        ld      h, #>note_to_octave_semitone
         ld      d, (hl)
         push    de              ; +octave/semitone
 
@@ -657,59 +591,95 @@ compute_ym2610_adpcm_b_note::
         and     #0xf
 
         ;; lh: semitone -> delta_n address
-        ld      hl, (state_b_delta_n_base)
-        sla     a
+        ld      hl, (state_b_instr_base_delta_n)
+        ld      b, a
+        add     b
+        add     b
         ld      b, #0
         ld      c, a
         add     hl, bc
 
-        ;; hl: base delta_n for semitone (integer part of note)
+        ;; de:b : base Delta-N for note
+        ld      b, (hl)
+        inc     hl
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        inc     hl
+        push    bc              ; +base Delta-N __:8_
+        push    de              ; +base Delta-N 16:__
+
+        ;; prepare arguments for scaling distance to next tune
+        ;; hl:a: base Delta-N for next node
         ld      a, (hl)
         inc     hl
-        ld      l, (hl)
-        ld      h, a
-        push    hl              ; +base delta-n
+        ld      c, (hl)
+        inc     hl
+        ld      h, (hl)
+        ld      l, c
 
-        ;; e: half-distance (base delta-n) to next semitone (8bit add)
-        ld      a, d
-        and     #0xf
-        ld      hl, (state_b_delta_n_half_distance)
-        add     l
-        ld      l, a
-        adc     a, h
-        sub     l
-        ld      h, a
-        ld      e, (hl)
-        ;; c: ADPCM-B: intermediate frequency is positive
-        ld      c, #0
-        ;; b: intermediate note position (fractional part)
-        ld      b, NOTE_POS16(ix)
-        ;; de: current intermediate base delta_n
-        call    slide_intermediate_freq
-        push    hl
-        pop     de
+        ;; c:de: distance to next Delta-N (hl:a - de:b)
+        sub     b
+        sbc     hl, de
+        ld      c, h
+        ld      d, l
+        ld      e, a
 
-        ;; hl: base delta_n for fixed-point note
-        pop     hl              ; -base delta-n
-        add     hl, de
+        ;; l: current note (fractional part) to offset in delta table
+        ;; l/2 to get index in delta table
+        ;; (l/2)*2 to get offset in bytes in the delta table
+        ld      l, NOTE_POS16(ix)
+        res     0, l
+
+        ;; hl: delta factor for current fractional part
+        ld      h, #>ssg_tune_deltas
+        ld      b, (hl)
+        inc     l
+        ld      h, (hl)
+        ld      l, b
+
+        ;; de:b : scaled 24bit distance
+        call    scale_int24_by_factor16
+
+        ;; hl:a_ : base Delta-N
+        pop     hl              ; -base tune 16:__
+        pop     af              ; -base tune __:8_
+
+        ;; final tune = base tune + result = hl:a_ + de:b_
+        add     b
+        adc     hl, de
 
         ;; d: octave
-        pop     de              ; -octave/semitone
-        srl     d
-        srl     d
-        srl     d
-        srl     d
+        pop     af              ; -octave/semitone
+        rra
+        rra
+        rra
+        rra
+        and     #0xf
+        ld      d, a
 
-        ;; hl: delta_n (base << octave) for fixed-point note
-        ld      a, d
-        cp      #0
-        jp      z, _no_delta_shift
-_delta_shift:
-        add     hl, hl
+        ;; check how to shift the base Delta-N w.r.t octave
+        ld      a, BASE_OCTAVE(ix)
+        sub     d
+        jr      c, _b_raise
+        jr      z, _post_delta_shift
+        ld      d, a
+        ;; prepare hl -> ha for faster right shift
+        ld      a, l
+_b_lower:
+        srl     h
+        rra
         dec     d
-        jp      nz, _delta_shift
-_no_delta_shift:
+        jr      nz, _b_lower
+        ld      l, a
+        jr      _post_delta_shift
 
+_b_raise:
+        add     hl, hl
+        inc     a
+        jr      nz, _b_raise
+
+_post_delta_shift:
         ld      DELTA_N(ix), l
         ld      DELTA_N+1(ix), h
 

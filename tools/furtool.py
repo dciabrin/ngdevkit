@@ -33,6 +33,8 @@ from operator import ior
 
 VERBOSE = False
 
+# The 8Mhz tick from the AES master clock
+_8M = 8055943
 
 def error(s):
     sys.exit("error: " + s)
@@ -326,23 +328,12 @@ class adpcm_a_instrument:
 class adpcm_b_instrument:
     name: str = ""
     sample: adpcm_b_sample = None
-    c4_delta_n_idx: int = 0
+    base_octave: int = 4
+    base_delta_ns: list[int] = field(default_factory=list)
     tuned: int = 0
-    fine_tune: int = 0
     loop: bool = False
 
 
-# pre-defined ADPCM-B playback frequencies for all semitones (MVS frequencies)
-b_base_freqs = [int(2759*(2**(x/12))) for x in range(5*12)]
-
-def adpcm_b_fixed_point_semitone(freq):
-    assert 1461 <= freq <= 55555, "frequency out of allowed ranges (%d Hz)"%freq
-    integer_pos = next(x for x in range(len(b_base_freqs)) if b_base_freqs[x]<freq<b_base_freqs[x+1])
-    float_pos = 12 * log(freq/2759, 2)
-    if float_pos-integer_pos >= 0.5:
-        integer_pos += 1
-    fract_pos = int(256*(float_pos - integer_pos))
-    return (integer_pos, fract_pos)
 
 
 def read_fm_instrument(bs, version):
@@ -593,7 +584,7 @@ def make_adpcm_b_instrument(smp, sample):
     ins = adpcm_b_instrument()
     ins.loop = smp[sample].loop
     ins.sample = get_sample_format(smp, sample, 38)
-    ins.c4_delta_n_idx, ins.fine_tune = adpcm_b_fixed_point_semitone(ins.sample.frequency)
+    ins.base_delta_ns, ins.base_octave = b_delta_ns(ins)
     return ins
 
 
@@ -854,15 +845,50 @@ def asm_ssg_load_func(mac, fd):
     print("", file=fd)
 
 
-def asm_adpcm_instrument(ins, fd):
-    name = ins.sample.name.upper()
-    print("%s:" % ins.name, file=fd)
-    print("        .db     %s_START_LSB, %s_START_MSB  ; start >> 8" % (name, name), file=fd)
-    print("        .db     %s_STOP_LSB,  %s_STOP_MSB   ; stop  >> 8" % (name, name), file=fd)
-    if isinstance(ins, adpcm_b_instrument):
-        fine_tune = unpack("H", pack("h", ins.fine_tune))[0]
-        print("        .db     0x%02x      ; loop" % (ins.loop,), file=fd)
-        print("        .dw     0x%04x    ; fine tune" % (fine_tune,), file=fd)
+def asm_adpcm_sample_desc(ins_name, macro_name, fd):
+    print("%s:" % ins_name, file=fd)
+    print("        .db     %s_START_LSB, %s_START_MSB  ; start >> 8" % (macro_name, macro_name), file=fd)
+    print("        .db     %s_STOP_LSB,  %s_STOP_MSB   ; stop  >> 8" % (macro_name, macro_name), file=fd)
+
+
+def asm_adpcm_a_instrument(ins, fd):
+    asm_adpcm_sample_desc(ins.name, ins.sample.name.upper(), fd)
+    print("", file=fd)
+
+
+def b_delta_ns(ins):
+    def delta_n_i24(f):
+        delta_n = (65536/(_8M/144)) * f
+        return int((delta_n+0.5)*256)
+
+    # C-4 maps to the instrument's sample frequency
+    base_freq = ins.sample.frequency
+    base_octave = 4
+    # https://github.com/tildearrow/furnace/issues/2347
+    furnace_compensation = (440 * 2**((3+48)/12))/8363
+    base_freq *= furnace_compensation
+    # The 12 semitones are all offset from base (C-4 sample frequency)
+    semitones = [base_freq*(2**(s/12)) for s in range(13)]
+    delta_ns = [delta_n_i24(s) for s in semitones]
+    # In case the sample frequency is to high to encode a 16bit Delta-N,
+    # tune down the deltas by 1 or more octave
+    overflow = max([d>>24 for d in delta_ns])
+    if overflow:
+        delta_ns = [d>>overflow for d in delta_ns]
+
+    return delta_ns, base_octave - overflow
+
+
+def asm_adpcm_b_instrument(ins, fd):
+    asm_adpcm_sample_desc(ins.name, ins.sample.name.upper(), fd)
+    print("        .db     0x%02x      ; loop" % (ins.loop,), file=fd)
+    o = ins.base_octave
+    print("        .db     0x%02x      ; base octave" % (o,), file=fd)
+    print("        ;; base Delta-N, 16:8 fixed point", file=fd)
+    semitones = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
+    bases = [x+str(o) for x in semitones]+[x+str(o+1) for x in semitones[:1]]
+    for d,n in zip(ins.base_delta_ns, bases):
+        print("        .db     0x%02x, 0x%02x, 0x%02x      ; %s"%(d&0xff, (d>>8)&0xff, (d>>16)&0xff, n), file=fd)
     print("", file=fd)
 
 
@@ -884,8 +910,8 @@ def generate_instruments(mod, sample_map_name, ins_name, bank, ins, fd):
     print("", file=fd)
     inspp = {fm_instrument: asm_fm_instrument,
              ssg_macro: asm_ssg_macro,
-             adpcm_a_instrument: asm_adpcm_instrument,
-             adpcm_b_instrument: asm_adpcm_instrument}
+             adpcm_a_instrument: asm_adpcm_a_instrument,
+             adpcm_b_instrument: asm_adpcm_b_instrument}
     if ins:
         print("%s::" % ins_name, file=fd)
         for i in ins:

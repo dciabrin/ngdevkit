@@ -1047,34 +1047,14 @@ def compact_calls(nss):
 
 
 def tune_adpcm_b_notes(nss, ins):
-    # for ADPCM-B, the playback frequency depends on the instrument in use:
-    #   . the C-4 note is played back at the current instrument's sample frequency
-    #   . every other semitone has a frequency that is based on the instrument's C-4 frequency
-    #   . each frequency must be converted to Delta-N for the YM2610
-    # nullsound does not work with Delta-N nor frequencies directly, it has to reason
-    # with fixed-point semitones to implements FX
-    #   . internally, nullsound has a table of possible Delta-N (one Delta-N per semitone)
-    #   . a given frequency lies between two consecutive entries in the Delta-N table (fixed point)
-    #   . for each ADPCM-B instrument parsed, furtool maps the C-4 note to an entry in the Delta-N
-    #     table, plus a fractional displacement to the closest Delta-N to get the desired frequency
-
-    semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
-
-    # all notes in the ADPCM-B channel are relative to C-4
-    c4 = (4*12)+0
     # current instrument for ADPCM-B
     current_inst = -1
-    # instrument's Delta-N index for C-4 frequency
-    inst_delta_n_idx = 0
-
-    def note_str(note):
-        octave, semitone = note // 12, note % 12
-        return semitones[semitone].ljust(2, '-')+str(octave)
+    # temporary workaround to support arpeggio tweak from macro
+    tmp_note_tune = 0
 
     def tune_adpcm_b_pass(op, out):
-        nonlocal c4
         nonlocal current_inst
-        nonlocal inst_delta_n_idx
+        nonlocal tmp_note_tune
 
         if type(op) == nss_label:
             current_inst = -1
@@ -1082,18 +1062,10 @@ def tune_adpcm_b_notes(nss, ins):
         elif type(op) == b_instr:
             if current_inst != op.inst:
                 current_inst = op.inst
-                inst_delta_n_idx = ins[current_inst].c4_delta_n_idx
-                # temporary workaround to support arpeggio tweak from macro
-                inst_delta_n_idx += ins[current_inst].tuned
+                tmp_note_tune = ins[current_inst].tuned
                 out.append(op)
         elif type(op) == b_note:
-            # get the semitone offset from c4
-            semitone_offset = op.note - c4
-            # the "tuned" note is the note to use in nullsound to configure the
-            # right frequency in the YM2610 (i.e. the semitone offset from the
-            # sample's base frequency)
-            idx_offset = inst_delta_n_idx + semitone_offset
-            out.append(b_note(idx_offset))
+            out.append(b_note(op.note+tmp_note_tune))
         else:
             out.append(op)
 
