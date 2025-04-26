@@ -24,34 +24,20 @@
         .include "ym2610.inc"
         .include "struct-fx.inc"
 
+        .lclequ UPMOST_NOTE,((8*12)-1)
+
         .area  CODE
 
 
-;;; Initialize slide effect for the current channel
+;;; Setup the fixed-point increment for the slide
 ;;; ------
-;;;   ix  : state for channel
-;;;    a  : slide direction: 0 == up, 1 == down
 ;;;    c  : increment size (increment = 1/2^c)
-;;;    h  : speed (increments)
-;;;    l  : depth (target semitone)
+;;;    e  : speed (increments)
 ;;; bc, de modified
-slide_init_common::
-        ;; b: slide direction (from a)
-        ld      b, a
-
-        ;; if the slide is already running, keep its internal
-        ;; state, otherwise initialize it.
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      nz, _post_enable_slide
-        xor     a
-        ld      SLIDE_POS16(ix), a
-        ld      SLIDE_POS16+1(ix), a
-        set     BIT_FX_SLIDE, FX(ix)
-
-_post_enable_slide:
+slide_init_increment::
 
         ;; de: inc16 = speed / 2^c
-        ld      d, h
+        ld      d, e
         ld      e, #0
 __slide_divide:
         srl     d
@@ -59,177 +45,50 @@ __slide_divide:
         dec     c
         jr      nz, __slide_divide
 
-        ;; down: negate inc16
-        bit     0, b
-        jr      z, __post_inc16_negate
-        ld      a, #0
-        sub     e
-        ld      e, a
-        ld      a, #0
-        sbc     d
-        ld      d, a
-__post_inc16_negate:
-        ld      SLIDE_INC16(ix), e
-        ld      SLIDE_INC16+1(ix), d
-
-        ;; depth
-        ld      a, l
-        ;; down: negate depth
-        ;; we also need to go one seminote below, to account for the
-        ;; fractional parts of the slide.
-        bit     0, b
-        jr      z, __post_depth_negate
-        neg
-        dec     a
-__post_depth_negate:
-        ld      SLIDE_DEPTH(ix), a
-
-        ;; save target is the current position + new displacement
-        ld      a, SLIDE_DEPTH(ix)
-        add     SLIDE_POS16+1(ix)
-        ld      SLIDE_END(ix), a
-
-        ret
-
-
-;;; Initialize slide increment for the current channel
-;;; ------
-;;;   ix  : state for channel
-;;;    a  : slide direction: 0 == up, 1 == down
-;;;    c  : increment size (increment = 1/2^c)
-;;;    d  : speed (increments)
-;;; bc, de modified
-slide_init_setup_increment::
-        ;; b: slide direction (from a)
-        ld      b, a
-
-        ;; de: inc16 = speed / 2^c
-        ld      e, #0
-_slide_divide:
-        srl     d
-        rr      e
-        dec     c
-        jr      nz, _slide_divide
-
-        ;; down: negate inc16
-        bit     0, b
-        jr      z, _post_inc16_negate
-        ld      a, #0
-        sub     e
-        ld      e, a
-        ld      a, #0
-        sbc     d
-        ld      d, a
-_post_inc16_negate:
+        ;; store absolute speed (no direction)
         ld      SLIDE_INC16(ix), e
         ld      SLIDE_INC16+1(ix), d
 
         ret
 
 
-;;; Initialize slide depth target for the current channel
+;;; Initialize the source note for the slide
 ;;; ------
 ;;;   ix  : state for channel
-;;;    a  : slide direction: 0 == up, 1 == down
-;;;    c  : depth (target semitone)
-;;; bc modified
-slide_init_depth_target::
-        ;; b: slide direction (from a)
-        ld      b, a
-
-        ;; depth
-        ld      a, c
-        ;; down: negate depth
-        ;; we also need to go one seminote below, to account for the
-        ;; fractional parts of the slide.
-        bit     0, b
-        jr      z, _post_depth_negate
-        neg
-        dec     a
-_post_depth_negate:
-        ld      SLIDE_DEPTH(ix), a
-
-        ;; init semitone position, fixed point representation
-        ld      a, #0
-        ld      SLIDE_POS16(ix), a
-        ld      SLIDE_POS16+1(ix), a
-
-        ;; save target depth
-        ld      a, SLIDE_DEPTH(ix)
-        ld      SLIDE_END(ix), a
-
+;;;    b  : current note
+;;; TODO: we might get rid of this call we merge the
+;;;       FX pos16 and the current channel pos.
+slide_init_source::
+        ;; init slide position if no slide FX is ongoing
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      nz, _post_init_slide
+        ld      SLIDE_POS16(ix), #0
+        ld      SLIDE_POS16+1(ix), b
+_post_init_slide:
         ret
 
 
-;;; Get intermediate frequency distance between nearest semitones,
-;;; based on the current fixed point semitone position.
-;;; ----
-;;; IN:
-;;;    b: fractional note position (distance to next semitone)
-;;;    c: result frequency increment sign (0: positive, 1: negative)
-;;;    e: half-distance to next ym2610 note frequency
-;;; OUT:
-;;;   hl: intermediate frequency
-;;; bc, de, hl modified
-slide_intermediate_freq:
-        ;; The distance between two semitones is the fraction part
-        ;; encoded by bits 7,6,5,... of POS16, where:
-        ;;     distance = [0.0, 1.0[
-        ;; For the sake of speed and simplicity, only bits 7,6,5
-        ;; are considered for computing the intermediate frequency
-        ;; between the current and the next ym2610 frequency value,
-        ;; which can be encoded as:
-        ;;     frequency = bit7 * 1/2 * distance +
-        ;;                 bit6 * 1/4 * distance +
-        ;;                 bit5 * 1/8 * distance +
-        ;;                 ...
-        ;; or with out precalc distances:
-        ;;     frequency = bit7 *  1  * half_distance +
-        ;;                 bit6 * 1/2 * half_distance +
-        ;;                 bit5 * 1/4 * half_distance +
-        ;;                 ...
-        ;;
-        ;; compute frequency distance w.r.t semitone distance
-        ld      hl, #0
-        ld      d, h
-_chk_bit7:
-        bit     7, b
-        jr      z, _chk_bit6
-        ;; freq distance -= 1/2*(semitone distance)
-        add     hl, de
-_chk_bit6:
-        srl     e
-        bit     6, b
-        jr      z, _chk_bit5
-        ;; freq distance -= 1/4*(semitone distance)
-        add     hl, de
-_chk_bit5:
-        srl     e
-        bit     5, b
-        jr      z, _chk_bit4
-        ;; freq distance -= 1/8*(semitone distance)
-        add     hl, de
-_chk_bit4:
-        srl     e
-        bit     4, b
-        jr      z, _post_chk
-        ;; freq distance -= 1/16*(semitone distance)
-        add     hl, de
+;;; Initialize a target note for the slide
+;;; ------
+;;;   ix  : state for channel
+;;;    b  : current note
+;;;    d  : target offset (signed)
+slide_init_target::
+        ;; init slide direction
+        res     BIT_SLIDE_DIRECTION, SLIDE_CFG(ix)
 
-_post_chk:
-        ;; check whether increment must be negative or positive:
-        ;;   . the next semitone's value (period) in the SSG channel is always
-        ;;     lower than the current semitone's, so `f_dist` must be negative.
-        ;;   . the next semitone's value (f-num) in the FM channel is always
-        ;;     higher than the current semitone's, so `f_dist` must be positive.
-        bit     0, c
-        jr      z, _post_sign_chk
-        push    hl
-        pop     de
-        ld      hl, #0
-        or      a
-        sbc     hl, de
-_post_sign_chk:
+        ;; slide target is the current position + new displacement
+        ;; a: target note
+        ld      a, b
+        add     d
+        ;; down: we also need to go one seminote below, to account
+        ;; for the fractional parts of the slide.
+        bit     7, d
+        jr      z, _post_neg_slide
+        set     BIT_SLIDE_DIRECTION, SLIDE_CFG(ix)
+        dec     a
+_post_neg_slide:
+        ld      SLIDE_END(ix), a
 
         ret
 
@@ -243,96 +102,102 @@ _post_sign_chk:
 ;;; OUT:
 ;;;    a : whether effect is finished (0: finished, 1: still running)
 ;;;    d : when effect is finished, target displacement
-;;; bc, de modified
+;;; bc, de, hl modified
 eval_slide_step:
-        ;; c: 0 slide up, 1 slide down
-        ld      a, SLIDE_INC16+1(ix)
-        rlc     a
-        and     #1
-        ld      c, a
+        ;; de: decimal note address (TODO get rid of it)
+        push    ix
+        pop     de
+        add     hl, de
+        ex      de, hl
 
-        ;; add/sub increment to the current semitone displacement POS16
-        ;; e: fractional part
-        ld      a, SLIDE_INC16(ix)
-        add     SLIDE_POS16(ix)
-        ld      SLIDE_POS16(ix), a
-        ld      e, a
-        ;; d: integer part
-        ld      a, SLIDE_INC16+1(ix)
-        adc     SLIDE_POS16+1(ix)
-        ld      SLIDE_POS16+1(ix), a
-        ld      d, a
+        ;; bc: increment
+        ld      c, SLIDE_INC16(ix)
+        ld      b, SLIDE_INC16+1(ix)
+        ;; hl: decimal note (FX copy)
+        ld      l, SLIDE_POS16(ix)
+        ld      h, SLIDE_POS16+1(ix)
+
+        ;; c: 0 slide up, 1 slide down
+        bit     BIT_SLIDE_DIRECTION, SLIDE_CFG(ix)
+        jr      nz, _slide_sub_inc
+
+_slide_add_inc:
+        add     hl, bc
+        ld      b, SLIDE_END(ix)
+        ld      a, h
+        jr      _slide_cp
+_slide_sub_inc:
+        or      a
+        sbc     hl, bc
+        ld      b, h
+        ld      a, SLIDE_END(ix)
+
+        ;; c: effect is still running (default)
+        ld      c, #1
 
         ;; have we reached the end of the slide?
         ;; slide up:   continue if cur < end
         ;; slide down: continue if end < cur
-        bit     0, c
-        jr      z, _slide_cp_up
-        ld      a, SLIDE_END(ix)
-        jr      _slide_cp
-_slide_cp_up:
-        ld      a, d
-        ld      d, SLIDE_END(ix)
+        ;; note: we don't check for equality because the increment
+        ;; can go past the target note
 _slide_cp:
-        cp      d
+        cp      b
         jp      m, _slide_intermediate
 
-        ;; slide is finished, stop effect and clear FX state
+        ;; slide is finished, stop effect and clamp output
         res     BIT_FX_SLIDE, FX(ix)
         xor     a
-        ld      SLIDE_PORTAMENTO(ix), a
         ld      SLIDE_POS16(ix), a
         ld      SLIDE_POS16+1(ix), a
 
-        ;; d: clamp the last slide pos to the target displacement
-        ld      d, SLIDE_END(ix)
+        ;; hl: clamp the last slide pos to the target displacement
+        ld      h, SLIDE_END(ix)
+        ld      l, #0
 
         ;; for slide down, we finish one note below the real target to play
         ;; all ticks with fractional parts. Adjust the end displacement back if needed
-        bit     0, c
-        jr      z, _post_adjust
-        inc     d
-_post_adjust:
-        ;; effect is finished, new displacement in d
-        ld      a, #0
-        ret
+        bit     BIT_SLIDE_DIRECTION, SLIDE_CFG(ix)
+        jr      z, _slide_post_sub_clamp
+        inc     h
+_slide_post_sub_clamp:
+        ld      c, #0
 
 _slide_intermediate:
         ;; effect is still running
-        ld      a, #1
+        ;; TODO: if we stop the slide at this point, we can only keep the
+        ;; integer part of the note, which is likely not matching Furnace's semantics
+        ld      SLIDE_POS16(ix), l
+        ld      SLIDE_POS16+1(ix), h
+        ld      a, h
+        ld      (de), a
+
+        ;; running status
+        ld      a, c
+
         ret
 
 
 ;;; Check whether the slide NSS opcode should disable the current slide FX
-;;; When disabling the FX, update the current NOTE position with the last
-;;; slide displacement.
 ;;; ------
+;;; IN:
 ;;;   ix  : state for channel
-;;;    c  : offset from ix of current note for channel
-;;; [ hl ]: 0 means disable FX, otherwise bail out
+;;; [ hl ]: FX args in the NSS stream
+;;; OUT:
+;;;   carry: 0: FX disabled (bail out), 1: continue
 slide_check_disable_fx:
         ld      a, (hl)
         cp      #0
         jr      z, _slide_check_disable
-        ;; set carry flag
+        ;; continue marker
         scf
         ret
 _slide_check_disable:
-        inc     hl
-        push    hl
-        ;; hl: offset of note from current channel context
-        push    ix
-        pop     hl
-        ld      b, #0
-        add     hl, bc
-        ;; update current note with slide displacement
-        ld      a, (hl)
-        add     SLIDE_POS16+1(ix)
-        ld      (hl), a
-        pop     hl
         ;; stop FX
+        ;; ld      SLIDE_CFG(ix), #0
         res     BIT_FX_SLIDE, FX(ix)
-        ;; clear carry flag
+        ;; next position in the NSS stream
+        inc     hl
+        ;; bail out marker
         or      a
         ret
 
@@ -345,49 +210,65 @@ _slide_check_disable:
 ;;; [ hl ]: speed (4bits) and depth (4bits)
 slide_init::
         call    slide_check_disable_fx
-        ;; null input means 'disable FX', in that case,
-        ;; update current note with slide displacement and exit
         jr      c, _slide_init_setup
         ret
 _slide_init_setup:
-        ;; a: slide direction
-        ld      a, b
 
+        ;; FX configuration
+        ld      a, b
+        set     BIT_SLIDE_PORTAMENTO, a
+        ld      SLIDE_CFG(ix), a
+
+        push    bc
         push    de
 
-        ;; d: slide direction
+        ;; d: depth (distance to target note)
+        ld      a, (hl)
+        and     #0xf
         ld      d, a
 
-        ;; c: depth
-        ld      a, (hl)
-        and     #0xf
-        ld      c, a
+        ;; d: signed depth
+        bit     0, b
+        jr      z, _post_dist_sign
+        xor     a
+        sub     d
+        ld      d, a
+_post_dist_sign:
 
-        ;; b: speed
+        ;; e: speed
         ld      a, (hl)
         rra
         rra
         rra
         rra
         and     #0xf
-        ld      b, a
+        ld      e, a
 
         inc     hl
         push    hl
 
-        ;; setup the slide
-        ;; h: speed
-        ld      h, b
-        ;; l: depth
-        ld      l, c
-        ;; c: increment size
+        ;; b: current note
+        ;; TODO: make the note offset common to all track types
+        push    ix
+        pop     hl
+        ld      a, l
+        add     c
+        ld      l, a
+        ld      b, (hl)
+
+        ;; init slide positions
+        call    slide_init_source
+        call    slide_init_target
+
+        ;; c: increment size: 1/8th semitone
         ld      c, #3
-        ;; a: direction
-        ld      a, d
-        call    slide_init_common
+        call    slide_init_increment
+
+        set     BIT_FX_SLIDE, FX(ix)
 
         pop     hl
         pop     de
+        pop     bc
 
         ret
 
@@ -400,73 +281,53 @@ _slide_init_setup:
 ;;; [ hl ]: speed
 slide_pitch_init::
         call    slide_check_disable_fx
-        ;; null input means 'disable FX', in that case,
-        ;; update current note with slide displacement and exit
         jr      c, _slide_pitch_init_setup
         ret
-_slide_pitch_init_setup:
-        ;; a: slide direction
-        ld      a, b
 
+_slide_pitch_init_setup:
+        ;; FX configuration
+        ld      a, b
+        set     BIT_SLIDE_PORTAMENTO, a
+        ld      SLIDE_CFG(ix), a
+
+        push    bc
         push    de
 
-        ;; d: slide direction
-        ld      d, a
+        ;; set up a default target bound, as per definition, pitch slides
+        ;; do not have one (they rely on the stop FX in the music)
+        bit     0, b
+        jr      nz, _slide_pitch_init_direction
+        ld      b, #UPMOST_NOTE
+_slide_pitch_init_direction:
+        ld      SLIDE_END(ix), b
 
-        ;; b: speed
-        ld      b, (hl)
+        ;; setup slide increments
+        ;; e: speed
+        ld      e, (hl)
         inc     hl
         push    hl
 
-        ;; setup the slide
-        ;; h: speed
-        ld      h, b
-        ;; l: depth
-        ld      l, #127
-        ;; c: increment size
-        ld      c, #5
-        ;; a: direction
-        ld      a, d
-        call    slide_init_common
-
+        ;; b: current note
+        ;; TODO: make the note offset common to all track types
+        push    ix
         pop     hl
-        pop     de
-
-        ret
-
-
-;;; Finish initializing the slide effect for the target note
-;;; ------
-;;;   ix  : state for channel, speed increment already initialized
-;;;    b  : current note for channel
-;;; bc modified
-slide_portamento_finish_init::
-        ;; setup the slide
-
-        ;; a: distance from current slide position
-        ld      a, SLIDE_PORTAMENTO(ix)
-        sub     b
-        sub     SLIDE_POS16+1(ix)
-        jr      nc, _slide_post_distance
-        neg
-_slide_post_distance:
-
-        push    de
-        push    hl
-
-        ;; l: depth (distance from current slide)
+        ld      a, l
+        add     c
         ld      l, a
-        ;; a: slide direction from current slide position
-        ld      a, #0
-        rl      a
-        ;; h: speed
-        ld      h, SLIDE_SPEED(ix)
-        ;; c: increment size
+        ld      b, (hl)
+
+        ;; init slide start positions
+        call    slide_init_source
+
+        ;; c: increment size: 1/32 semitone
         ld      c, #5
-        call    slide_init_common
+        call    slide_init_increment
+
+        set     BIT_FX_SLIDE, FX(ix)
 
         pop     hl
         pop     de
+        pop     bc
 
         ret
 
@@ -474,28 +335,72 @@ _slide_post_distance:
 ;;; Enable portamento effect for the current channel
 ;;; ------
 ;;;   ix  : state for channel
-;;;     a : current note for channel
+;;;    a  : current note for channel
 ;;; [ hl ]: speed
 slide_portamento_init::
+        push    bc
+        ;; b: current note
+        ld      b, a
 
-        ;; mark this slide as being a portamento by setting a non-null
-        ;; portamento target. This is not the real target yet...
-        set     BIT_FX_SLIDE, FX(ix)
-        ld      a, #-1
-        ld      SLIDE_PORTAMENTO(ix), a
+        call    slide_check_disable_fx
+        jr      c, _slide_portamento_init_setup
+        pop     bc
+        ret
+_slide_portamento_init_setup:
 
-        ;; ... the portamento increments can only be fully initialized when
-        ;; the real target note is known. This is only the case when we reach
-        ;; the next note NSS opcode.
-        ;; So mark the slide FX  as `to be initialized`
-        ;; (end == to be initialized)
+        ;; FX configuration
         xor     a
-        ld      SLIDE_END(ix), a
+        set     BIT_SLIDE_PORTAMENTO, a
+        ld      SLIDE_CFG(ix), a
 
-        ;; a: speed
-        ld      a, (hl)
-        ld      SLIDE_SPEED(ix), a
+        push    de
+
+        ;; configure slide source
+        call    slide_init_source
+
+        ;; setup slide increments
+        ;; e: speed
+        ld      e, (hl)
         inc     hl
+        push    hl
+
+        ;; c: increment size: 1/32 semitone
+        ld      c, #5
+        call    slide_init_increment
+
+        ;; the slide target is configured with the next note opcode
+
+        set     BIT_FX_SLIDE, FX(ix)
+
+        pop     hl
+        pop     de
+        pop     bc
 
         ld      a, #1
+        ret
+
+
+;;; Update an ongoing slide effect with a new note
+;;; ------
+;;;   ix  : state for channel
+;;;     c : current note for channel
+;;;     b : new note for channel
+;;; [ hl ]: speed
+slide_update::
+        bit     BIT_SLIDE_PORTAMENTO, SLIDE_CFG(ix)
+        jr      nz, _slide_update_target
+
+_slide_update_src:
+        ld      SLIDE_POS16(ix), #0
+        ld      SLIDE_POS16+1(ix), a
+        ret
+
+_slide_update_target:
+        ;; d: offset to target
+        ld      a, b
+        sub     c
+        ld      d, a
+        ;; b: current note
+        ld      b, c
+        call    slide_init_target
         ret

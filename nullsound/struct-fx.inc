@@ -29,7 +29,7 @@
         .local  pipeline, fx_fx, fx_trigger, fx_vol_slide, fx_slide, fx_vibrato
         .local  _trigger_action, _trigger_note, _trigger_vol, _trigger_arg, _trigger_cur, _trigger_size
         .local  _vol_slide_inc16, _vol_slide_pos16, _vol_slide_end, _vol_slide_size
-        .local  _slide_speed, _slide_depth, _slide_inc16, _slide_pos16, _slide_portamento, _slide_end, _slide_size
+        .local  _slide_cfg, _slide_inc16, _slide_pos16, _slide_end, _slide_size
         .local _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
 
 ;;; actions to run at every tick. This must be the first field of a channel's state
@@ -51,12 +51,10 @@ _vol_slide_end:         .blkb 1         ; volume slide end (0: no attenuation)
 _vol_slide_size:
 ;;; FX: slide
 fx_slide:
-_slide_speed:           .blkb 1         ; number of increments per tick
-_slide_depth:           .blkb 1         ; distance in semitones
-_slide_inc16:           .blkw 1         ; 1/8 semitone increment * speed
+_slide_cfg:             .blkb 1         ; config (up, down, portamento)
+_slide_inc16:           .blkw 1         ; semitone increment * speed
 _slide_pos16:           .blkw 1         ; slide pos
-_slide_end:             .blkb 1         ; end note (octave/semitone)
-_slide_portamento:      .blkb 1         ; portamento to target note
+_slide_end:             .blkb 1         ; target note
 _slide_size:
 ;;; FX: vibrato
 fx_vibrato:
@@ -84,11 +82,9 @@ _vibrato_size:
         .lclequ VOL_SLIDE_END,  (_vol_slide_end - pipeline)
         .lclequ VOL_SLIDE_SIZE, (_vol_slide_size - fx_vol_slide)
         .lclequ SLIDE,          (fx_slide - pipeline)
-        .lclequ SLIDE_SPEED,    (_slide_speed - pipeline)
-        .lclequ SLIDE_DEPTH,    (_slide_depth - pipeline)
+        .lclequ SLIDE_CFG,      (_slide_cfg - pipeline)
         .lclequ SLIDE_INC16,    (_slide_inc16 - pipeline)
         .lclequ SLIDE_POS16,    (_slide_pos16 - pipeline)
-        .lclequ SLIDE_PORTAMENTO, (_slide_portamento - pipeline)
         .lclequ SLIDE_END,      (_slide_end - pipeline)
         .lclequ SLIDE_SIZE,     (_slide_size - fx_slide)
         .lclequ VIBRATO,        (fx_vibrato - pipeline)
@@ -112,3 +108,6 @@ _vibrato_size:
         .lclequ BIT_TRIGGER_ACTION_RETRIGGER,   2
         .lclequ BIT_TRIGGER_LOAD_NOTE,          4
         .lclequ BIT_TRIGGER_LOAD_VOL,           5
+
+        .lclequ BIT_SLIDE_DIRECTION,            0
+        .lclequ BIT_SLIDE_PORTAMENTO,           1

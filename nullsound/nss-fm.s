@@ -416,18 +416,17 @@ compute_fm_fixed_point_note::
         ld      l, a
         ld      h, NOTE_SEMITONE(ix)
 
+        ;; bc: slide offset if the slide FX is enabled
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _fm_post_add_slide
+        ld      l, SLIDE_POS16(ix)
+        ld      h, SLIDE_POS16+1(ix)
+_fm_post_add_slide::
+
         ;; hl: detuned semitone
         ld      c, DETUNE(ix)
         ld      b, DETUNE+1(ix)
         add     hl, bc
-
-        ;; bc: slide offset if the slide FX is enabled
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _fm_post_add_slide
-        ld      c, SLIDE_POS16(ix)
-        ld      b, SLIDE_POS16+1(ix)
-        add     hl, bc
-_fm_post_add_slide::
 
         ;; bc vibrato offset if the vibrato FX is enabled
         bit     BIT_FX_VIBRATO, FX(ix)
@@ -657,7 +656,7 @@ _fm_post_fx_vibrato:
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _fm_post_fx_slide
         ld      hl, #NOTE_SEMITONE
-        call    eval_fm_slide_step
+        call    eval_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _fm_post_fx_slide:
         bit     BIT_FX_VOL_SLIDE, FX(ix)
@@ -975,55 +974,17 @@ eval_fm_vibrato_step::
         ret
 
 
-;;; Update the slide for the current channel
-;;; Slide moves up or down by 1/8 of semitone increments * slide depth.
-;;; ------
-;;; IN:
-;;;   hl: state for the current channel
-;;; OUT:
-;;;   bc:
-eval_fm_slide_step::
-        push    hl
-        push    de
-        push    bc
-        ;; push    ix
-
-        ;; update internal state for the next slide step
-        call    eval_slide_step
-
-        ;; effect still in progress?
-        cp      a, #0
-        jp      nz, _end_fm_slide_load_fnum2
-        ;; otherwise set the end note as the new base note
-        ld      a, NOTE(ix)
-        add     d
-        ld      NOTE(ix), a
-_end_fm_slide_load_fnum2:
-
-        ;; pop     ix
-        pop     bc
-        pop     de
-        pop     hl
-
-        ret
-
-
 ;;; Configure state for new note and trigger a load in the pipeline
 ;;; ------
 fm_configure_note_on:
         push    bc
         push    af              ; +note
-        ;; if portamento is ongoing, this is treated as an update
+        ;; if a slide is ongoing, this is treated as a slide FX update
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _fm_cfg_note_update
-        ld      a, SLIDE_PORTAMENTO(ix)
-        cp      #0
-        jr      z, _fm_cfg_note_update
-        ;; update the portamento now
-        pop     af              ; -note
-        ld      SLIDE_PORTAMENTO(ix), a
-        ld      b, NOTE_SEMITONE(ix)
-        call    slide_portamento_finish_init
+        pop     bc              ; -note
+        ld      c, NOTE_SEMITONE(ix)
+        call    slide_update
         ;; if a note is currently playing, do nothing else, the
         ;; portamento will be updated at the next pipeline run...
         bit     BIT_NOTE_STARTED, PIPELINE(ix)
@@ -1082,6 +1043,19 @@ _fm_note_on_immediate:
         call    fm_configure_note_on
 
 _fm_note_on_end:
+        ld      a, #1
+        ret
+
+
+;;; FM_NOTE_ON_AND_NEXT_CTX
+;;; Emit a specific note (frequency) on an FM channel and
+;;; immediately switch to the next FM context
+;;; ------
+;;; [ hl ]: note (0xAB: A=octave B=semitone)
+fm_note_on_and_next_ctx::
+        ;; process a regular note opcode
+        call    fm_note_on
+
         ;; fm context will now target the next channel
         ld      a, (state_fm_channel)
         inc     a
@@ -1133,6 +1107,18 @@ fm_stop_playback:
 ;;; ------
 fm_note_off::
         call    fm_stop_playback
+
+        ld      a, #1
+        ret
+
+
+;;; FM_NOTE_OFF_AND_NEXT_CTX
+;;; Release the note on an FM channel. The sound will decay according
+;;; to the current configuration of the FM channel's operators.
+;;; Immediately switch to the next FM context.
+;;; ------
+fm_note_off_and_next_ctx::
+        call    fm_note_off
 
         ;; FM context will now target the next channel
         ld      a, (state_fm_channel)

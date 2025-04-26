@@ -99,7 +99,7 @@ state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
 ;;; SSG-specific state
 ;;; Note
 state_ssg_note_pos16:           .blkb   2       ; fixed-point note after the FX pipeline
-state_ssg_note:                 .blkb   1       ; NSS note to be played on the FM channel
+state_ssg_note:                 .blkb   1       ; NSS note to be played on the SSG channel
 state_ssg_detune:               .blkb   2       ; fixed-point semitone detune
 state_ssg_note_fine_coarse:     .blkb   2       ; YM2610 note factors (fine+coarse)
 state_mirrored_ssg_props:
@@ -294,7 +294,7 @@ _ssg_post_fx_vibrato:
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _ssg_post_fx_slide
         ld      hl, #NOTE
-        call    eval_ssg_slide_step
+        call    eval_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _ssg_post_fx_slide:
         bit     BIT_FX_VOL_SLIDE, FX(ix)
@@ -428,6 +428,13 @@ compute_ssg_fixed_point_note::
         ld      l, a
         ld      h, NOTE(ix)
 
+        ;; bc: slide offset if the slide FX is enabled
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _ssg_post_add_slide
+        ld      l, SLIDE_POS16(ix)
+        ld      h, SLIDE_POS16+1(ix)
+_ssg_post_add_slide::
+
         ;; hl: detuned semitone
         ld      c, DETUNE(ix)
         ld      b, DETUNE+1(ix)
@@ -447,13 +454,6 @@ compute_ssg_fixed_point_note::
         ld      b, VIBRATO_POS16+1(ix)
         add     hl, bc
 _ssg_post_add_vibrato::
-        ;; bc: add slide offset if the slide FX is enabled
-        bit     1, a
-        jr      z, _ssg_post_add_slide
-        ld      c, SLIDE_POS16(ix)
-        ld      b, SLIDE_POS16+1(ix)
-        add     hl, bc
-_ssg_post_add_slide::
 
         ;; update computed fixed-point note position
         ld      NOTE_POS16(ix), l
@@ -716,7 +716,7 @@ ssg_macro::
 
 ;;; Update the vibrato for the current SSG channel
 ;;; ------
-;;; ix: mirrored state of the current fm channel
+;;; ix: mirrored state of the current SSG channel
 eval_ssg_vibrato_step::
         push    hl
         push    de
@@ -727,33 +727,6 @@ eval_ssg_vibrato_step::
         pop     bc
         pop     de
         pop     hl
-
-        ret
-
-
-;;; Update the slide for the current channel
-;;; Slide moves up or down by 1/8 of semitone increments * slide depth.
-;;; ------
-;;; IN:
-;;;   hl: state for the current channel
-;;; OUT:
-;;;   bc:
-eval_ssg_slide_step::
-        push    de
-
-        ;; update internal state for the next slide step
-        call    eval_slide_step
-
-        ;; effect still in progress?
-        cp      a, #0
-        jp      nz, _end_ssg_slide_step
-        ;; otherwise set the end note as the new base note
-        ld      a, NOTE(ix)
-        add     d
-        ld      NOTE(ix), a
-_end_ssg_slide_step:
-
-        pop     de
 
         ret
 
@@ -801,10 +774,21 @@ ssg_stop_playback:
 ssg_note_off::
         call    ssg_stop_playback
 
+        ld      a, #1
+        ret
+
+
+;;; SSG_NOTE_OFF_AND_NEXT_CTX
+;;; Release (stop) the note on the current SSG channel.
+;;; Immediately switch to the next SSG context.
+;;; ------
+ssg_note_off_and_next_ctx::
+        call    ssg_note_off
+
         ;; SSG context will now target the next channel
         ld      a, (state_ssg_channel)
         inc     a
-        call    fm_ctx_set_current
+        call    ssg_ctx_set_current
 
         ld      a, #1
         ret
@@ -843,17 +827,12 @@ _ssg_vol_end:
 ssg_configure_note_on:
         push    bc
         push    af              ; +note
-        ;; if portamento is ongoing, this is treated as an update
+        ;; if a slide is ongoing, this is treated as a slide FX update
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _ssg_cfg_note_update
-        ld      a, SLIDE_PORTAMENTO(ix)
-        cp      #0
-        jr      z, _ssg_cfg_note_update
-        ;; update the portamento now
-        pop     af              ; -note
-        ld      SLIDE_PORTAMENTO(ix), a
-        ld      b, NOTE(ix)
-        call    slide_portamento_finish_init
+        pop     bc              ; -note
+        ld      c, NOTE(ix)
+        call    slide_update
         ;; if a note is currently playing, do nothing else, the
         ;; portamento will be updated at the next pipeline run...
         bit     BIT_NOTE_STARTED, PIPELINE(ix)
@@ -915,10 +894,23 @@ _ssg_note_on_immediate:
         call    ssg_configure_note_on
 
 _ssg_note_on_end:
-        ;; ssg context will now target the next channel
+        ld      a, #1
+        ret
+
+
+;;; SSG_NOTE_ON_AND_NEXT_CTX
+;;; Emit a specific note (frequency) on a SSG channel and
+;;; immediately switch to the next SSG context
+;;; ------
+;;; [ hl ]: note (0xAB: A=octave B=semitone)
+ssg_note_on_and_next_ctx::
+        ;; process a regular note opcode
+        call    ssg_note_on
+
+        ;; SSG context will now target the next channel
         ld      a, (state_ssg_channel)
         inc     a
-        call    fm_ctx_set_current
+        call    ssg_ctx_set_current
 
         ld      a, #1
         ret

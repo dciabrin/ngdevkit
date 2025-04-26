@@ -367,6 +367,8 @@ def convert_fm_row(row, channel):
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
+            elif fx in [0xe1, 0xe2]: # post-note FX
+                pass
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
             elif fx == 0x0d:  # Jump to next order
@@ -391,14 +393,6 @@ def convert_fm_row(row, channel):
                 opcodes.append(op4_lvl(fxval))
             elif fx == 0xe5:  # pitch
                 opcodes.append(fm_pitch(fxval))
-            elif fx == 0xe1:  # slide up
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(fm_note_slide_u(fxval))
-            elif fx == 0xe2:  # slide down
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(fm_note_slide_d(fxval))
             elif fx == 0x0a:  # volume slide down
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
@@ -427,6 +421,19 @@ def convert_fm_row(row, channel):
                 opcodes.append(fm_stop())
             else:
                 opcodes.append(fm_note(to_nss_note(row.note)))
+
+        # post-note opcodes are FX that rely on the row's note
+        # to be already processed
+        for fx, fxval in row.fx:
+            if fx == 0xe1:  # slide up
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(fm_note_slide_u(fxval))
+            elif fx == 0xe2:  # slide down
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(fm_note_slide_d(fxval))
+
     return jmp_to_order, opcodes
 
 def row_warn(row, msg):
@@ -468,6 +475,8 @@ def convert_s_row(row, channel):
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
+            elif fx in [0xe1, 0xe2]: # post-note FX
+                pass
             elif fx == 0x08:  # panning
                 row_warn(row, "panning FX invalid for SSG")
             elif fx == 0x0b:  # Jump to order
@@ -484,12 +493,6 @@ def convert_s_row(row, channel):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(s_vibrato(fxval))
-            elif fx == 0xe1:  # slide up
-                assert fxval != -1
-                opcodes.append(s_slide_u(fxval))
-            elif fx == 0xe2:  # slide down
-                assert fxval != -1
-                opcodes.append(s_slide_d(fxval))
             elif fx == 0xe5:  # set pitch (tune)
                 opcodes.append(s_pitch(fxval))
             elif fx == 0x0a:  # volume slide down
@@ -517,6 +520,17 @@ def convert_s_row(row, channel):
                 opcodes.append(s_stop())
             else:
                 opcodes.append(s_note(to_nss_note(row.note)))
+
+        # post-note opcodes are FX that rely on the row's note
+        # to be already processed
+        for fx, fxval in row.fx:
+            if fx == 0xe1:  # slide up
+                assert fxval != -1
+                opcodes.append(s_slide_u(fxval))
+            elif fx == 0xe2:  # slide down
+                assert fxval != -1
+                opcodes.append(s_slide_d(fxval))
+
     return jmp_to_order, opcodes
 
 
@@ -592,6 +606,8 @@ def convert_b_row(row, channel):
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
+            elif fx in [0xe1, 0xe2]: # post-note FX
+                pass
             elif fx == 0x0b:  # Jump to order
                 jmp_to_order = fxval
             elif fx == 0x0d:  # Jump to next order
@@ -617,14 +633,6 @@ def convert_b_row(row, channel):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(b_vibrato(fxval))
-            elif fx == 0xe1:  # slide up
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(b_note_slide_u(fxval))
-            elif fx == 0xe2:  # slide down
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(b_note_slide_d(fxval))
             else:
                 row_warn(row, "UNKNOWN")
                 add_unknown_fx('ADPCM-B', fx)
@@ -635,6 +643,19 @@ def convert_b_row(row, channel):
                 opcodes.append(b_stop())
             else:
                 opcodes.append(b_note(to_nss_note(row.note)))
+
+        # post-note opcodes are FX that rely on the row's note
+        # to be already processed
+        for fx, fxval in row.fx:
+            if fx == 0xe1:  # slide up
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(b_note_slide_u(fxval))
+            elif fx == 0xe2:  # slide down
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(b_note_slide_d(fxval))
+
     return jmp_to_order, opcodes
 
 
