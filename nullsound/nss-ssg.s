@@ -69,7 +69,7 @@
 ;;; ------
         ;; This padding ensures the entire _state_ssg data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   110
+        .blkb   80
 
 _state_ssg_start:
 
@@ -96,6 +96,7 @@ state_ssg_trigger:              .blkb   TRIGGER_SIZE
 state_ssg_fx_vol_slide:         .blkb   VOL_SLIDE_SIZE
 state_ssg_fx_slide:             .blkb   SLIDE_SIZE
 state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
+state_ssg_fx_arpeggio:          .blkb   ARPEGGIO_SIZE
 ;;; SSG-specific state
 ;;; Note
 state_ssg_note_pos16:           .blkb   2       ; fixed-point note after the FX pipeline
@@ -140,7 +141,7 @@ state_ssg_action_funcs:
 ;;;  Reset SSG playback state.
 ;;;  Called before playing a stream
 ;;; ------
-;;; [a modified - other registers saved]
+;;; bc, de, hl modified
 init_nss_ssg_state_tracker::
         ld      hl, #_state_ssg_start
         ld      d, h
@@ -149,6 +150,15 @@ init_nss_ssg_state_tracker::
         ld      (hl), #0
         ld      bc, #_state_ssg_end-2-_state_ssg_start
         ldir
+        ;; init non-zero default values
+        ld      d, #4
+        ld      iy, #state_mirrored_ssg
+        ld      bc, #SSG_STATE_SIZE
+_ssg_init:
+        ld      ARPEGGIO_SPEED(iy), #1   ; default arpeggio speed
+        add     iy, bc
+        dec     d
+        jr      nz, _ssg_init
         ;; global SSG volume is initialized in the volume state tracker
         ld      a, #0x3f
         ld      (state_mirrored_enabled), a
@@ -291,6 +301,11 @@ _ssg_post_fx_trigger:
         call    eval_ssg_vibrato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _ssg_post_fx_vibrato:
+        bit     BIT_FX_ARPEGGIO, FX(ix)
+        jr      z, _ssg_post_fx_arpeggio
+        call    eval_arpeggio_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_ssg_post_fx_arpeggio:
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _ssg_post_fx_slide
         ld      hl, #NOTE
@@ -438,6 +453,11 @@ _ssg_post_add_slide::
         ;; hl: detuned semitone
         ld      c, DETUNE(ix)
         ld      b, DETUNE+1(ix)
+        add     hl, bc
+
+        ;; hl: arpeggiated semitone
+        ld      c, #0
+        ld      b, ARPEGGIO_POS8(ix)
         add     hl, bc
 
         ;; h: current note + arpeggio shift

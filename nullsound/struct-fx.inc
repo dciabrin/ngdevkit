@@ -26,11 +26,12 @@
 
         .area   struct
 
-        .local  pipeline, fx_fx, fx_trigger, fx_vol_slide, fx_slide, fx_vibrato
+        .local  pipeline, fx_fx, fx_trigger, fx_vol_slide, fx_slide, fx_vibrato, fx_arpeggio
         .local  _trigger_action, _trigger_note, _trigger_vol, _trigger_arg, _trigger_cur, _trigger_size
         .local  _vol_slide_inc16, _vol_slide_pos16, _vol_slide_end, _vol_slide_size
         .local  _slide_cfg, _slide_inc16, _slide_pos16, _slide_end, _slide_size
         .local _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
+        .local _arpeggio_speed, _arpeggio_count, _arpeggio_2nd, _arpeggio_3rd, _arpeggio_pos, _arpeggio_pos8, _arpeggio_size
 
 ;;; actions to run at every tick. This must be the first field of a channel's state
 pipeline:               .blkb 1
@@ -63,6 +64,15 @@ _vibrato_depth:         .blkb 1         ; vibrato_depth
 _vibrato_pos:           .blkb 1         ; vibrato_pos
 _vibrato_pos16:         .blkw 1         ; vibrato_pos16
 _vibrato_size:
+;;; FX: arpeggio
+fx_arpeggio:
+_arpeggio_speed:        .blkb 1         ; number of ticks between notes
+_arpeggio_count:        .blkb 1         ; countdown before next tick
+_arpeggio_2nd:          .blkb 1         ; 2nd note offset in the chord
+_arpeggio_3rd:          .blkb 1         ; 3rd note offset in the chord
+_arpeggio_pos:          .blkb 1         ; position in arpeggio [0, 2, 1]
+_arpeggio_pos8:         .blkb 1         ; current note offset
+_arpeggio_size:
 
         ;; FX getter for a channel's state
         ;; The offset assumes that that the FX structure are located
@@ -93,11 +103,20 @@ _vibrato_size:
         .lclequ VIBRATO_POS,    (_vibrato_pos - pipeline)
         .lclequ VIBRATO_POS16,  (_vibrato_pos16 - pipeline)
         .lclequ VIBRATO_SIZE,   (_vibrato_size - fx_vibrato)
+        .lclequ ARPEGGIO,       (fx_arpeggio - pipeline)
+        .lclequ ARPEGGIO_SPEED, (_arpeggio_speed - pipeline)
+        .lclequ ARPEGGIO_COUNT, (_arpeggio_count - pipeline)
+        .lclequ ARPEGGIO_2ND,   (_arpeggio_2nd - pipeline)
+        .lclequ ARPEGGIO_3RD,   (_arpeggio_3rd - pipeline)
+        .lclequ ARPEGGIO_POS,   (_arpeggio_pos - pipeline)
+        .lclequ ARPEGGIO_POS8,  (_arpeggio_pos8 - pipeline)
+        .lclequ ARPEGGIO_SIZE,  (_arpeggio_size - fx_arpeggio)
 
         .lclequ BIT_FX_VIBRATO,         0
         .lclequ BIT_FX_SLIDE,           1
         .lclequ BIT_FX_VOL_SLIDE,       2
         .lclequ BIT_FX_TRIGGER,         3
+        .lclequ BIT_FX_ARPEGGIO,        4
 
         .lclequ TRIGGER_LOAD_NOTE_FUNC,         0
         .lclequ TRIGGER_LOAD_VOL_FUNC,          2

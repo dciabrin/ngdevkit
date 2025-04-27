@@ -94,6 +94,12 @@ state_fm_f_num_half_distance::
         .blkw   1
 
 ;;; context: current fm channel for opcode actions
+
+        ;; This padding ensures the entire _state_ssg data sticks into
+        ;; a single 256 byte boundary to make 16bit arithmetic faster
+        .blkb   0xbc
+
+
 _state_fm_start:
 state_fm_channel::
         .blkb   1
@@ -111,6 +117,7 @@ state_fm_trigger:               .blkb   TRIGGER_SIZE
 state_fm_fx_vol_slide:          .blkb   VOL_SLIDE_SIZE
 state_fm_fx_slide:              .blkb   SLIDE_SIZE
 state_fm_fx_vibrato:            .blkb   VIBRATO_SIZE
+state_fm_fx_arpeggio:           .blkb   ARPEGGIO_SIZE
 ;;; FM-specific state
 ;;; Note
 state_fm_note:
@@ -167,7 +174,7 @@ state_fm_action_funcs:
 ;;;  Reset FM playback state.
 ;;;  Called before playing a stream
 ;;; ------
-;;; [a modified - other registers saved]
+;;; bc, de, hl, iy modified
 init_nss_fm_state_tracker::
         ld      hl, #_state_fm_start
         ld      d, h
@@ -181,17 +188,16 @@ init_nss_fm_state_tracker::
         ld      (hl), #0xc0
         ld      bc, #3
         ldir
-        ;; init instr to a non-existing instr (0xff)
-        ld      a, #0xff
-        ld      hl, #(state_fm+INSTRUMENT)
+        ;; init non-zero default values
+        ld      d, #4
+        ld      iy, #state_fm
         ld      bc, #FM_STATE_SIZE
-        ld      (hl), a
-        add     hl, bc
-        ld      (hl), a
-        add     hl, bc
-        ld      (hl), a
-        add     hl, bc
-        ld      (hl), a
+_fm_init:
+        ld      INSTRUMENT(iy), #0xff    ; non-existing instrument
+        ld      ARPEGGIO_SPEED(iy), #1   ; default arpeggio speed
+        add     iy, bc
+        dec     d
+        jr      nz, _fm_init
         ;; global FM volume is initialized in the volume state tracker
         ;; init YM2610 function pointer
         ld      a, #0xc3        ; jp 0x....
@@ -428,6 +434,11 @@ _fm_post_add_slide::
         ld      b, DETUNE+1(ix)
         add     hl, bc
 
+        ;; hl: arpeggiated semitone
+        ld      c, #0
+        ld      b, ARPEGGIO_POS8(ix)
+        add     hl, bc
+
         ;; bc vibrato offset if the vibrato FX is enabled
         bit     BIT_FX_VIBRATO, FX(ix)
         jr      z, _fm_post_add_vibrato
@@ -653,6 +664,11 @@ _fm_post_fx_trigger:
         call    eval_fm_vibrato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _fm_post_fx_vibrato:
+        bit     BIT_FX_ARPEGGIO, FX(ix)
+        jr      z, _fm_post_fx_arpeggio
+        call    eval_arpeggio_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_fm_post_fx_arpeggio:
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _fm_post_fx_slide
         ld      hl, #NOTE_SEMITONE

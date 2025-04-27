@@ -300,6 +300,8 @@ def register_nss_ops():
         ("fm_stop_w" , ),
         ("b_note_slide_u", ["speed_depth"]),
         ("b_note_slide_d", ["speed_depth"]),
+        ("arpeggio",  ["first_second"]),
+        ("arpeggio_speed", ["speed"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -375,6 +377,10 @@ def convert_fm_row(row, channel):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x00:  # arpeggio
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(arpeggio(fxval))
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
             elif fx == 0x09:  # Groove
@@ -412,6 +418,10 @@ def convert_fm_row(row, channel):
             elif fx in [0x08, 0x80]: # panning
                 pan_mask = convert_pan(fx, fxval)
                 opcodes.append(fm_pan(pan_mask))
+            elif fx == 0xe0:  # arpeggio speed
+                # fxval == -1 means default arpeggio speed
+                fxval = max(fxval, 1)
+                opcodes.append(arpeggio_speed(fxval))
             else:
                 add_unknown_fx('FM', fx)
 
@@ -477,6 +487,10 @@ def convert_s_row(row, channel):
                 pass
             elif fx in [0xe1, 0xe2]: # post-note FX
                 pass
+            elif fx == 0x00:  # arpeggio
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(arpeggio(fxval))
             elif fx == 0x08:  # panning
                 row_warn(row, "panning FX invalid for SSG")
             elif fx == 0x0b:  # Jump to order
@@ -511,6 +525,10 @@ def convert_s_row(row, channel):
                 opcodes.append(s_porta(fxval))
             elif fx == 0xec:  # cut
                 opcodes.append(s_cut(fxval))
+            elif fx == 0xe0:  # arpeggio speed
+                # fxval == -1 means default arpeggio speed
+                fxval = max(fxval, 1)
+                opcodes.append(arpeggio_speed(fxval))
             else:
                 add_unknown_fx('SSG', fx)
 
@@ -614,6 +632,10 @@ def convert_b_row(row, channel):
                 jmp_to_order = 256
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
+            elif fx == 0x00:  # arpeggio
+                # fxval == -1 means disable slide
+                fxval = max(fxval, 0)
+                opcodes.append(arpeggio(fxval))
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
             elif fx == 0x09:  # Groove
@@ -633,6 +655,10 @@ def convert_b_row(row, channel):
                 # fxval == -1 means disable vibrato
                 fxval = max(fxval, 0)
                 opcodes.append(b_vibrato(fxval))
+            elif fx == 0xe0:  # arpeggio speed
+                # fxval == -1 means default arpeggio speed
+                fxval = max(fxval, 1)
+                opcodes.append(arpeggio_speed(fxval))
             else:
                 row_warn(row, "UNKNOWN")
                 add_unknown_fx('ADPCM-B', fx)

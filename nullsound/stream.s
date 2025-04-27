@@ -569,6 +569,8 @@ nss_opcodes:
         .nss_op nss_nop3
         .nss_op adpcm_b_note_slide_up
         .nss_op adpcm_b_note_slide_down
+        .nss_op arpeggio
+        .nss_op arpeggio_speed
 
 
 

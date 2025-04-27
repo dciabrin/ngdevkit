@@ -56,7 +56,7 @@
 ;;; ------
         ;; This padding ensures the entire _state_ssg data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   42
+        .blkb   82
 
 _state_adpcm_start:
 

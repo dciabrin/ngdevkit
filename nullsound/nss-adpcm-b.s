@@ -62,11 +62,12 @@
 
         ;; FIXME: temporary padding to ensures the next data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   16
+        .blkb   26
 
 
 ;;; ADPCM playback state tracker
 ;;; ------
+
 _state_adpcm_b_start:
 
 ;;; ADPCM-B mirrored state
@@ -78,6 +79,7 @@ state_b_trigger:                .blkb   TRIGGER_SIZE
 state_b_fx_vol_slide:           .blkb   VOL_SLIDE_SIZE
 state_b_fx_slide:               .blkb   SLIDE_SIZE
 state_b_fx_vibrato:             .blkb   VIBRATO_SIZE
+state_b_fx_arpeggio:            .blkb   ARPEGGIO_SIZE
 ;;; ADPCM-B-specific state
 ;;; Note
 state_b_note:
@@ -128,12 +130,10 @@ init_nss_adpcm_b_state_tracker::
         ldir
         ;; init flags
         ld      ix, #state_b
-        ld      a, #0x80        ; start flag
-        ld      START_CMD(ix), a
-        ld      a, #0xff        ; default volume
-        ld      VOL(ix), a
-        ld      a, #0xff        ; default non-existing instrument
-        ld      INSTR(ix), a
+        ld      START_CMD(ix), #0x80     ; default ADPCM-B start flag
+        ld      VOL(ix), #0xff           ; default volume
+        ld      INSTR(ix), #0xff         ; default non-existing instrument
+        ld      ARPEGGIO_SPEED(ix), #1   ; default arpeggio speed
 
         ;; global ADPCM volumes are initialized in the volume state tracker
         ret
@@ -170,6 +170,11 @@ _b_post_fx_trigger:
         call    eval_b_vibrato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _b_post_fx_vibrato:
+        bit     BIT_FX_ARPEGGIO, FX(ix)
+        jr      z, _b_post_fx_arpeggio
+        call    eval_arpeggio_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_b_post_fx_arpeggio:
         bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _b_post_fx_slide
         ld      hl, #NOTE_SEMITONE
@@ -522,6 +527,11 @@ compute_adpcm_b_fixed_point_note::
         ld      l, SLIDE_POS16(ix)
         ld      h, SLIDE_POS16+1(ix)
 _b_post_add_slide::
+
+        ;; hl: arpeggiated semitone
+        ld      c, #0
+        ld      b, ARPEGGIO_POS8(ix)
+        add     hl, bc
 
         ;; bc vibrato offset if the vibrato FX is enabled
         bit     BIT_FX_VIBRATO, FX(ix)
