@@ -21,6 +21,7 @@
 
         .module nullsound
 
+        .include "align.inc"
         .include "ym2610.inc"
         .include "struct-fx.inc"
 
@@ -69,7 +70,7 @@
 ;;; ------
         ;; This padding ensures the entire _state_ssg data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   80
+        .blkb   ALIGN_OFFSET_SSG
 
 _state_ssg_start:
 

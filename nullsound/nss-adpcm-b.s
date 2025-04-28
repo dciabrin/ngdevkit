@@ -21,6 +21,7 @@
 
         .module nullsound
 
+        .include "align.inc"
         .include "ym2610.inc"
         .include "struct-fx.inc"
 
@@ -62,7 +63,7 @@
 
         ;; FIXME: temporary padding to ensures the next data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   26
+        .blkb   ALIGN_OFFSET_ADPCM_B
 
 
 ;;; ADPCM playback state tracker

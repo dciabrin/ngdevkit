@@ -21,9 +21,9 @@
 
         .module nullsound
 
+        .include "align.inc"
         .include "ym2610.inc"
         .include "struct-fx.inc"
-
 
         .lclequ FM_STATE_SIZE,(state_fm_end-state_fm)
 
@@ -97,7 +97,7 @@ state_fm_f_num_half_distance::
 
         ;; This padding ensures the entire _state_ssg data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   0xbc
+        .blkb   ALIGN_OFFSET_FM
 
 
 _state_fm_start:
