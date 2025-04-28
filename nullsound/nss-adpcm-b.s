@@ -80,6 +80,7 @@ state_b_fx_vol_slide:           .blkb   VOL_SLIDE_SIZE
 state_b_fx_slide:               .blkb   SLIDE_SIZE
 state_b_fx_vibrato:             .blkb   VIBRATO_SIZE
 state_b_fx_arpeggio:            .blkb   ARPEGGIO_SIZE
+state_b_fx_legato:              .blkb   LEGATO_SIZE
 ;;; ADPCM-B-specific state
 ;;; Note
 state_b_note:
@@ -165,6 +166,12 @@ run_adpcm_b_pipeline::
         ld      hl, #state_b_action_funcs
         call    eval_trigger_step
 _b_post_fx_trigger:
+        bit     BIT_FX_LEGATO, FX(ix)
+        jr      z, _b_post_fx_legato
+        ld      hl, #NOTE_SEMITONE
+        call    eval_legato_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_b_post_fx_legato:
         bit     BIT_FX_VIBRATO, FX(ix)
         jr      z, _b_post_fx_vibrato
         call    eval_b_vibrato_step
@@ -528,7 +535,7 @@ compute_adpcm_b_fixed_point_note::
         ld      h, SLIDE_POS16+1(ix)
 _b_post_add_slide::
 
-        ;; hl: arpeggiated semitone
+        ;; hl: arpeggio offset
         ld      c, #0
         ld      b, ARPEGGIO_POS8(ix)
         add     hl, bc

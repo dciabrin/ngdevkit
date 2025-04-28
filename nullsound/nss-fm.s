@@ -118,6 +118,7 @@ state_fm_fx_vol_slide:          .blkb   VOL_SLIDE_SIZE
 state_fm_fx_slide:              .blkb   SLIDE_SIZE
 state_fm_fx_vibrato:            .blkb   VIBRATO_SIZE
 state_fm_fx_arpeggio:           .blkb   ARPEGGIO_SIZE
+state_fm_fx_legato:             .blkb   LEGATO_SIZE
 ;;; FM-specific state
 ;;; Note
 state_fm_note:
@@ -434,7 +435,7 @@ _fm_post_add_slide::
         ld      b, DETUNE+1(ix)
         add     hl, bc
 
-        ;; hl: arpeggiated semitone
+        ;; hl: arpeggio offset
         ld      c, #0
         ld      b, ARPEGGIO_POS8(ix)
         add     hl, bc
@@ -659,6 +660,12 @@ _fm_update_loop:
         ld      hl, #state_fm_action_funcs
         call    eval_trigger_step
 _fm_post_fx_trigger:
+        bit     BIT_FX_LEGATO, FX(ix)
+        jr      z, _fm_post_fx_legato
+        ld      hl, #NOTE_SEMITONE
+        call    eval_legato_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+_fm_post_fx_legato:
         bit     BIT_FX_VIBRATO, FX(ix)
         jr      z, _fm_post_fx_vibrato
         call    eval_fm_vibrato_step

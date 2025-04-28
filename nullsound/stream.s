@@ -571,6 +571,7 @@ nss_opcodes:
         .nss_op adpcm_b_note_slide_down
         .nss_op arpeggio
         .nss_op arpeggio_speed
+        .nss_op quick_legato
 
 
 

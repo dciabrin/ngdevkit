@@ -26,12 +26,13 @@
 
         .area   struct
 
-        .local  pipeline, fx_fx, fx_trigger, fx_vol_slide, fx_slide, fx_vibrato, fx_arpeggio
+        .local  pipeline, fx_fx, fx_trigger, fx_vol_slide, fx_slide, fx_vibrato, fx_arpeggio, fx_legato
         .local  _trigger_action, _trigger_note, _trigger_vol, _trigger_arg, _trigger_cur, _trigger_size
         .local  _vol_slide_inc16, _vol_slide_pos16, _vol_slide_end, _vol_slide_size
         .local  _slide_cfg, _slide_inc16, _slide_pos16, _slide_end, _slide_size
         .local _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
         .local _arpeggio_speed, _arpeggio_count, _arpeggio_2nd, _arpeggio_3rd, _arpeggio_pos, _arpeggio_pos8, _arpeggio_size
+        .local _legato_cfg, _legato_delay, _legato_transpose, _legato_size
 
 ;;; actions to run at every tick. This must be the first field of a channel's state
 pipeline:               .blkb 1
@@ -73,6 +74,12 @@ _arpeggio_3rd:          .blkb 1         ; 3rd note offset in the chord
 _arpeggio_pos:          .blkb 1         ; position in arpeggio [0, 2, 1]
 _arpeggio_pos8:         .blkb 1         ; current note offset
 _arpeggio_size:
+;;; FX: legato
+fx_legato:
+_legato_cfg:            .blkb 1         ; config (up, down...)
+_legato_delay:          .blkb 1         ; number of ticks before new note
+_legato_transpose:      .blkb 1         ; transpose note in semitone (signed)
+_legato_size:
 
         ;; FX getter for a channel's state
         ;; The offset assumes that that the FX structure are located
@@ -111,12 +118,17 @@ _arpeggio_size:
         .lclequ ARPEGGIO_POS,   (_arpeggio_pos - pipeline)
         .lclequ ARPEGGIO_POS8,  (_arpeggio_pos8 - pipeline)
         .lclequ ARPEGGIO_SIZE,  (_arpeggio_size - fx_arpeggio)
+        .lclequ LEGATO_CFG,     (_legato_cfg - pipeline)
+        .lclequ LEGATO_DELAY,   (_legato_delay - pipeline)
+        .lclequ LEGATO_TRANSPOSE, (_legato_transpose - pipeline)
+        .lclequ LEGATO_SIZE,  (_legato_size - fx_legato)
 
         .lclequ BIT_FX_VIBRATO,         0
         .lclequ BIT_FX_SLIDE,           1
         .lclequ BIT_FX_VOL_SLIDE,       2
         .lclequ BIT_FX_TRIGGER,         3
         .lclequ BIT_FX_ARPEGGIO,        4
+        .lclequ BIT_FX_LEGATO,          5
 
         .lclequ TRIGGER_LOAD_NOTE_FUNC,         0
         .lclequ TRIGGER_LOAD_VOL_FUNC,          2

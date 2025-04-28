@@ -302,6 +302,7 @@ def register_nss_ops():
         ("b_note_slide_d", ["speed_depth"]),
         ("arpeggio",  ["first_second"]),
         ("arpeggio_speed", ["speed"]),
+        ("quick_legato", ["delay_transpose"]),
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -422,6 +423,8 @@ def convert_fm_row(row, channel):
                 # fxval == -1 means default arpeggio speed
                 fxval = max(fxval, 1)
                 opcodes.append(arpeggio_speed(fxval))
+            elif fx == 0xe6:  # quick legato
+                opcodes.append(quick_legato(fxval))
             else:
                 add_unknown_fx('FM', fx)
 
@@ -529,6 +532,8 @@ def convert_s_row(row, channel):
                 # fxval == -1 means default arpeggio speed
                 fxval = max(fxval, 1)
                 opcodes.append(arpeggio_speed(fxval))
+            elif fx == 0xe6:  # quick legato
+                opcodes.append(quick_legato(fxval))
             else:
                 add_unknown_fx('SSG', fx)
 
@@ -659,6 +664,8 @@ def convert_b_row(row, channel):
                 # fxval == -1 means default arpeggio speed
                 fxval = max(fxval, 1)
                 opcodes.append(arpeggio_speed(fxval))
+            elif fx == 0xe6:  # quick legato
+                opcodes.append(quick_legato(fxval))
             else:
                 row_warn(row, "UNKNOWN")
                 add_unknown_fx('ADPCM-B', fx)
