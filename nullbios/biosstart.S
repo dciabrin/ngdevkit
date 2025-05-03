@@ -346,6 +346,7 @@ SYSTEM_IO:
 #endif
 .Lend_of_coin_prechecks:
         move.b  %d0, BIOS_START_FLAG
+	move.w  #$2000,%sr
         jsr     PLAYER_START.l
         cmp.b   #2, BIOS_USER_MODE
         bne     .Lnostart
