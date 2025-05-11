@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024 Damien Ciabrini
+;;; Copyright (c) 2024-2025 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -26,8 +26,8 @@
         .include "struct-fx.inc"
 
 
-        .lclequ SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg)
-        ;; .lclequ PIPELINE,(state_ssg_pipeline-state_mirrored_ssg)
+        .lclequ SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg_start)
+        .lclequ SSG_MAX_VOL,0xf
 
         ;; getters for SSG state
         .lclequ NOTE,(state_ssg_note-state_mirrored_ssg)
@@ -42,7 +42,6 @@
         .lclequ MACRO_POS,(state_ssg_macro_pos-state_mirrored_ssg)
         .lclequ MACRO_LOAD,(state_ssg_macro_load-state_mirrored_ssg)
         .lclequ REG_VOL, (state_ssg_reg_vol-state_mirrored_ssg)
-        .lclequ VOL, (state_ssg_vol-state_mirrored_ssg)
         .lclequ OUT_VOL, (state_ssg_out_vol-state_mirrored_ssg)
 
         ;; pipeline state for SSG channel
@@ -86,13 +85,17 @@ state_ssg_channel::
 state_mirrored_enabled:
         .blkb   1
 
-;;; ssg mirrored state
-state_mirrored_ssg:
 ;;; SSG A
 state_mirrored_ssg_a:
+;;; state
+state_mirrored_ssg_start:
+;;; stream data
+state_ssg_vol:                  .blkb   1       ; configured volume
+state_mirrored_ssg:
+;;; stream pipeline
 state_ssg_pipeline:             .blkb   1       ; actions to run at every tick (eval macro, load note, vol, other regs)
-state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
 ;;; FX state trackers
+state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
 state_ssg_trigger:              .blkb   TRIGGER_SIZE
 state_ssg_fx_vol_slide:         .blkb   VOL_SLIDE_SIZE
 state_ssg_fx_slide:             .blkb   SLIDE_SIZE
@@ -115,7 +118,6 @@ state_ssg_arpeggio:             .blkb   1       ; arpeggio (semitone shift)
 state_ssg_macro_data:           .blkb   2       ; address of the start of the macro program
 state_ssg_macro_pos:            .blkb   2       ; address of the current position in the macro program
 state_ssg_macro_load:           .blkb   2       ; function to load the SSG registers modified by the macro program
-state_ssg_vol:                  .blkb   1       ; note volume (attenuation)
 state_ssg_out_vol:              .blkb   1       ; ym2610 volume for SSG channel after the FX pipeline
 state_mirrored_ssg_end:
 ;;; SSG B
@@ -157,7 +159,9 @@ init_nss_ssg_state_tracker::
         ld      iy, #state_mirrored_ssg
         ld      bc, #SSG_STATE_SIZE
 _ssg_init:
-        ld      ARPEGGIO_SPEED(iy), #1   ; default arpeggio speed
+        ;; FX defaults
+        ld      ARPEGGIO_SPEED(iy), #1
+        ld      VOL_SLIDE_MAX(iy), #SSG_MAX_VOL
         add     iy, bc
         dec     d
         jr      nz, _ssg_init
@@ -576,20 +580,16 @@ compute_ym2610_ssg_note::
 ;;; ------
 ;;; [b modified]
 compute_ym2610_ssg_vol::
-        ;; a: current note volume for channel
-        ld      a, REG_VOL(ix)
-        and     #0xf
-
-        ;; substract slide down FX volume if used (attenuation)
+        ;; a: note volume for channel
+        ld      a, VOL(ix)
         bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _post_ssg_sub_vol_slide
-        sub     VOL_SLIDE_POS16+1(ix)
-_post_ssg_sub_vol_slide:
+        jr      z, _ssg_post_vol
+        ld      a, VOL_SLIDE_POS16+1(ix)
+_ssg_post_vol:
+        ;; a: volume converted to attenuation
+        sub     #SSG_MAX_VOL
 
-        ;; substract configured volume (attenuation)
-        sub     VOL(ix)
-
-        ;; substract global volume attenuation
+        ;; additional global volume attenuation
         ;; NOTE: YM2610's SSG output level ramp follows an exponential curve,
         ;; so we implement this output level attenuation via a basic substraction
         ld      b, a
@@ -597,9 +597,10 @@ _post_ssg_sub_vol_slide:
         neg
         add     b
 
-        ;; clamp result volume
-        bit     7, a
-        jr      z, _post_ssg_vol_clamp
+        ;; apply attenuation to current volume (from macro), and
+        ;; clamp if result is negative
+        add     REG_VOL(ix)
+        jp      p, _post_ssg_vol_clamp
         ld      a, #0
 _post_ssg_vol_clamp:
 
@@ -826,11 +827,9 @@ ssg_note_off_and_next_ctx::
 ;;; ------
 ;;; [ hl ]: volume level
 ssg_vol::
-        ;; a: attenuation (15-volume)
+        ;; a: volume
         ld      a, (hl)
         inc     hl
-        sub     a, #15
-        neg
 
         ;; delay load via the trigger FX?
         bit     BIT_TRIGGER_ACTION_DELAY, TRIGGER_ACTION(ix)
@@ -892,11 +891,16 @@ _ssg_cfg_note_end:
 ;;; Configure state for new volume and trigger a load in the pipeline
 ;;; ------
 ssg_configure_vol:
+        ;; if a volume slide is ongoing, treat it as a volume slide FX update
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _ssg_cfg_vol_update
+        call    vol_slide_update
+        jr      _ssg_cfg_vol_end
+_ssg_cfg_vol_update:
         ld      VOL(ix), a
-
         ;; reload configured vol at the next pipeline run
         set     BIT_LOAD_VOL, PIPELINE(ix)
-
+_ssg_cfg_vol_end:
         ret
 
 

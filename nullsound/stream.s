@@ -538,7 +538,7 @@ nss_opcodes:
         .nss_op adpcm_b_vol
         .nss_op adpcm_a_vol
         .nss_op fm_pan
-        .nss_op fm_vol_slide_down
+        .nss_op nss_nop4
         .nss_op ssg_vol_slide_down
         .nss_op fm_pitch_slide_down
         .nss_op ssg_delay
@@ -572,6 +572,9 @@ nss_opcodes:
         .nss_op arpeggio
         .nss_op arpeggio_speed
         .nss_op quick_legato
+        .nss_op vol_slide_up
+        .nss_op vol_slide_down
+        .nss_op vol_slide_off
 
 
 
@@ -853,5 +856,6 @@ _ret_set_process:
 nss_nop::
 nss_nop2::
 nss_nop3::
+nss_nop4::
         ld      a, #1
         ret

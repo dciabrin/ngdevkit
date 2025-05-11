@@ -25,7 +25,8 @@
         .include "ym2610.inc"
         .include "struct-fx.inc"
 
-        .lclequ FM_STATE_SIZE,(state_fm_end-state_fm)
+        .lclequ FM_STATE_SIZE,(state_fm_end-state_fm_start)
+        .lclequ FM_MAX_VOL,0x7f
 
         ;; FM constants
         .lclequ NSS_FM_INSTRUMENT_PROPS,        28
@@ -56,7 +57,6 @@
         .lclequ OP4, (state_fm_op4_vol-state_fm)
         .lclequ OUT_OPS, (state_fm_out_ops-state_fm)
         .lclequ OUT_OP1, (state_fm_out_op1-state_fm)
-        .lclequ VOL, (state_fm_vol-state_fm)
 
         ;; pipeline state for FM channel
         .lclequ STATE_PLAYING,      0x01
@@ -106,13 +106,17 @@ state_fm_channel::
 state_fm_ym2610_channel::
         .blkb   1
 
-;;; FM mirrored state
-state_fm:
 ;;; FM1
 state_fm1:
+;;; state
+state_fm_start:
+;;; stream data
+state_fm_vol:                   .blkb    1      ; configured volume
+state_fm:
+;;; stream pipeline
 state_fm_pipeline:              .blkb   1       ; actions to run at every tick (load note, vol, other regs)
-state_fm_fx:                    .blkb   1       ; enabled FX for this channel
 ;;; FX state trackers
+state_fm_fx:                    .blkb   1       ; enabled FX for this channel
 state_fm_trigger:               .blkb   TRIGGER_SIZE
 state_fm_fx_vol_slide:          .blkb   VOL_SLIDE_SIZE
 state_fm_fx_slide:              .blkb   SLIDE_SIZE
@@ -129,7 +133,6 @@ state_fm_note_pos16:            .blkb    2      ; channel's fixed-point note aft
 state_fm_note_fnum:             .blkb    2      ; channel's f-num after the FX pipeline
 state_fm_note_block:            .blkb    1      ; channel's FM block (multiplier) after the FX pipeline
 ;; volume
-state_fm_vol:                   .blkb    1      ; configured note volume (attenuation)
 state_fm_op1_vol:               .blkb    1      ; configured volume for OP1
 state_fm_op2_vol:               .blkb    1      ; configured volume for OP2
 state_fm_op3_vol:               .blkb    1      ; configured volume for OP3
@@ -194,7 +197,9 @@ init_nss_fm_state_tracker::
         ld      iy, #state_fm
         ld      bc, #FM_STATE_SIZE
 _fm_init:
+        ;; FX defaults
         ld      INSTRUMENT(iy), #0xff    ; non-existing instrument
+        ld      VOL_SLIDE_MAX(iy), #FM_MAX_VOL ; max volume for channel
         ld      ARPEGGIO_SPEED(iy), #1   ; default arpeggio speed
         add     iy, bc
         dec     d
@@ -460,17 +465,15 @@ _fm_post_add_vibrato::
 compute_ym2610_fm_vol::
         push    iy
 
-        ;; a: note vol (attenuation) for current channel
+        ;; a: note vol for current channel
         ld      a, VOL(ix)
         bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _vol_post_clamp_up
-        ;; add slide down vol and clamp
-        add     VOL_SLIDE_POS16+1(ix)
-        bit     7, a
-        jr      z, _vol_post_clamp_up
-        ld      a, #127
-_vol_post_clamp_up:
-        ;; b: intermediate attenuation (note vol + vol slide)
+        jr      z, _fm_post_vol
+        ld      a, VOL_SLIDE_POS16+1(ix)
+_fm_post_vol:
+        ;; b: convert volume to attenuation
+        neg
+        add     #FM_MAX_VOL
         ld      b, a
 
         ;; c: bitmask for the output OPs + sentinel bits for looping
@@ -504,7 +507,7 @@ _c_ops_loop:
         add     b
         bit     7, a
         jr      z, _c_ops_post_clamp
-        ld      a, #127
+        ld      a, #FM_MAX_VOL
 _c_ops_post_clamp:
 
         ;; substract global volume attenuation
@@ -516,7 +519,7 @@ _c_ops_post_clamp:
         add     d
         bit     7, a
         jr      z, _c_ops_post_global_clamp
-        ld      a, #127
+        ld      a, #FM_MAX_VOL
 _c_ops_post_global_clamp:
 
 _c_ops_result:
@@ -776,11 +779,10 @@ _fm_end_pipeline:
 ;;; The next note to be played or instrument change will pick
 ;;; up this volume configuration change
 ;;; ------
-;;; [ hl ]: volume [0-127]
+;;; [ hl ]: volume [0-0x7f]
 fm_vol::
-        ;; a: volume (difference from max volume)
-        ld      a, #127
-        sub     (hl)
+        ;; a: volume
+        ld      a, (hl)
         inc     hl
 
         ;; delay load via the trigger FX?
@@ -1037,11 +1039,16 @@ _fm_cfg_note_end:
 ;;; Configure state for new volume and trigger a load in the pipeline
 ;;; ------
 fm_configure_vol:
+        ;; if a volume slide is ongoing, treat it as a volume slide FX update
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _fm_cfg_vol_update
+        call    vol_slide_update
+        jr      _fm_cfg_vol_end
+_fm_cfg_vol_update:
         ld      VOL(ix), a
-
         ;; reload configured vol at the next pipeline run
         set     BIT_LOAD_VOL, PIPELINE(ix)
-
+_fm_cfg_vol_end:
         ret
 
 
@@ -1341,26 +1348,6 @@ fm_pan::
 
         pop     bc
         pop     de
-        ld      a, #1
-        ret
-
-
-;;; FM_VOL_SLIDE_DOWN
-;;; Enable volume slide down effect for the current FM channel
-;;; ------
-;;; [ hl ]: speed (4bits)
-fm_vol_slide_down::
-        push    bc
-        push    de
-
-        ld      bc, #0x40
-        ld      d, #127
-        ld      a, #1
-        call    vol_slide_init
-
-        pop     de
-        pop     bc
-
         ld      a, #1
         ret
 

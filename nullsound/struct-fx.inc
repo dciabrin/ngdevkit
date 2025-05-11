@@ -25,16 +25,18 @@
         ;; file many times without linking errors.
 
         .area   struct
-
+        .local  vol
         .local  pipeline, fx_fx, fx_trigger, fx_vol_slide, fx_slide, fx_vibrato, fx_arpeggio, fx_legato
         .local  _trigger_action, _trigger_note, _trigger_vol, _trigger_arg, _trigger_cur, _trigger_size
-        .local  _vol_slide_inc16, _vol_slide_pos16, _vol_slide_end, _vol_slide_size
+        .local  _vol_slide_cfg, _vol_slide_inc16, _vol_slide_pos16, _vol_slide_end, _vol_slide_max, _vol_slide_size
         .local  _slide_cfg, _slide_inc16, _slide_pos16, _slide_end, _slide_size
         .local _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
         .local _arpeggio_speed, _arpeggio_count, _arpeggio_2nd, _arpeggio_3rd, _arpeggio_pos, _arpeggio_pos8, _arpeggio_size
         .local _legato_cfg, _legato_delay, _legato_transpose, _legato_size
 
-;;; actions to run at every tick. This must be the first field of a channel's state
+;;; The pipeline structure is all relative to the pipeline field,
+;;; fields before that are optional based on the type of channel
+vol:                    .blkb 1         ; configured volume
 pipeline:               .blkb 1
 ;;; enabled FX. This must be the second field of a channel's state
 fx_fx:                  .blkb 1
@@ -47,9 +49,11 @@ _trigger_cur:           .blkb 1         ; per-action current accumulator
 _trigger_size:
 ;;; FX: volume slide
 fx_vol_slide:
+_vol_slide_cfg:         .blkw 1         ; config (up, down, portamento)
 _vol_slide_inc16:       .blkw 1         ; volume slide speed
-_vol_slide_pos16:       .blkw 1         ; volume slide position (attenuation)
-_vol_slide_end:         .blkb 1         ; volume slide end (0: no attenuation)
+_vol_slide_pos16:       .blkw 1         ; volume slide position
+_vol_slide_end:         .blkw 1         ; volume slide end
+_vol_slide_max:         .blkb 1         ; volume slide max for channel
 _vol_slide_size:
 ;;; FX: slide
 fx_slide:
@@ -81,6 +85,9 @@ _legato_delay:          .blkb 1         ; number of ticks before new note
 _legato_transpose:      .blkb 1         ; transpose note in semitone (signed)
 _legato_size:
 
+        ;; getter for optional parts of the channel's state
+        .lclequ VOL,            (vol - pipeline)
+
         ;; FX getter for a channel's state
         ;; The offset assumes that that the FX structure are located
         ;; sequentially from the start of the channel's state
@@ -94,9 +101,11 @@ _legato_size:
         .lclequ TRIGGER_CUR,    (_trigger_cur - pipeline)
         .lclequ TRIGGER_SIZE,   (_trigger_size - fx_trigger)
         .lclequ VOL_SLIDE,      (fx_vol_slide - pipeline)
+        .lclequ VOL_SLIDE_CFG,  (_vol_slide_cfg - pipeline)
         .lclequ VOL_SLIDE_INC16, (_vol_slide_inc16 - pipeline)
         .lclequ VOL_SLIDE_POS16, (_vol_slide_pos16 - pipeline)
         .lclequ VOL_SLIDE_END,  (_vol_slide_end - pipeline)
+        .lclequ VOL_SLIDE_MAX,  (_vol_slide_max - pipeline)
         .lclequ VOL_SLIDE_SIZE, (_vol_slide_size - fx_vol_slide)
         .lclequ SLIDE,          (fx_slide - pipeline)
         .lclequ SLIDE_CFG,      (_slide_cfg - pipeline)
@@ -142,3 +151,4 @@ _legato_size:
 
         .lclequ BIT_SLIDE_DIRECTION,            0
         .lclequ BIT_SLIDE_PORTAMENTO,           1
+        .lclequ BIT_SLIDE_KEEP_RUNNING,         2

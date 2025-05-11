@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024 Damien Ciabrini
+;;; Copyright (c) 2024-2025 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -26,14 +26,14 @@
         .include "struct-fx.inc"
 
 
-        .lclequ ADPCM_B_STATE_SIZE,(state_b_end-state_b)
+        .lclequ ADPCM_B_STATE_SIZE,(state_b_end-state_b_start)
+        .lclequ ADPCM_B_MAX_VOL,0xff
 
         ;; getters for ADPCM-B state
         .lclequ NOTE, (state_b_note_semitone-state_b)
         .lclequ NOTE_SEMITONE, (state_b_note_semitone-state_b)
         .lclequ NOTE_POS16,(state_b_note_pos16-state_b)
         .lclequ DELTA_N, (state_b_note_delta_n-state_b)
-        .lclequ VOL, (state_b_vol-state_b)
         .lclequ OUT_VOL, (state_b_out_vol-state_b)
         .lclequ PAN, (state_b_pan-state_b)
         .lclequ INSTR, (state_b_instr-state_b)
@@ -72,10 +72,14 @@
 _state_adpcm_b_start:
 
 ;;; ADPCM-B mirrored state
+;;; state
+state_b_start:
+;;; stream data
+state_b_vol:                    .blkb   1       ; configured volume
 state_b:
 state_b_pipeline:               .blkb   1       ; actions to run at every tick (load note, vol, other regs)
-state_b_fx:                     .blkb   1       ; enabled FX for this channel
 ;;; FX state trackers
+state_b_fx:                     .blkb   1       ; enabled FX for this channel
 state_b_trigger:                .blkb   TRIGGER_SIZE
 state_b_fx_vol_slide:           .blkb   VOL_SLIDE_SIZE
 state_b_fx_slide:               .blkb   SLIDE_SIZE
@@ -94,7 +98,6 @@ state_b_instr_start_cmd:        .blkb   1       ; instrument play command (with 
 state_b_instr_base_octave:      .blkb   2       ; instrument base octave
 state_b_instr_base_delta_n:     .blkb   2       ; instrument base delta-n table for all semitones
 ;;; volume
-state_b_vol:                    .blkb   1       ; configured note volume (attenuation)
 state_b_out_vol:                .blkb   1       ; ym2610 volume after the FX pipeline
 ;;; pan
 state_b_pan:                    .blkb    1      ; configured pan (b7: left, b6: right)
@@ -130,11 +133,12 @@ init_nss_adpcm_b_state_tracker::
         ld      (hl), #0
         ld      bc, #(state_b_end-1-state_b)
         ldir
-        ;; init flags
+        ;; FX defaults
         ld      ix, #state_b
         ld      START_CMD(ix), #0x80     ; default ADPCM-B start flag
         ld      VOL(ix), #0xff           ; default volume
         ld      INSTR(ix), #0xff         ; default non-existing instrument
+        ld      VOL_SLIDE_MAX(ix), #ADPCM_B_MAX_VOL ; max volume for channel
         ld      ARPEGGIO_SPEED(ix), #1   ; default arpeggio speed
 
         ;; global ADPCM volumes are initialized in the volume state tracker
@@ -189,6 +193,12 @@ _b_post_fx_arpeggio:
         call    eval_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _b_post_fx_slide:
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _b_post_fx_vol_slide
+        call    eval_vol_slide_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_b_post_fx_vol_slide:
+
 
         ;; Pipeline action: make sure no load note takes place when not playing
         bit     BIT_PLAYING, PIPELINE(ix)
@@ -470,11 +480,16 @@ _b_cfg_note_end:
 ;;; Configure state for new note and trigger a load in the pipeline
 ;;; ------
 adpcm_b_configure_vol:
+        ;; if a volume slide is ongoing, treat it as a volume slide FX update
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _b_cfg_vol_update
+        call    vol_slide_update
+        jr      _b_cfg_vol_end
+_b_cfg_vol_update:
         ld      VOL(ix), a
-
         ;; reload configured vol at the next pipeline run
         set     BIT_LOAD_VOL, PIPELINE(ix)
-
+_b_cfg_vol_end:
         ret
 
 
@@ -511,6 +526,10 @@ _b_note_on_end:
 compute_ym2610_adpcm_b_vol::
         ;; a: note vol
         ld      a, VOL(ix)
+        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        jr      z, _b_post_vol
+        ld      a, VOL_SLIDE_POS16+1(ix)
+_b_post_vol:
 
         ;; scale volume based on global attenuation
         call    adpcm_b_scale_output
