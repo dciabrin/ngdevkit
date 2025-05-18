@@ -180,7 +180,7 @@ _release_ops:
         inc     b
         call    ym2610_write_port_a
         ld      b, #REG_SSG_ENABLE
-        ld      c, #0xff
+        ld      c, #0x3f
         call    ym2610_write_port_a
 
         ;; ADPCM-A
