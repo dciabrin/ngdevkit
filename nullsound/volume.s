@@ -25,12 +25,7 @@
         .include "ports.inc"
         .include "timer.inc"
         .include "struct-fx.inc"
-
-        ;; TODO remove bitmask hardcodes
-        .lclequ FM_BIT_LOAD_VOL,       3
-        .lclequ SSG_BIT_LOAD_VOL,      4
-        .lclequ ADPCM_A_BIT_LOAD_VOL,  3
-        .lclequ ADPCM_B_BIT_LOAD_VOL,  3
+        .include "pipeline.inc"
 
 
 ;;;
@@ -78,6 +73,8 @@ state_volume_fade_progress::    .blkb   1
 
 ;;; Fade out speed. Fixed point value (4bit integer + 2bit fractional)
 state_volume_fade_speed::       .blkb   1
+
+
 
         .area  CODE
 
@@ -249,39 +246,39 @@ volume_update_stream_state:
         bit     0, d
         jr      z, _vol_upd_post_fm1
         ld      iy, #state_fm1
-        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
 _vol_upd_post_fm1:
         bit     1, d
         jr      z, _vol_upd_post_fm2
         ld      iy, #state_fm2
-        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
 _vol_upd_post_fm2:
         bit     2, d
         jr      z, _vol_upd_post_fm3
         ld      iy, #state_fm3
-        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
 _vol_upd_post_fm3:
         bit     3, d
         jr      z, _vol_upd_post_fm4
         ld      iy, #state_fm4
-        set     FM_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
 _vol_upd_post_fm4:
 
         ;; Notify the SSG pipeline
         bit     4, d
         jr      z, _vol_upd_post_ssg_a
         ld      iy, #state_mirrored_ssg_a
-        set     SSG_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
 _vol_upd_post_ssg_a:
         bit     5, d
         jr      z, _vol_upd_post_ssg_b
         ld      iy, #state_mirrored_ssg_b
-        set     SSG_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
 _vol_upd_post_ssg_b:
         bit     6, d
         jr      z, _vol_upd_post_ssg_c
         ld      iy, #state_mirrored_ssg_c
-        set     SSG_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
 _vol_upd_post_ssg_c:
 
 
@@ -301,7 +298,7 @@ _vol_adpcm_a_loop:
         ;; channel used in the music?
         bit     0, d
         jr      z, _vol_adpcm_a_next
-        set     ADPCM_A_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE(iy)
 _vol_adpcm_a_next:
         add     iy, bc
         sra     d
@@ -320,7 +317,7 @@ _vol_adpcm_a_next:
         ld      iy, #state_b
         bit     0, d
         jr      z, _vol_post_adpcm_b
-        set     ADPCM_B_BIT_LOAD_VOL, PIPELINE(iy)
+        set     BIT_LOAD_VOL, PIPELINE(iy)
 _vol_post_adpcm_b:
 
         pop     iy

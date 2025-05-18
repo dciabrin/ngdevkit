@@ -16,7 +16,7 @@
 ;;; You should have received a copy of the GNU Lesser General Public License
 ;;; along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-;;; Trigger effect (delay, cut...), common functions for FM and SSG
+;;; Legato functions for FM, SSG, and ADPCM-B
 ;;;
 
         .module nullsound
@@ -26,49 +26,44 @@
         .include "pipeline.inc"
 
 
+
         .area  CODE
 
 
-;;; QUICK_LEGATO
-;;; Change pitch (up/down) by a some semitones, after some ticks have passed
+;;; Configure the quick legato FX
 ;;; ------
+;;; ;  a  : direction (0:up, 1:down)
 ;;;   ix  : state for channel
-;;; [ hl ]: direction/ticks:4 - transpose:4
+;;; [ hl ]: ticks:4 - transpose:4
 ;;; hl modified
-quick_legato::
+legato_init::
         push    bc
 
-        ;; b: transpose (unsigned)
-        ld      a, (hl)
-        and     #0xf
+        ;; b: direction
         ld      b, a
 
-        ;; c: delay before transpose
+        ;; a: transpose (unsigned)
         ld      a, (hl)
-        rra
-        rra
-        rra
-        rra
         and     #0xf
-        ld      c, a
-        cp      #8
-        jr      c, _legato_post_sign
-        sub     #8
-        ld      c, a
-        ld      a, b
+        bit     0, b
+        jr      z, _legato_post_sign
         neg
-        ld      b, a
 _legato_post_sign:
+        ld      LEGATO_TRANSPOSE(ix), a
 
-        ld      LEGATO_TRANSPOSE(ix), b
-        ld      LEGATO_DELAY(ix), c
+        ;; a: delay before transpose
+        ld      a, (hl)
+        rra
+        rra
+        rra
+        rra
+        and     #0xf
+        ld      LEGATO_DELAY(ix), a
 
-        set     BIT_FX_LEGATO, FX(ix)
+        set     BIT_FX_LEGATO, NOTE_FX(ix)
 
         pop     bc
-
         inc     hl
-_legato_end:
         ld      a, #1
         ret
 
@@ -76,8 +71,6 @@ _legato_end:
 ;;; Update the legato state for the current channel
 ;;; ------
 ;;;   ix : mirrored state of the current channel
-;;;   hl : offset of current note for channel
-;;; bc, hl modified
 eval_legato_step::
 
         ld      a, LEGATO_DELAY(ix)
@@ -86,22 +79,41 @@ eval_legato_step::
         dec     LEGATO_DELAY(ix)
         ret
 _legato_update_pos:
-        ;; hl: current note address
-        ;; TODO: make the note offset commong to all track types
-        push    ix
-        pop     bc
-        add     hl, bc
-
-        ;; transpose current note
-        ld      a, (hl)
+        ;; the shift is the current note position + transpose
+        ld      a, NOTE16+1(ix)
         add     LEGATO_TRANSPOSE(ix)
-        ld      (hl), a
+        ld      NOTE16+1(ix), a
+
         ;; To fully clear the state after the FX is disabled, we must remember
         ;; to recompute the note and tune values without shift, so force it here
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 
         ;; stop FX
         ld      LEGATO_TRANSPOSE(ix), #0
-        res     BIT_FX_LEGATO, FX(ix)
+        res     BIT_FX_LEGATO, NOTE_FX(ix)
 
         ret
+
+
+;;; QUICK_LEGATO_UP
+;;; Change pitch up by some semitones, after some ticks have passed
+;;; ------
+;;;   ix  : state for channel
+;;; [ hl ]: ticks:4 - transpose:4
+;;; hl modified
+quick_legato_up::
+        ;; a: direction
+        xor     a
+        jp      legato_init
+
+
+;;; QUICK_LEGATO_DOWN
+;;; Change pitch down by some semitones, after some ticks have passed
+;;; ------
+;;;   ix  : state for channel
+;;; [ hl ]: ticks:4 - transpose:4
+;;; hl modified
+quick_legato_down::
+        ;; a: direction
+        xor     a
+        jp      legato_init

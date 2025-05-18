@@ -22,11 +22,12 @@ This document details the current level of support for Furnace features in NSS. 
   - Only the `sequence` macro type can used to configure SSG properties. Macro types `ADSR` and `LFO` are not supported and there is no plan to support them.
 
   - Within a sequence macro, each step is 1 tick long. That is, each time the YM2610 triggers an IRQ during music playback, a step of the macro is being evaluated. Unlike in Furnace, there is no native support in NSS for step length or step delay.
+
   - Macro looping is currently different from what Furnace allows. Currently, NSS groups property updates by steps. When the loop is reached, it starts again from the configured step, which means all properties are re-evaluated from this step. This means you can't have loops for two different properties. This is going to improve in the future to match Furnace's semantics.
 
   - SSG Auto-envelope feature is currently broken, SSG instruments using that feature can be processed by `nsstool`, but the resulting playback is invalid. Do not use it.
 
-* If you use SSG in your Furnace module, and SSG instruments use the SSG noise channel, be aware that this will prevent you from fading out your module while it's playing. This is because the YM2610 has no support in hardware to change the volume of the noise channel.
+* If you use SSG in your Furnace module, and SSG instruments uses the volume envelope bit for the channel, be aware that this will prevent you from fading out your module while it's playing. This is because the YM2610 has no support in hardware to change the volume of the envelope generator.
 
 
 ## Currently supported Furnace FX
@@ -39,15 +40,15 @@ This document details the current level of support for Furnace features in NSS. 
 
 ## Volume
 
-| FX   | Description                   | Status | Note                           |
-|------|-------------------------------|--------|--------------------------------|
-| `0A` | Volume slide                  | ⚠️      | Only volume down. No ADPCM yet |
-| `FA` | Fast volume slide             | 💜     |                                |
-| `F3` | Fine volume slide up          | 💜     |                                |
-| `F4` | Fine volume slide down        | 💜     |                                |
-| `F8` | Single tick volume slide up   | 💜     |                                |
-| `F9` | Single tick volume slide down | 💜     |                                |
-| `07` | Tremolo                       | 💜     |                                |
+| FX   | Description                   | Status | Note |
+|------|-------------------------------|--------|------|
+| `0A` | Volume slide                  | 💚️     |      |
+| `FA` | Fast volume slide             | 💜     |      |
+| `F3` | Fine volume slide up          | 💜     |      |
+| `F4` | Fine volume slide down        | 💜     |      |
+| `F8` | Single tick volume slide up   | 💜     |      |
+| `F9` | Single tick volume slide down | 💜     |      |
+| `07` | Tremolo                       | 💜     |      |
 
 
 ## Pitch
@@ -61,13 +62,13 @@ This document details the current level of support for Furnace features in NSS. 
 | F2 | Single tick pitch slide down | 💜     |      |
 | 03 | Portamento                   | 💚     |      |
 | E1 | Note slide up                | 💚     |      |
-| E2 | Note slide down              | 💚     |      |
 | EA | Toggle legato                | 💜     |      |
+| E2 | Note slide down              | 💚     |      |
 | E6 | Quick legato (compatibility) | 🚫     |      |
-| E8 | Quick legato up              | 🚫     |      |
-| E9 | Quick legato down            | 🚫     |      |
-| 00 | Arpeggio                     | 💜     |      |
-| E0 | Set arpeggio speed           | 💜     |      |
+| E8 | Quick legato up              | 💚     |      |
+| E9 | Quick legato down            | 💚     |      |
+| 00 | Arpeggio                     | 💚     |      |
+| E0 | Set arpeggio speed           | 💚     |      |
 | 04 | Vibrato                      | 💚     |      |
 | E3 | Set vibrato direction        | 🚫     |      |
 | E4 | Set vibrato rang             | 🚫     |      |
@@ -75,15 +76,15 @@ This document details the current level of support for Furnace features in NSS. 
 
 ## Panning
 
-| FX | Description                     | Status | Note |
-|----|---------------------------------|--------|------|
-| 08 | Set panning                     | 💚     |      |
-| 88 | Set rear panning                | 🚫     |      |
-| 81 | Set volume of left channe       | 🚫     |      |
-| 82 | Set volume of right channe      | 🚫     |      |
-| 89 | Set volume of rear left channe  | 🚫     |      |
-| 8A | Set volume of rear right channe | 🚫     |      |
-| 80 | Set panning (linear)            | 💚     |      |
+| FX | Description                      | Status | Note |
+|----|----------------------------------|--------|------|
+| 08 | Set panning                      | 💚     |      |
+| 88 | Set rear panning                 | 🚫     |      |
+| 81 | Set volume of left channel       | 🚫     |      |
+| 82 | Set volume of right channel      | 🚫     |      |
+| 89 | Set volume of rear left channel  | 🚫     |      |
+| 8A | Set volume of rear right channel | 🚫     |      |
+| 80 | Set panning (linear)             | 💚     |      |
 
 
 ## Time

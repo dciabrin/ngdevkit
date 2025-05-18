@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2023 Damien Ciabrini
+;;; Copyright (c) 2023-2025 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -24,34 +24,27 @@
         .include "align.inc"
         .include "ym2610.inc"
         .include "struct-fx.inc"
+        .include "pipeline.inc"
 
 
-        .lclequ ADPCM_A_STATE_SIZE,(state_a_end-state_a)
+        .lclequ ADPCM_A_STATE_SIZE,(state_a_end-state_a_start)
+        .lclequ ADPCM_A_MAX_VOL,0x1f
 
         ;; getters for ADPCM-A state
-        .lclequ VOL, (state_a_vol-state_a)
         .lclequ OUT_VOL, (state_a_out_vol-state_a)
         .lclequ PAN, (state_a_pan-state_a)
 
         .equ    NSS_ADPCM_A_INSTRUMENT_PROPS,   4
         .equ    NSS_ADPCM_A_NEXT_REGISTER,      8
 
-
-        ;; pipeline state for ADPCM-A channel
-        .lclequ STATE_PLAYING,      0x01
-        .lclequ STATE_EVAL_MACRO,   0x02
-        .lclequ STATE_START,        0x04
-        .lclequ STATE_LOAD_VOL,     0x08
-        .lclequ STATE_LOAD_PAN,     0x10
-        .lclequ BIT_PLAYING,        0
-        .lclequ BIT_EVAL_MACRO,     1
-        .lclequ BIT_START,          2
-        .lclequ BIT_LOAD_VOL,       3
-        .lclequ BIT_LOAD_PAN,       4
+        ;; specific pipeline state for SSG channel
+        .lclequ STATE_START_NOTE, 0x04
+        .lclequ BIT_START_NOTE,      2
 
 
 
         .area  DATA
+
 
 ;;; ADPCM playback state tracker
 ;;; ------
@@ -61,20 +54,24 @@
 
 _state_adpcm_start:
 
-;;; ADPCM-A mirrored state
-state_a:
 ;;; ADPCM-A1
 state_a1:
+;;; state
+state_a_start:
+;;; stream pipeline
+state_a:
 state_a_pipeline:               .blkb   1       ; actions to run at every tick (load note, vol, other regs)
 state_a_fx:                     .blkb   1       ; enabled FX for this channel
+;;; volume state tracker
+state_a_vol_cfg:                .blkb   1       ; configured volume
+state_a_vol16:                  .blkb   2       ; current decimal volume
 ;;; FX state trackers
-state_a_trigger:                .blkb   TRIGGER_SIZE
+state_a_fx_vol_slide:           .blkb   SLIDE_SIZE
+state_a_fx_trigger:             .blkb   TRIGGER_SIZE
 ;;; ADPCM-A-specific state
-;;; volume
-state_a_vol:                    .blkb    1      ; configured note volume (attenuation)
-state_a_out_vol:                .blkb    1      ; ym2610 volume after the FX pipeline
+state_a_out_vol:                .blkb   1       ; ym2610 volume after the FX pipeline
 ;;; pan
-state_a_pan:                    .blkb    1      ; configured pan (b7: left, b6: right)
+state_a_pan:                    .blkb   1       ; configured pan (b7: left, b6: right)
 ;;;
 state_a_end:
 ;;; ADPCM-A2
@@ -105,7 +102,10 @@ state_adpcm_a_volume_attenuation::   .blkb   1
 
 _state_adpcm_end:
 
+
+
         .area  CODE
+
 
 ;;; context: channel action functions for FM
 state_a_action_funcs::
@@ -119,28 +119,24 @@ state_a_action_funcs::
 ;;; ------
 ;;; [a modified - other registers saved]
 init_nss_adpcm_state_tracker::
-        ld      hl, #state_a
+        ld      hl, #state_a_start
         ld      d, h
         ld      e, l
         inc     de
         ;; zero states
         ld      (hl), #0
-        ld      bc, #(state_a6_end-1-state_a)
+        ld      bc, #(state_a6_end-1-state_a_start)
         ldir
         ;; init flags
-        ld      a, #0
-        ld      (state_adpcm_a_channel), a
-        ;; set default
-        ld      ix, #state_a1
+        ld      iy, #state_a1
         ld      bc, #ADPCM_A_STATE_SIZE
         ld      d, #6
 _a_init:
-        ld      a, #0x1f
-        ld      VOL(ix), a
-        ld      a, #0xc0
-        ld      PAN(ix), a
+        ;; set default
+        ld      VOL_CTX+SLIDE_MAX(iy), #ADPCM_A_MAX_VOL ; max volume for channel
+        ld      PAN(iy), #0xc0  ; default PAN to L+R
 
-        add     ix, bc
+        add     iy, bc
         dec     d
         jr      nz, _a_init
         ;; global ADPCM volumes are initialized in the volume state tracker
@@ -223,10 +219,22 @@ _a_update_loop:
         call    eval_trigger_step
 _a_post_fx_trigger:
 
+        ;; iy: volume FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #VOL_CTX
+        add     iy, bc
+
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _a_post_fx_vol_slide
+        call    eval_slide_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_a_post_fx_vol_slide:
+
         ;; Pipeline action: make sure no load note takes place when not playing
         bit     BIT_PLAYING, PIPELINE(ix)
         jr      nz, _a_post_check_playing
-        res     BIT_START, PIPELINE(ix)
+        res     BIT_START_NOTE, PIPELINE(ix)
 _a_post_check_playing:
 
         ;; Pipeline action: compute volume registers when the volume state is modified
@@ -256,9 +264,9 @@ _post_load_a_vol:
 _post_load_a_pan_vol:
 
         ;; Pipeline action: load note register when the note state is modified
-        bit     BIT_START, PIPELINE(ix)
+        bit     BIT_START_NOTE, PIPELINE(ix)
         jr      z, _post_load_a_note
-        res     BIT_START, PIPELINE(ix)
+        res     BIT_START_NOTE, PIPELINE(ix)
 
         ;; d: ADPCM-A channel
         ld      a, (state_adpcm_a_channel)
@@ -426,7 +434,7 @@ adpcm_a_configure_on:
         ;; load a new note means "restart the current sample"
 
         ld      a, PIPELINE(ix)
-        or      #(STATE_PLAYING|STATE_START)
+        or      #(STATE_PLAYING|STATE_START_NOTE)
         ld      PIPELINE(ix), a
 
         ret
@@ -435,11 +443,21 @@ adpcm_a_configure_on:
 ;;; Configure state for new volume and trigger a load in the pipeline
 ;;; ------
 adpcm_a_configure_vol:
+        ;; if a volume slide is ongoing, treat it as a volume slide FX update
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _a_cfg_vol_update
+        push    bc
+        ld      bc, #VOL_CTX
+        call    slide_update
+        pop     bc
+        jr      _a_cfg_vol_end
+_a_cfg_vol_update:
         ld      VOL(ix), a
-
+        ld      VOL16+1(ix), a
+        ld      VOL16(ix), #0
         ;; reload configured vol at the next pipeline run
         set     BIT_LOAD_VOL, PIPELINE(ix)
-
+_a_cfg_vol_end:
         ret
 
 
@@ -567,7 +585,8 @@ _adpcm_a_clamp_level:
 ;;; ------
 ;;; modified: c
 compute_ym2610_a_vol::
-        ld      c, VOL(ix)
+        ;; c: note vol for current channel
+        ld      c, VOL16+1(ix)
 
         ;; attenuation to match the configured ADPCM-A output level
         ld      a, (state_adpcm_a_volume_attenuation)

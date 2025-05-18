@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024 Damien Ciabrini
+;;; Copyright (c) 2024-2025 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -16,34 +16,43 @@
 ;;; You should have received a copy of the GNU Lesser General Public License
 ;;; along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-;;; Vibrato effect, common functions for FM and SSG
+;;; Vibrato effect, common functions all channel types
 ;;;
 
         .module nullsound
 
         .include "ym2610.inc"
         .include "struct-fx.inc"
+        .include "pipeline.inc"
 
-        .area  CODE
 
         .equ    VIBRATO_PRECALC_SIZE, 64
 
 
 
+        .area  CODE
+
+
 ;;; Enable vibrato effect for the current channel
 ;;; ------
 ;;;   ix  : state for channel
+;;;   de  : offset to the note or vol FX state
 ;;; [ hl ]: speed (4bits) and depth (4bits)
+;;; iy modified
 vibrato_init::
+        ;; iy: FX state for channel
+        push    ix
+        pop     iy
+        add     iy, de
 
         ;; if vibrato was in use, keep the current vibrato pos
-        bit     BIT_FX_VIBRATO, FX(ix)
+        bit     BIT_FX_VIBRATO, DATA_FX(iy)
         jp      nz, _post_vibrato_pos
-        ;; reset vibrato sine pos
-        ld      VIBRATO_POS(ix), #0
+        ;; else reset vibrato sine pos
+        ld      VIBRATO_POS(iy), #0
 _post_vibrato_pos:
         ;; enable vibrato FX
-        set      BIT_FX_VIBRATO, FX(ix)
+        set      BIT_FX_VIBRATO, DATA_FX(iy)
 
         ;; speed
         ld      a, (hl)
@@ -52,15 +61,20 @@ _post_vibrato_pos:
         rra
         rra
         and     #0xf
-        ld      VIBRATO_SPEED(ix), a
+        ld      VIBRATO_SPEED(iy), a
 
         ;; depth, clamped to [1..16]
         ld      a, (hl)
         and     #0xf
         inc     a
-        ld      VIBRATO_DEPTH(ix), a
+        ld      VIBRATO_DEPTH(iy), a
 
         inc     hl
+
+        ;; pop the vol of note config
+        pop     de
+
+        ld      a, #1
         ret
 
 
@@ -120,14 +134,15 @@ _post_bit1:
 ;;; defined in the sine wave.
 ;;; ------
 ;;; IN:
-;;;   ix: mirrored state of the current fm channel
+;;;   ix : state for channel
+;;;   iy : FX state for channel
 ;;; bc, de, hl modified
-vibrato_eval_step::
+eval_vibrato_step::
         ;; e: next vibrato pos
-        ld      a, VIBRATO_POS(ix)
-        add     a, VIBRATO_SPEED(ix)
+        ld      a, VIBRATO_POS(iy)
+        add     a, VIBRATO_SPEED(iy)
         and     #(VIBRATO_PRECALC_SIZE-1)
-        ld      VIBRATO_POS(ix), a
+        ld      VIBRATO_POS(iy), a
         ;; e: offset for sine precalc
         sla     a
         ld      e, a
@@ -156,7 +171,7 @@ _v_mul:
         srl     b
 
         ;; a effect depth clamped to [1..16] (5 bits)
-        ld      a, VIBRATO_DEPTH(ix)
+        ld      a, VIBRATO_DEPTH(iy)
         ;; TODO move shifts in the vibrato setup, and store bounds
         ;; as [0..15], to avoid shifts at every tick (FM and SSG)
         sla     a
@@ -207,7 +222,30 @@ _v_post_bit0:
         ld      h, a
 _v_post_sign:
 
-        ld      VIBRATO_POS16(ix), l
-        ld      VIBRATO_POS16+1(ix), h
+        ld      VIBRATO_POS16(iy), l
+        ld      VIBRATO_POS16+1(iy), h
 
+        ret
+
+
+;;; VIBRATO
+;;; Enable vibrato for the current channel
+;;; ------
+;;; [ hl ]: speed (4bits) and depth (4bits)
+vibrato::
+        push    de
+        ld      de, #NOTE_CTX
+        jp      vibrato_init
+
+
+;;; VIBRATO_OFF
+;;; Disable vibrato for the current channel
+;;; ------
+vibrato_off::
+        ;; disable FX
+        res     BIT_FX_VIBRATO, NOTE_FX(ix)
+        ;; since we disable the FX outside of the pipeline process
+        ;; make sure to load this new note at next pipeline run
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+        ld      a, #1
         ret

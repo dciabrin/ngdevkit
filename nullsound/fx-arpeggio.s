@@ -16,7 +16,7 @@
 ;;; You should have received a copy of the GNU Lesser General Public License
 ;;; along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-;;; Trigger effect (delay, cut...), common functions for FM and SSG
+;;; Arpeggio effect for FM, SSG and ADPCM-B
 ;;;
 
         .module nullsound
@@ -29,79 +29,9 @@
         .area  CODE
 
 
-;;; ARPEGGIO
-;;; Enable arpeggio chord for note playback
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: semitone:4 - semitone:4
-;;; hl modified
-arpeggio::
-        ;; check whether this disables FX
-        ld      a, (hl)
-        cp      #0
-        jr      nz, _arpeggio_init
-        inc     hl
-        res     BIT_FX_ARPEGGIO, FX(ix)
-        ;; To fully clear the state after the FX is disabled, we must remember
-        ;; to recompute the note and tune values without shift, so force it here
-        ld      ARPEGGIO_POS8(ix), a
-        set     BIT_LOAD_NOTE, PIPELINE(ix)
-        ld      a, #1
-        ret
-_arpeggio_init:
-        ;; 2nd note in chord
-        ld      a, (hl)
-        rra
-        rra
-        rra
-        rra
-        and     #0xf
-        ld      ARPEGGIO_2ND(ix), a
-
-        ;; 3rd note in chord
-        ld      a, (hl)
-        and     #0xf
-        ld      ARPEGGIO_3RD(ix), a
-
-        inc     hl
-
-        ;; init arpeggio state if it is not running already
-        bit     BIT_FX_ARPEGGIO, FX(ix)
-        jr      nz, _arpeggio_end
-        ld      a, ARPEGGIO_SPEED(ix)
-        ld      ARPEGGIO_COUNT(ix), a
-        xor     a
-        ld      ARPEGGIO_POS(ix), a
-        ld      ARPEGGIO_POS8(ix), a
-
-        set     BIT_FX_ARPEGGIO, FX(ix)
-
-_arpeggio_end:
-        ld      a, #1
-        ret
-
-
-;;; ARPEGGIO_SPEED
-;;; configure the number of ticks between two notes of the chord
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: speed
-;;; hl modified
-arpeggio_speed::
-        ld      a, (hl)
-        inc     hl
-
-        ld      ARPEGGIO_SPEED(ix), a
-
-        ld      a, #1
-
-        ret
-
-
 ;;; Update the arpeggio state for the current channel
 ;;; ------
 ;;; ix: mirrored state of the current channel
-;;; [TODO modified]
 eval_arpeggio_step::
         ;; assert: speed is always >=1, so count is never 0 here
         dec     ARPEGGIO_COUNT(ix)
@@ -141,4 +71,72 @@ _arpeggio_not1:
         ld      ARPEGGIO_POS8(ix), #0
 
 _arpeggio_eval_end:
+        ret
+
+
+;;; ARPEGGIO
+;;; Enable arpeggio chord for note playback
+;;; ------
+;;;   ix  : state for channel
+;;; [ hl ]: semitone:4 - semitone:4
+;;; hl modified
+arpeggio::
+        ;; 2nd note in chord
+        ld      a, (hl)
+        rra
+        rra
+        rra
+        rra
+        and     #0xf
+        ld      ARPEGGIO_2ND(ix), a
+
+        ;; 3rd note in chord
+        ld      a, (hl)
+        and     #0xf
+        ld      ARPEGGIO_3RD(ix), a
+
+        inc     hl
+
+        ;; init arpeggio state if it is not running already
+        bit     BIT_FX_ARPEGGIO, NOTE_FX(ix)
+        jr      nz, _arpeggio_end
+        ld      a, ARPEGGIO_SPEED(ix)
+        ld      ARPEGGIO_COUNT(ix), a
+        xor     a
+        ld      ARPEGGIO_POS(ix), a
+        ld      ARPEGGIO_POS8(ix), a
+
+        set     BIT_FX_ARPEGGIO, NOTE_FX(ix)
+
+_arpeggio_end:
+        ld      a, #1
+        ret
+
+
+;;; ARPEGGIO_SPEED
+;;; configure the number of ticks between two notes of the chord
+;;; ------
+;;;   ix  : state for channel
+;;; [ hl ]: speed
+;;; hl modified
+arpeggio_speed::
+        ld      a, (hl)
+        inc     hl
+        ld      ARPEGGIO_SPEED(ix), a
+        ld      a, #1
+        ret
+
+
+;;; ARPEGGIO_OFF
+;;; Disable arpeggio chord for note playback
+;;; ------
+;;;   ix  : state for channel
+arpeggio_off::
+        ;; disable FX
+        res     BIT_FX_ARPEGGIO, NOTE_FX(ix)
+        ld      ARPEGGIO_POS8(ix), #0
+        ;; since we disable the FX outside of the pipeline process
+        ;; make sure to load this new note at next pipeline run
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+        ld      a, #1
         ret

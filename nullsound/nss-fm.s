@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024 Damien Ciabrini
+;;; Copyright (c) 2024-2025 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -24,6 +24,7 @@
         .include "align.inc"
         .include "ym2610.inc"
         .include "struct-fx.inc"
+        .include "pipeline.inc"
 
         .lclequ FM_STATE_SIZE,(state_fm_end-state_fm_start)
         .lclequ FM_MAX_VOL,0x7f
@@ -44,8 +45,6 @@
         .lclequ OP4_BIT, 8
 
         ;; getters for FM state
-        .lclequ NOTE,(state_fm_note_semitone-state_fm)
-        .lclequ NOTE_SEMITONE,(state_fm_note_semitone-state_fm)
         .lclequ DETUNE,(state_fm_detune-state_fm)
         .lclequ NOTE_POS16,(state_fm_note_pos16-state_fm)
         .lclequ NOTE_FNUM,(state_fm_note_fnum-state_fm)
@@ -58,25 +57,10 @@
         .lclequ OUT_OPS, (state_fm_out_ops-state_fm)
         .lclequ OUT_OP1, (state_fm_out_op1-state_fm)
 
-        ;; pipeline state for FM channel
-        .lclequ STATE_PLAYING,      0x01
-        .lclequ STATE_EVAL_MACRO,   0x02
-        .lclequ STATE_LOAD_NOTE,    0x04
-        .lclequ STATE_LOAD_VOL,     0x08
-        .lclequ STATE_LOAD_REGS,    0x10
-        .lclequ STATE_LOAD_ALL,     0x1e
-        .lclequ STATE_CONFIG_VOL,   0x20
-        .lclequ STATE_NOTE_STARTED, 0x80
-        .lclequ BIT_PLAYING,        0
-        .lclequ BIT_EVAL_MACRO,     1
-        .lclequ BIT_LOAD_NOTE,      2
-        .lclequ BIT_LOAD_VOL,       3
-        .lclequ BIT_LOAD_REGS,      4
-        .lclequ BIT_CONFIG_VOL,     5
-        .lclequ BIT_NOTE_STARTED,   7
 
 
         .area  DATA
+
 
 ;;; FM playback state tracker
 ;;; ------
@@ -110,24 +94,28 @@ state_fm_ym2610_channel::
 state_fm1:
 ;;; state
 state_fm_start:
-;;; stream data
-state_fm_vol:                   .blkb    1      ; configured volume
-state_fm:
-;;; stream pipeline
-state_fm_pipeline:              .blkb   1       ; actions to run at every tick (load note, vol, other regs)
-;;; FX state trackers
-state_fm_fx:                    .blkb   1       ; enabled FX for this channel
-state_fm_trigger:               .blkb   TRIGGER_SIZE
-state_fm_fx_vol_slide:          .blkb   VOL_SLIDE_SIZE
-state_fm_fx_slide:              .blkb   SLIDE_SIZE
+;;; additional note and FX state tracker
+state_fm_note_fx:               .blkb   1      ; enabled note FX for this channel
+state_fm_note_cfg:              .blkb   1      ; configured note
+state_fm_note16:                .blkb   2      ; current decimal note
+state_fm_fx_note_slide:         .blkb   SLIDE_SIZE
 state_fm_fx_vibrato:            .blkb   VIBRATO_SIZE
 state_fm_fx_arpeggio:           .blkb   ARPEGGIO_SIZE
 state_fm_fx_legato:             .blkb   LEGATO_SIZE
+;;; stream pipeline
+state_fm:
+state_fm_pipeline:              .blkb   1      ; actions to run at every tick (load note, vol, other regs)
+state_fm_fx:                    .blkb   1      ; enabled FX for this channel
+;;; volume state tracker
+state_fm_vol_cfg:               .blkb   1      ; configured volume
+state_fm_vol16:                 .blkb   2      ; current decimal volume
+;;; FX state trackers
+state_fm_fx_vol_slide:          .blkb   SLIDE_SIZE
+state_fm_fx_trigger:            .blkb   TRIGGER_SIZE
 ;;; FM-specific state
 ;;; Note
 state_fm_note:
 state_fm_instrument:            .blkb    1      ; instrument
-state_fm_note_semitone:         .blkb    1      ; NSS note (octave+semitone) to be played on the FM channel
 state_fm_detune:                .blkb    2      ; channel's fixed-point semitone detune
 state_fm_note_pos16:            .blkb    2      ; channel's fixed-point note after the FX pipeline
 state_fm_note_fnum:             .blkb    2      ; channel's f-num after the FX pipeline
@@ -199,7 +187,8 @@ init_nss_fm_state_tracker::
 _fm_init:
         ;; FX defaults
         ld      INSTRUMENT(iy), #0xff    ; non-existing instrument
-        ld      VOL_SLIDE_MAX(iy), #FM_MAX_VOL ; max volume for channel
+        ld      NOTE_CTX+SLIDE_MAX(iy), #((8*12)-1) ; max note
+        ld      VOL_CTX+SLIDE_MAX(iy), #FM_MAX_VOL ; max volume for channel
         ld      ARPEGGIO_SPEED(iy), #1   ; default arpeggio speed
         add     iy, bc
         dec     d
@@ -423,33 +412,25 @@ fm_set_ops_level::
 ;;; ------
 ;;; ix: state for the current channel
 compute_fm_fixed_point_note::
-        ;; hl: note from currently configured note (fixed point)
-        ld      a, #0
-        ld      l, a
-        ld      h, NOTE_SEMITONE(ix)
+        ;; hl: current decimal note
+        ld      l, NOTE16(ix)
+        ld      h, NOTE16+1(ix)
 
-        ;; bc: slide offset if the slide FX is enabled
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _fm_post_add_slide
-        ld      l, SLIDE_POS16(ix)
-        ld      h, SLIDE_POS16+1(ix)
-_fm_post_add_slide::
-
-        ;; hl: detuned semitone
+        ;; + detuned semitone
         ld      c, DETUNE(ix)
         ld      b, DETUNE+1(ix)
         add     hl, bc
 
-        ;; hl: arpeggio offset
+        ;; + arpeggio offset
         ld      c, #0
         ld      b, ARPEGGIO_POS8(ix)
         add     hl, bc
 
-        ;; bc vibrato offset if the vibrato FX is enabled
-        bit     BIT_FX_VIBRATO, FX(ix)
+        ;; + vibrato offset if the vibrato FX is enabled
+        bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _fm_post_add_vibrato
-        ld      c, VIBRATO_POS16(ix)
-        ld      b, VIBRATO_POS16+1(ix)
+        ld      c, NOTE_CTX+VIBRATO_POS16(ix)
+        ld      b, NOTE_CTX+VIBRATO_POS16+1(ix)
         add     hl, bc
 _fm_post_add_vibrato::
 
@@ -466,11 +447,8 @@ compute_ym2610_fm_vol::
         push    iy
 
         ;; a: note vol for current channel
-        ld      a, VOL(ix)
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _fm_post_vol
-        ld      a, VOL_SLIDE_POS16+1(ix)
-_fm_post_vol:
+        ld      a, VOL16+1(ix)
+
         ;; b: convert volume to attenuation
         neg
         add     #FM_MAX_VOL
@@ -653,43 +631,57 @@ _fm_update_loop:
         ;; bail out if the current channel is not in use
         ld      a, PIPELINE(ix)
         or      a, FX(ix)
+        or      a, NOTE_FX(ix)
         cp      #0
         jp      z, _end_fm_channel_pipeline
 
         ;; Pipeline action: evaluate one FX step for each enabled FX
 
+        ;; misc FX
         bit     BIT_FX_TRIGGER, FX(ix)
         jr      z, _fm_post_fx_trigger
         ld      hl, #state_fm_action_funcs
         call    eval_trigger_step
 _fm_post_fx_trigger:
-        bit     BIT_FX_LEGATO, FX(ix)
-        jr      z, _fm_post_fx_legato
-        ld      hl, #NOTE_SEMITONE
-        call    eval_legato_step
+
+        ;; iy: volume FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #VOL_CTX
+        add     iy, bc
+
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _fm_post_fx_vol_slide
+        call    eval_slide_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_fm_post_fx_vol_slide:
+
+        ;; iy: note FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #NOTE_CTX
+        add     iy, bc
+
+        bit     BIT_FX_SLIDE, NOTE_FX(ix)
+        jr      z, _fm_post_fx_slide
+        call    eval_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
-_fm_post_fx_legato:
-        bit     BIT_FX_VIBRATO, FX(ix)
+_fm_post_fx_slide:
+        bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _fm_post_fx_vibrato
-        call    eval_fm_vibrato_step
+        call    eval_vibrato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _fm_post_fx_vibrato:
-        bit     BIT_FX_ARPEGGIO, FX(ix)
+        bit     BIT_FX_ARPEGGIO, NOTE_FX(ix)
         jr      z, _fm_post_fx_arpeggio
         call    eval_arpeggio_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _fm_post_fx_arpeggio:
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _fm_post_fx_slide
-        ld      hl, #NOTE_SEMITONE
-        call    eval_slide_step
+        bit     BIT_FX_LEGATO, NOTE_FX(ix)
+        jr      z, _fm_post_fx_legato
+        call    eval_legato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
-_fm_post_fx_slide:
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _fm_post_fx_vol_slide
-        call    eval_vol_slide_step
-        set     BIT_LOAD_VOL, PIPELINE(ix)
-_fm_post_fx_vol_slide:
+_fm_post_fx_legato:
 
         ;; Pipeline action: make sure no load note takes place when not playing
         bit     BIT_PLAYING, PIPELINE(ix)
@@ -982,51 +974,33 @@ fm_pitch::
         ret
 
 
-;;; Update the vibrato for the current FM channel
-;;; ------
-;;; ix: mirrored state of the current fm channel
-eval_fm_vibrato_step::
-        push    hl
-        push    de
-        push    bc
-
-        call    vibrato_eval_step
-
-        pop     bc
-        pop     de
-        pop     hl
-
-        ret
-
-
 ;;; Configure state for new note and trigger a load in the pipeline
 ;;; ------
 fm_configure_note_on:
         push    bc
-        push    af              ; +note
         ;; if a slide is ongoing, this is treated as a slide FX update
-        bit     BIT_FX_SLIDE, FX(ix)
+        bit     BIT_FX_SLIDE, NOTE_FX(ix)
         jr      z, _fm_cfg_note_update
-        pop     bc              ; -note
-        ld      c, NOTE_SEMITONE(ix)
+        ld      bc, #NOTE_CTX
         call    slide_update
         ;; if a note is currently playing, do nothing else, the
         ;; portamento will be updated at the next pipeline run...
         bit     BIT_NOTE_STARTED, PIPELINE(ix)
         jr      nz, _fm_cfg_note_end
-        ;; ... else a new instrument was loaded, reload this note as well
+        ;; ... else prepare the note for reload as well
         jr      _fm_cfg_note_prepare_ym2610
 _fm_cfg_note_update:
         ;; update the current note and prepare the ym2610
-        pop     af              ; -note
-        ld      NOTE_SEMITONE(ix), a
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
+        ld      NOTE(ix), a
+        ld      NOTE16+1(ix), a
+        ld      NOTE16(ix), #0
 _fm_cfg_note_prepare_ym2610:
         ;; stop playback on the channel, and let the pipeline restart it
         ld      a, (state_fm_ym2610_channel)
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
         call    ym2610_write_port_a
-        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
@@ -1040,12 +1014,17 @@ _fm_cfg_note_end:
 ;;; ------
 fm_configure_vol:
         ;; if a volume slide is ongoing, treat it as a volume slide FX update
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _fm_cfg_vol_update
-        call    vol_slide_update
+        push    bc
+        ld      bc, #VOL_CTX
+        call    slide_update
+        pop     bc
         jr      _fm_cfg_vol_end
 _fm_cfg_vol_update:
         ld      VOL(ix), a
+        ld      VOL16+1(ix), a
+        ld      VOL16(ix), #0
         ;; reload configured vol at the next pipeline run
         set     BIT_LOAD_VOL, PIPELINE(ix)
 _fm_cfg_vol_end:
@@ -1207,106 +1186,6 @@ op4_lvl::
         inc     hl
         ld      OP4(ix), a
         set     BIT_LOAD_VOL, PIPELINE(ix)
-        ld      a, #1
-        ret
-
-
-;;; FM_VIBRATO
-;;; Enable vibrato for the current FM channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-fm_vibrato::
-        ;; TODO: move this part to common vibrato_init
-
-        ;; hl == 0 means disable vibrato
-        ld      a, (hl)
-        cp      #0
-        jr      nz, _setup_fm_vibrato
-
-        ;; disable vibrato fx
-        res     BIT_FX_VIBRATO, FX(ix)
-
-        ;; reload configured note at the next pipeline run
-        set     BIT_LOAD_NOTE, PIPELINE(ix)
-
-        inc     hl
-        jr      _post_fm_vibrato_setup
-
-_setup_fm_vibrato:
-        call    vibrato_init
-
-_post_fm_vibrato_setup:
-
-        ld      a, #1
-        ret
-
-
-;;; FM_NOTE_SLIDE_UP
-;;; Enable slide up effect for the current FM channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-fm_note_slide_up::
-        push    bc
-        ld      b, #0
-        ld      c, #NOTE_SEMITONE
-        call    slide_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; FM_NOTE_SLIDE_DOWN
-;;; Enable slide down effect for the current FM channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-fm_note_slide_down::
-        push    bc
-        ld      b, #1
-        ld      c, #NOTE_SEMITONE
-        call    slide_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; FM_PITCH_SLIDE_UP
-;;; Enable slide up effect for the current FM channel
-;;; ------
-;;; [ hl ]: speed (8bits)
-fm_pitch_slide_up::
-        push    bc
-        ld      b, #0
-        ld      c, #NOTE_SEMITONE
-        call    slide_pitch_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; FM_PITCH_SLIDE_DOWN
-;;; Enable slide down effect for the current FM channel
-;;; ------
-;;; [ hl ]: speed (8bits)
-fm_pitch_slide_down::
-        push    bc
-        ld      b, #1
-        ld      c, #NOTE_SEMITONE
-        call    slide_pitch_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; FM_PORTAMENTO
-;;; Enable slide to the next note to be loaded into the pipeline
-;;; ------
-;;; [ hl ]: speed
-fm_portamento::
-        ;; current note (start of portamento)
-        ld      a, NOTE_POS16+1(ix)
-
-        call    slide_portamento_init
-
         ld      a, #1
         ret
 

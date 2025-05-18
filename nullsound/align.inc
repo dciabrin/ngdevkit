@@ -27,6 +27,6 @@
         ;; to tune the constants below to achieve our desired alignment.
 
         .lclequ ALIGN_OFFSET_FM,        0xbc
-        .lclequ ALIGN_OFFSET_SSG,       0x50
+        .lclequ ALIGN_OFFSET_SSG,       0x4b
         .lclequ ALIGN_OFFSET_ADPCM_A,   0x52
-        .lclequ ALIGN_OFFSET_ADPCM_B,   0x1a
+        .lclequ ALIGN_OFFSET_ADPCM_B,   0x10

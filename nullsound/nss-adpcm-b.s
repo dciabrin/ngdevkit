@@ -24,14 +24,13 @@
         .include "align.inc"
         .include "ym2610.inc"
         .include "struct-fx.inc"
+        .include "pipeline.inc"
 
 
         .lclequ ADPCM_B_STATE_SIZE,(state_b_end-state_b_start)
         .lclequ ADPCM_B_MAX_VOL,0xff
 
         ;; getters for ADPCM-B state
-        .lclequ NOTE, (state_b_note_semitone-state_b)
-        .lclequ NOTE_SEMITONE, (state_b_note_semitone-state_b)
         .lclequ NOTE_POS16,(state_b_note_pos16-state_b)
         .lclequ DELTA_N, (state_b_note_delta_n-state_b)
         .lclequ OUT_VOL, (state_b_out_vol-state_b)
@@ -44,22 +43,10 @@
         .equ    NSS_ADPCM_B_INSTRUMENT_PROPS,   4
         .equ    NSS_ADPCM_B_NEXT_REGISTER,      8
 
-        ;; pipeline state for ADPCM-B channel
-        .lclequ STATE_PLAYING,      0x01
-        .lclequ STATE_EVAL_MACRO,   0x02
-        .lclequ STATE_LOAD_NOTE,    0x04
-        .lclequ STATE_LOAD_VOL,     0x08
-        .lclequ STATE_LOAD_PAN,     0x10
-        .lclequ STATE_NOTE_STARTED, 0x80
-        .lclequ BIT_PLAYING,        0
-        .lclequ BIT_EVAL_MACRO,     1
-        .lclequ BIT_LOAD_NOTE,      2
-        .lclequ BIT_LOAD_VOL,       3
-        .lclequ BIT_LOAD_PAN,       4
-        .lclequ BIT_NOTE_STARTED,   7
 
 
         .area  DATA
+
 
         ;; FIXME: temporary padding to ensures the next data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
@@ -74,22 +61,27 @@ _state_adpcm_b_start:
 ;;; ADPCM-B mirrored state
 ;;; state
 state_b_start:
-;;; stream data
-state_b_vol:                    .blkb   1       ; configured volume
-state_b:
-state_b_pipeline:               .blkb   1       ; actions to run at every tick (load note, vol, other regs)
-;;; FX state trackers
-state_b_fx:                     .blkb   1       ; enabled FX for this channel
-state_b_trigger:                .blkb   TRIGGER_SIZE
-state_b_fx_vol_slide:           .blkb   VOL_SLIDE_SIZE
-state_b_fx_slide:               .blkb   SLIDE_SIZE
+;;; additional note and FX state tracker
+state_b_note_fx:                .blkb   1       ; enabled note FX for this channel
+state_b_note_cfg:               .blkb   1       ; configured note
+state_b_note16:                 .blkb   2       ; current decimal note
+state_b_fx_note_slide:          .blkb   SLIDE_SIZE
 state_b_fx_vibrato:             .blkb   VIBRATO_SIZE
 state_b_fx_arpeggio:            .blkb   ARPEGGIO_SIZE
 state_b_fx_legato:              .blkb   LEGATO_SIZE
+;;; stream pipeline
+state_b:
+state_b_pipeline:               .blkb   1       ; actions to run at every tick (load note, vol, other regs)
+state_b_fx:                     .blkb   1       ; enabled FX for this channel
+;;; volume state tracker
+state_b_vol_cfg:                .blkb   1       ; configured volume
+state_b_vol16:                  .blkb   2       ; current decimal volume
+;;; FX state trackers
+state_b_fx_vol_slide:           .blkb   SLIDE_SIZE
+state_b_trigger:                .blkb   TRIGGER_SIZE
 ;;; ADPCM-B-specific state
 ;;; Note
 state_b_note:
-state_b_note_semitone:          .blkb   1       ; NSS note (octave+semitone) to be played
 state_b_note_pos16:             .blkb   2       ; fixed-point note after the FX pipeline
 state_b_note_delta_n:           .blkb   2       ; ym2610 delta-N after the FX pipeline
 ;;; instrument
@@ -100,7 +92,7 @@ state_b_instr_base_delta_n:     .blkb   2       ; instrument base delta-n table 
 ;;; volume
 state_b_out_vol:                .blkb   1       ; ym2610 volume after the FX pipeline
 ;;; pan
-state_b_pan:                    .blkb    1      ; configured pan (b7: left, b6: right)
+state_b_pan:                    .blkb   1       ; configured pan (b7: left, b6: right)
 ;;;
 state_b_end:
 
@@ -111,7 +103,10 @@ state_adpcm_b_volume_attenuation::   .blkb   1
 
 _state_adpcm_b_end:
 
+
+
         .area  CODE
+
 
 ;;; context: channel action functions for FM
 state_b_action_funcs::
@@ -125,21 +120,22 @@ state_b_action_funcs::
 ;;; ------
 ;;; [a modified - other registers saved]
 init_nss_adpcm_b_state_tracker::
-        ld      hl, #state_b
+        ld      hl, #state_b_start
         ld      d, h
         ld      e, l
         inc     de
         ;; zero states
         ld      (hl), #0
-        ld      bc, #(state_b_end-1-state_b)
+        ld      bc, #(state_b_end-1-state_b_start)
         ldir
         ;; FX defaults
-        ld      ix, #state_b
-        ld      START_CMD(ix), #0x80     ; default ADPCM-B start flag
-        ld      VOL(ix), #0xff           ; default volume
-        ld      INSTR(ix), #0xff         ; default non-existing instrument
-        ld      VOL_SLIDE_MAX(ix), #ADPCM_B_MAX_VOL ; max volume for channel
-        ld      ARPEGGIO_SPEED(ix), #1   ; default arpeggio speed
+        ld      iy, #state_b
+        ld      START_CMD(iy), #0x80     ; default ADPCM-B start flag
+        ld      VOL(iy), #0xff           ; default volume
+        ld      INSTR(iy), #0xff         ; default non-existing instrument
+        ld      NOTE_CTX+SLIDE_MAX(iy), #((8*12)-1) ; max note
+        ld      VOL_CTX+SLIDE_MAX(iy), #ADPCM_B_MAX_VOL ; max volume for channel
+        ld      ARPEGGIO_SPEED(iy), #1   ; default arpeggio speed
 
         ;; global ADPCM volumes are initialized in the volume state tracker
         ret
@@ -161,44 +157,57 @@ run_adpcm_b_pipeline::
         ;; bail out if the current channel is not in use
         ld      a, PIPELINE(ix)
         or      a, FX(ix)
+        or      a, NOTE_FX(ix)
         cp      #0
         jp      z, _end_b_channel_pipeline
 
         ;; Pipeline action: evaluate one FX step for each enabled FX
 
+        ;; misc FX
         bit     BIT_FX_TRIGGER, FX(ix)
         jr      z, _b_post_fx_trigger
         ld      hl, #state_b_action_funcs
         call    eval_trigger_step
 _b_post_fx_trigger:
-        bit     BIT_FX_LEGATO, FX(ix)
-        jr      z, _b_post_fx_legato
-        ld      hl, #NOTE_SEMITONE
-        call    eval_legato_step
+
+        ;; iy: FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #VOL_CTX
+        add     iy, bc
+
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _b_post_fx_vol_slide
+        call    eval_slide_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_b_post_fx_vol_slide:
+
+        ;; iy: note FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #NOTE_CTX
+        add     iy, bc
+
+        bit     BIT_FX_SLIDE, NOTE_FX(ix)
+        jr      z, _b_post_fx_slide
+        call    eval_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
-_b_post_fx_legato:
-        bit     BIT_FX_VIBRATO, FX(ix)
+_b_post_fx_slide:
+        bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _b_post_fx_vibrato
-        call    eval_b_vibrato_step
+        call    eval_vibrato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _b_post_fx_vibrato:
-        bit     BIT_FX_ARPEGGIO, FX(ix)
+        bit     BIT_FX_ARPEGGIO, NOTE_FX(ix)
         jr      z, _b_post_fx_arpeggio
         call    eval_arpeggio_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _b_post_fx_arpeggio:
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _b_post_fx_slide
-        ld      hl, #NOTE_SEMITONE
-        call    eval_slide_step
+        bit     BIT_FX_LEGATO, NOTE_FX(ix)
+        jr      z, _b_post_fx_legato
+        call    eval_legato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
-_b_post_fx_slide:
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _b_post_fx_vol_slide
-        call    eval_vol_slide_step
-        set     BIT_LOAD_VOL, PIPELINE(ix)
-_b_post_fx_vol_slide:
-
+_b_post_fx_legato:
 
         ;; Pipeline action: make sure no load note takes place when not playing
         bit     BIT_PLAYING, PIPELINE(ix)
@@ -272,7 +281,7 @@ _end_b_channel_pipeline:
 ;;; output volume = [0..1] * input volume, where the scale factor
 ;;; is the currently configured ADPCM-B output level [0x00..0xff]
 ;;; ------
-;;; a: input level [0x00..0x1f]
+;;; a: input level [0x00..0xff]
 ;;; modified: bc
 adpcm_b_scale_output::
         push    hl
@@ -425,50 +434,32 @@ _adpcm_b_instr_end:
         ret
 
 
-;;; Update the vibrato for the ADPCM-B channel
-;;; ------
-;;; ix: mirrored state of the ADPCM-B channel
-eval_b_vibrato_step::
-        push    hl
-        push    de
-        push    bc
-
-        call    vibrato_eval_step
-
-        pop     bc
-        pop     de
-        pop     hl
-
-        ret
-
-
 ;;; Configure state for new note and trigger a load in the pipeline
 ;;; ------
 adpcm_b_configure_note_on:
         push    bc
-        push    af              ; +note
         ;; if a slide is ongoing, this is treated as a slide FX update
-        bit     BIT_FX_SLIDE, FX(ix)
+        bit     BIT_FX_SLIDE, NOTE_FX(ix)
         jr      z, _b_cfg_note_update
-        pop     bc              ; -note
-        ld      c, NOTE_SEMITONE(ix)
+        ld      bc, #NOTE_CTX
         call    slide_update
         ;; if a note is currently playing, do nothing else, the
         ;; portamento will be updated at the next pipeline run...
         bit     BIT_NOTE_STARTED, PIPELINE(ix)
         jr      nz, _b_cfg_note_end
-        ;; ... else a new instrument was loaded, reload this note as well
+        ;; ... else prepare the note for reload as well
         jr      _b_cfg_note_prepare_ym2610
 _b_cfg_note_update:
         ;; update the current note and prepare the ym2610
-        pop     af              ; -note
-        ld      NOTE_SEMITONE(ix), a
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
+        ld      NOTE(ix), a
+        ld      NOTE16+1(ix), a
+        ld      NOTE16(ix), #0
 _b_cfg_note_prepare_ym2610:
         ;; stop playback on the channel, and let the pipeline restart it
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #1           ; reset flag (clears start and repeat in YM2610)
         call    ym2610_write_port_a
-        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
@@ -481,12 +472,17 @@ _b_cfg_note_end:
 ;;; ------
 adpcm_b_configure_vol:
         ;; if a volume slide is ongoing, treat it as a volume slide FX update
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _b_cfg_vol_update
-        call    vol_slide_update
+        push    bc
+        ld      bc, #VOL_CTX
+        call    slide_update
+        pop     bc
         jr      _b_cfg_vol_end
 _b_cfg_vol_update:
         ld      VOL(ix), a
+        ld      VOL16+1(ix), a
+        ld      VOL16(ix), #0
         ;; reload configured vol at the next pipeline run
         set     BIT_LOAD_VOL, PIPELINE(ix)
 _b_cfg_vol_end:
@@ -525,11 +521,7 @@ _b_note_on_end:
 ;;; modified: bc
 compute_ym2610_adpcm_b_vol::
         ;; a: note vol
-        ld      a, VOL(ix)
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _b_post_vol
-        ld      a, VOL_SLIDE_POS16+1(ix)
-_b_post_vol:
+        ld      a, VOL16+1(ix)
 
         ;; scale volume based on global attenuation
         call    adpcm_b_scale_output
@@ -543,28 +535,20 @@ _b_post_vol:
 ;;; ------
 ;;; ix: state for the current channel
 compute_adpcm_b_fixed_point_note::
-        ;; hl: note from currently configured note (fixed point)
-        ld      a, #0
-        ld      l, a
-        ld      h, NOTE_SEMITONE(ix)
+        ;; hl: current decimal note
+        ld      l, NOTE16(ix)
+        ld      h, NOTE16+1(ix)
 
-        ;; bc: slide offset if the slide FX is enabled
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _b_post_add_slide
-        ld      l, SLIDE_POS16(ix)
-        ld      h, SLIDE_POS16+1(ix)
-_b_post_add_slide::
-
-        ;; hl: arpeggio offset
+        ;; + arpeggio offset
         ld      c, #0
         ld      b, ARPEGGIO_POS8(ix)
         add     hl, bc
 
-        ;; bc vibrato offset if the vibrato FX is enabled
-        bit     BIT_FX_VIBRATO, FX(ix)
+        ;; + vibrato offset if the vibrato FX is enabled
+        bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _b_post_add_vibrato
-        ld      c, VIBRATO_POS16(ix)
-        ld      b, VIBRATO_POS16+1(ix)
+        ld      c, NOTE_CTX+VIBRATO_POS16(ix)
+        ld      b, NOTE_CTX+VIBRATO_POS16+1(ix)
         add     hl, bc
 _b_post_add_vibrato::
 
@@ -742,76 +726,6 @@ adpcm_b_ctx:
         ret
 
 
-;;; B_NOTE_SLIDE_UP
-;;; Enable slide up effect for the ADPCM-B channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-b_note_slide_up::
-        push    bc
-        ld      b, #0
-        ld      c, #NOTE_SEMITONE
-        call    slide_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; B_NOTE_SLIDE_DOWN
-;;; Enable slide down effect for the ADPCM-B channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-b_note_slide_down::
-        push    bc
-        ld      b, #1
-        ld      c, #NOTE_SEMITONE
-        call    slide_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; B_PITCH_SLIDE_UP
-;;; Enable slide up effect for the ADPCM-B channel
-;;; ------
-;;; [ hl ]: speed (8bits)
-b_pitch_slide_up::
-        push    bc
-        ld      b, #0
-        ld      c, #NOTE_SEMITONE
-        call    slide_pitch_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; B_PITCH_SLIDE_DOWN
-;;; Enable slide down effect for the ADPCM-B channel
-;;; ------
-;;; [ hl ]: speed (8bits)
-b_pitch_slide_down::
-        push    bc
-        ld      b, #1
-        ld      c, #NOTE_SEMITONE
-        call    slide_pitch_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; ADPCM_B_PORTAMENTO
-;;; Enable slide to the next note to be loaded into the pipeline
-;;; ------
-;;; [ hl ]: speed
-adpcm_b_portamento::
-        ;; current note (start of portamento)
-        ld      a, NOTE_POS16+1(ix)
-
-        call    slide_portamento_init
-
-        ld      a, #1
-        ret
-
-
 ;;; ADPCM_B_DELAY
 ;;; Enable delayed trigger for the next note and volume
 ;;; (note and volume and played after a number of ticks)
@@ -846,62 +760,4 @@ adpcm_b_pan::
         set     BIT_LOAD_PAN, PIPELINE(ix)
 
         ld      a, #1
-        ret
-
-
-;;; ADPCM_B_VIBRATO
-;;; Enable vibrato for the channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-adpcm_b_vibrato::
-        ;; TODO: move this part to common vibrato_init
-
-        ;; hl == 0 means disable vibrato
-        ld      a, (hl)
-        cp      #0
-        jr      nz, _setup_b_vibrato
-
-        ;; disable vibrato fx
-        res     BIT_FX_VIBRATO, FX(ix)
-
-        ;; reload configured note at the next pipeline run
-        set     BIT_LOAD_NOTE, PIPELINE(ix)
-
-        inc     hl
-        jr      _post_b_vibrato_setup
-
-_setup_b_vibrato:
-        call    vibrato_init
-
-_post_b_vibrato_setup:
-
-        ld      a, #1
-        ret
-
-
-;;; ADPCM_B_NOTE_SLIDE_UP
-;;; Enable slide up effect for the ADPCM-B channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-adpcm_b_note_slide_up::
-        push    bc
-        ld      b, #0
-        ld      c, #NOTE_SEMITONE
-        call    slide_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; ADPCM_B_NOTE_SLIDE_DOWN
-;;; Enable slide down effect for the ADPCM-B channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-adpcm_b_note_slide_down::
-        push    bc
-        ld      b, #1
-        ld      c, #NOTE_SEMITONE
-        call    slide_init
-        ld      a, #1
-        pop     bc
         ret
