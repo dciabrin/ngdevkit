@@ -37,13 +37,19 @@ cmd_jmptable_padding:
         .endm
 
         ;; private helper to generate z80 opcode to stay idle in RAM
+        .lclequ RESET_WAIT_PC,0xfffe
+        .lclequ OPCODE_JR_TO_SELF,0xfe18
         .macro  prepare_wait_in_ram_opcodes
         ;; create a jmp-to-self instruction at the top of the RAM
         ;; to ensure the 68k can bank-switch z80 code without impact
-        ld      bc, #0xfe18     ; jr <self>
-        ld      (#0xfffe), bc
+        ld      bc, #OPCODE_JR_TO_SELF     ; jr <self>
+        ld      (#RESET_WAIT_PC), bc
         ;; ;; prepare the stack to pop into the jump-to-self in RAM
         ld      hl, #0xfffe
         ld      sp, hl
         push    hl
         .endm
+
+        ;; address of an optional hook function that gets called
+        ;; once the driver finished its initialization
+        .lclequ POST_INIT_HOOK, RESET_WAIT_PC

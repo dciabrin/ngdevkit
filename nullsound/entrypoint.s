@@ -24,7 +24,8 @@
         .include "ports.inc"
         .include "ym2610.inc"
 
-        .equ    MAX_PENDING_COMMANDS, 64
+        .equ     START_OF_STACK, 0xfffd
+        .equ     MAX_PENDING_COMMANDS, 64
 
 
 
@@ -121,6 +122,19 @@ init_z80_and_wait:
         ret
 
 
+;;; Intialize and start the sound driver
+;;; This function is called during a NMI, this is the last
+;;; function called from the NMI before starting the driver
+;;; ------
+;;; [ bc ]: optional hook, called after the driver is initialized
+snd_init_driver_from_nmi::
+        di
+        ld      (#POST_INIT_HOOK), bc
+        ld      sp, #START_OF_STACK
+        ld      hl, #snd_start_driver
+        push    hl
+        retn
+
 
 ;;; Sound driver
 ;;; ------------
@@ -149,6 +163,17 @@ snd_start_driver::
         xor     a
         ld      (command_fifo_current), a
         ld      (command_fifo_pending), a
+
+        ;; if there is a post-hook function configured, run it
+        ;; now before entering the main loop
+        ld      hl, (#POST_INIT_HOOK)
+        ld      a, h
+        or      l
+        jr      z, snd_mainloop
+        ld      bc, #snd_mainloop
+        push    bc
+        push    hl
+        ret
 
 snd_mainloop:
         ;; process pending commands if any
