@@ -255,33 +255,33 @@ def register_nss_ops():
         ("s_vol"   , ["volume"]),
         ("fm_vol"  , ["volume"]),
         ("s_env"   , ["fine", "coarse"]),
-        ("s_vibrato", ["speed_depth"]),
-        ("s_slide_u", ["speed_depth"]),
-        ("s_slide_d", ["speed_depth"]),
+        None,
+        None,
+        None,
         # 0x30
-        ("fm_vibrato", ["speed_depth"]),
-        ("fm_note_slide_u", ["speed_depth"]),
-        ("fm_note_slide_d", ["speed_depth"]),
+        None,
+        None,
+        None,
         ("b_vol"   , ["volume"]),
         ("a_vol"   , ["volume"]),
         ("fm_pan"  , ["pan_mask"]),
-        ("fm_vol_slide_d", ["speed"]),
-        ("s_vol_slide_d", ["speed"]),
+        None,
+        None,
         # 0x38
-        ("fm_pitch_slide_d", ["speed"]),
+        None,
         ("s_delay" , ["delay"]),
         ("fm_delay", ["delay"]),
         ("a_delay" , ["delay"]),
         ("b_ctx"   , ),
-        ("fm_porta", ["speed"]),
-        ("fm_pitch_slide_u", ["speed"]),
+        None,
+        None,
         ("s_pitch" , ["pitch"]),
         # 0x40
-        ("b_pitch_slide_u", ["speed"]),
-        ("s_pitch_slide_u", ["speed"]),
-        ("b_porta", ["speed"]),
-        ("s_pitch_slide_d", ["speed"]),
-        ("s_porta", ["speed"]),
+        None,
+        None,
+        None,
+        None,
+        None,
         ("fm_cut",   ["delay"]),
         ("s_cut",    ["delay"]),
         ("a_cut",    ["delay"]),
@@ -291,18 +291,33 @@ def register_nss_ops():
         ("a_retrigger", ["delay"]),
         ("a_pan",    ["pan_mask"]),
         ("b_pan",    ["pan_mask"]),
-        ("b_vibrato", ["speed_depth"]),
+        None,
         ("call_tbl" , ["calls"]),
         ("fm_note_w" , ["note"]),
         # 0x50
         ("s_note_w"  , ["note"]),
         ("a_start_w" , ),
         ("fm_stop_w" , ),
-        ("b_note_slide_u", ["speed_depth"]),
-        ("b_note_slide_d", ["speed_depth"]),
         ("arpeggio",  ["first_second"]),
         ("arpeggio_speed", ["speed"]),
-        ("quick_legato", ["delay_transpose"]),
+        ("arpeggio_off", ),
+        ("quick_legato_u", ["delay_transpose"]),
+        ("quick_legato_d", ["delay_transpose"]),
+        # 0x58
+        ("vol_slide_off", ),
+        ("vol_slide_u"  , ["increment"]),
+        ("vol_slide_d"  , ["increment"]),
+        ("note_slide_off", ),
+        ("note_slide_u"  , ["speed_depth"]),
+        ("note_slide_d"  , ["speed_depth"]),
+        ("note_pitch_slide_u"  , ["speed"]),
+        ("note_pitch_slide_d"  , ["speed"]),
+        # 0x60
+        ("note_porta",  ["speed"]),
+        ("vibrato",     ["speed_depth"]),
+        ("vibrato_off", ),
+
+
         # reserved opcodes
         ("nss_label", ["pat"])
     )
@@ -354,19 +369,23 @@ def convert_fm_row(row, channel):
     if not is_empty(row):
         # context
         opcodes.append(ctx_t[channel]())
-        # volume (must be in the NSS stream before instrument)
+        # opcodes that must be executed before a vol/instr/note
+        for fx, fxval in row.fx:
+            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
+                opcodes.append(vol_slide_off())
+            elif fx == 0xed:  # note delay
+                opcodes.append(fm_delay(fxval))
+        # volume (must be in the NSS stream before instrument (check?))
         if row.vol != -1:
             opcodes.append(fm_vol(row.vol))
-        # pre-instrument effects
-        for fx, fxval in row.fx:
-            if fx == 0xed:  # note delay
-                opcodes.append(fm_delay(fxval))
         # instrument
         if row.ins != -1:
             opcodes.append(fm_instr(row.ins))
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
+                pass
+            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
@@ -379,17 +398,14 @@ def convert_fm_row(row, channel):
             elif fx == 0xff:  # Stop song
                 jmp_to_order = 257
             elif fx == 0x00:  # arpeggio
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(arpeggio(fxval))
+                if fxval in [-1, 0]:
+                    opcodes.append(arpeggio_off())
+                else:
+                    opcodes.append(arpeggio(fxval))
             elif fx == 0x0f:  # Speed
                 opcodes.append(speed(fxval))
             elif fx == 0x09:  # Groove
                 opcodes.append(groove(fxval))
-            elif fx == 0x04:  # vibrato
-                # fxval == -1 means disable vibrato
-                fxval = max(fxval, 0)
-                opcodes.append(fm_vibrato(fxval))
             elif fx == 0x12:  # OP1 level
                 opcodes.append(op1_lvl(fxval))
             elif fx == 0x13:  # OP2 level
@@ -400,22 +416,24 @@ def convert_fm_row(row, channel):
                 opcodes.append(op4_lvl(fxval))
             elif fx == 0xe5:  # pitch
                 opcodes.append(fm_pitch(fxval))
-            elif fx == 0x0a:  # volume slide down
-                # fxval == -1 means disable vibrato
-                fxval = max(fxval, 0)
-                opcodes.append(fm_vol_slide_d(fxval))
-            elif fx == 0x02:  # pitch slide down
-                # fxval == -1 means disable vibrato
-                fxval = max(fxval, 0)
-                opcodes.append(fm_pitch_slide_d(fxval))
+            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
+                if fxval > 0x0f:
+                    opcodes.append(vol_slide_u(fxval>>4))
+                else:
+                    opcodes.append(vol_slide_d(fxval))
+            elif fx in [0x01, 0x02] and fxval in [-1, 0]:
+                opcodes.append(note_slide_off())
             elif fx == 0x01:  # pitch slide up
-                # fxval == -1 means disable vibrato
-                fxval = max(fxval, 0)
-                opcodes.append(fm_pitch_slide_u(fxval))
+                opcodes.append(note_pitch_slide_u(fxval))
+            elif fx == 0x02:  # pitch slide down
+                opcodes.append(note_pitch_slide_d(fxval))
             elif fx == 0x03:  # portamento
-                opcodes.append(fm_porta(fxval))
-            elif fx == 0xec:  # cut
-                opcodes.append(fm_cut(fxval))
+                opcodes.append(note_porta(fxval))
+            elif fx == 0x04:  # vibrato
+                if fxval in [-1, 0]:
+                    opcodes.append(vibrato_off())
+                else:
+                    opcodes.append(vibrato(fxval))
             elif fx in [0x08, 0x80]: # panning
                 pan_mask = convert_pan(fx, fxval)
                 opcodes.append(fm_pan(pan_mask))
@@ -423,8 +441,20 @@ def convert_fm_row(row, channel):
                 # fxval == -1 means default arpeggio speed
                 fxval = max(fxval, 1)
                 opcodes.append(arpeggio_speed(fxval))
-            elif fx == 0xe6:  # quick legato
-                opcodes.append(quick_legato(fxval))
+            elif fx in [0xe1, 0xe2] and fxval in [-1, 0]:
+                opcodes.append(note_slide_off())
+            elif fx == 0xe6:  # quick legato up/down
+                ticks, semitones = fxval>>4, fxval&0xf
+                if 8 <= ticks <= 15:
+                    opcodes.append(quick_legato_d((ticks-8)<<4|semitones))
+                else:
+                    opcodes.append(quick_legato_u((ticks)<<4|semitones))
+            elif fx == 0xe8:  # quick legato up
+                opcodes.append(quick_legato_u(fxval))
+            elif fx == 0xe9:  # quick legato down
+                opcodes.append(quick_legato_d(fxval))
+            elif fx == 0xec:  # cut
+                opcodes.append(fm_cut(fxval))
             else:
                 add_unknown_fx('FM', fx)
 
@@ -438,14 +468,11 @@ def convert_fm_row(row, channel):
         # post-note opcodes are FX that rely on the row's note
         # to be already processed
         for fx, fxval in row.fx:
-            if fx == 0xe1:  # slide up
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(fm_note_slide_u(fxval))
-            elif fx == 0xe2:  # slide down
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(fm_note_slide_d(fxval))
+            if fx in [0xe1, 0xe2] and fxval not in [-1, 0]:
+                if fx == 0xe1:  # slide up
+                    opcodes.append(note_slide_u(fxval))
+                elif fx == 0xe2:  # slide down
+                    opcodes.append(note_slide_d(fxval))
 
     return jmp_to_order, opcodes
 
@@ -470,8 +497,10 @@ def convert_s_row(row, channel):
     if not is_empty(row):
         # context
         opcodes.append(ctx_t[channel]())
-        # pre note/vol effects
+        # opcodes that must be executed before a vol/instr/note
         for fx, fxval in row.fx:
+            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
+                opcodes.append(vol_slide_off())
             if fx == 0xed:  # note delay
                 opcodes.append(s_delay(fxval))
         # instrument
@@ -485,6 +514,8 @@ def convert_s_row(row, channel):
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
+                pass
+            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
@@ -506,34 +537,44 @@ def convert_s_row(row, channel):
                 opcodes.append(speed(fxval))
             elif fx == 0x09:  # Groove
                 opcodes.append(groove(fxval))
-            elif fx == 0x04:  # vibrato
-                # fxval == -1 means disable vibrato
-                fxval = max(fxval, 0)
-                opcodes.append(s_vibrato(fxval))
             elif fx == 0xe5:  # set pitch (tune)
                 opcodes.append(s_pitch(fxval))
-            elif fx == 0x0a:  # volume slide down
-                # fxval == -1 means disable vibrato
-                fxval = max(fxval, 0)
-                opcodes.append(s_vol_slide_d(fxval))
+            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
+                if fxval > 0x0f:
+                    opcodes.append(vol_slide_u(fxval>>4))
+                else:
+                    opcodes.append(vol_slide_d(fxval))
+            elif fx in [0x01, 0x02] and fxval in [-1, 0]:
+                opcodes.append(note_slide_off())
             elif fx == 0x01:  # pitch slide up
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(s_pitch_slide_u(fxval))
+                opcodes.append(note_pitch_slide_u(fxval))
             elif fx == 0x02:  # pitch slide down
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(s_pitch_slide_d(fxval))
-            elif fx == 0x03:  # pitch slide down
-                opcodes.append(s_porta(fxval))
-            elif fx == 0xec:  # cut
-                opcodes.append(s_cut(fxval))
+                opcodes.append(note_pitch_slide_d(fxval))
+            elif fx == 0x03:  # portamento
+                opcodes.append(note_porta(fxval))
+            elif fx == 0x04:  # vibrato
+                if fxval in [-1, 0]:
+                    opcodes.append(vibrato_off())
+                else:
+                    opcodes.append(vibrato(fxval))
             elif fx == 0xe0:  # arpeggio speed
                 # fxval == -1 means default arpeggio speed
                 fxval = max(fxval, 1)
                 opcodes.append(arpeggio_speed(fxval))
-            elif fx == 0xe6:  # quick legato
-                opcodes.append(quick_legato(fxval))
+            elif fx in [0xe1, 0xe2] and fxval in [-1, 0]:
+                opcodes.append(note_slide_off())
+            elif fx == 0xe6:  # quick legato up/down
+                ticks, semitones = fxval>>4, fxval&0xf
+                if 8 <= ticks <= 15:
+                    opcodes.append(quick_legato_d((ticks-8)<<4|semitones))
+                else:
+                    opcodes.append(quick_legato_u((ticks)<<4|semitones))
+            elif fx == 0xe8:  # quick legato up
+                opcodes.append(quick_legato_u(fxval))
+            elif fx == 0xe9:  # quick legato down
+                opcodes.append(quick_legato_d(fxval))
+            elif fx == 0xec:  # cut
+                opcodes.append(s_cut(fxval))
             else:
                 add_unknown_fx('SSG', fx)
 
@@ -547,12 +588,11 @@ def convert_s_row(row, channel):
         # post-note opcodes are FX that rely on the row's note
         # to be already processed
         for fx, fxval in row.fx:
-            if fx == 0xe1:  # slide up
-                assert fxval != -1
-                opcodes.append(s_slide_u(fxval))
-            elif fx == 0xe2:  # slide down
-                assert fxval != -1
-                opcodes.append(s_slide_d(fxval))
+            if fx in [0xe1, 0xe2] and fxval not in [-1, 0]:
+                if fx == 0xe1:  # slide up
+                    opcodes.append(note_slide_u(fxval))
+                elif fx == 0xe2:  # slide down
+                    opcodes.append(note_slide_d(fxval))
 
     return jmp_to_order, opcodes
 
@@ -564,9 +604,11 @@ def convert_a_row(row, channel):
     if not is_empty(row):
         # context
         opcodes.append(ctx_t[channel]())
-        # pre-instrument effects
+        # opcodes that must be executed before a vol/instr/note
         for fx, fxval in row.fx:
-            if fx == 0xed:  # note delay
+            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
+                opcodes.append(vol_slide_off())
+            elif fx == 0xed:  # note delay
                 opcodes.append(a_delay(fxval))
         # instrument
         if row.ins != -1:
@@ -577,6 +619,8 @@ def convert_a_row(row, channel):
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
+                pass
+            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
@@ -592,11 +636,16 @@ def convert_a_row(row, channel):
                 opcodes.append(speed(fxval))
             elif fx == 0x09:  # Groove
                 opcodes.append(groove(fxval))
-            elif fx == 0xec:  # cut
-                opcodes.append(a_cut(fxval))
+            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
+                if fxval > 0x0f:
+                    opcodes.append(vol_slide_u(fxval>>4))
+                else:
+                    opcodes.append(vol_slide_d(fxval))
             elif fx in [0x08, 0x80]: # panning
                 pan_mask = convert_pan(fx, fxval)
                 opcodes.append(a_pan(pan_mask))
+            elif fx == 0xec:  # cut
+                opcodes.append(a_cut(fxval))
             else:
                 add_unknown_fx('ADPCM-A', fx)
 
@@ -613,9 +662,11 @@ def convert_b_row(row, channel):
     jmp_to_order = -1
     opcodes = []
     if not is_empty(row):
-        # pre note/vol/instrument effects
+        # opcodes that must be executed before a vol/instr/note
         for fx, fxval in row.fx:
-            if fx == 0xed:  # note delay
+            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
+                opcodes.append(vol_slide_off())
+            elif fx == 0xed:  # note delay
                 opcodes.append(b_delay(fxval))
         # instrument
         if row.ins != -1:
@@ -626,6 +677,8 @@ def convert_b_row(row, channel):
         # effects
         for fx, fxval in row.fx:
             if fx == -1:      # empty fx
+                pass
+            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
                 pass
             elif fx in [0xed]: # pre-instrument FX
                 pass
@@ -645,27 +698,43 @@ def convert_b_row(row, channel):
                 opcodes.append(speed(fxval))
             elif fx == 0x09:  # Groove
                 opcodes.append(groove(fxval))
+            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
+                if fxval > 0x0f:
+                    opcodes.append(vol_slide_u(fxval>>4))
+                else:
+                    opcodes.append(vol_slide_d(fxval))
+            elif fx in [0x01, 0x02] and fxval in [-1, 0]:
+                opcodes.append(note_slide_off())
             elif fx == 0x01:  # pitch slide up
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(b_pitch_slide_u(fxval))
+                opcodes.append(note_pitch_slide_u(fxval))
+            elif fx == 0x02:  # pitch slide down
+                opcodes.append(note_pitch_slide_d(fxval))
             elif fx == 0x03:  # portamento
-                opcodes.append(b_porta(fxval))
-            elif fx == 0xec:  # cut
-                opcodes.append(b_cut(fxval))
+                opcodes.append(note_porta(fxval))
+            elif fx == 0x04:  # vibrato
+                if fxval in [-1, 0]:
+                    opcodes.append(vibrato_off())
+                else:
+                    opcodes.append(vibrato(fxval))
             elif fx in [0x08, 0x80]: # panning
                 pan_mask = convert_pan(fx, fxval)
                 opcodes.append(b_pan(pan_mask))
-            elif fx == 0x04:  # vibrato
-                # fxval == -1 means disable vibrato
-                fxval = max(fxval, 0)
-                opcodes.append(b_vibrato(fxval))
             elif fx == 0xe0:  # arpeggio speed
                 # fxval == -1 means default arpeggio speed
                 fxval = max(fxval, 1)
                 opcodes.append(arpeggio_speed(fxval))
-            elif fx == 0xe6:  # quick legato
-                opcodes.append(quick_legato(fxval))
+            elif fx == 0xe6:  # quick legato up/down
+                ticks, semitones = fxval>>4, fxval&0xf
+                if 8 <= ticks <= 15:
+                    opcodes.append(quick_legato_d((ticks-8)<<4|semitones))
+                else:
+                    opcodes.append(quick_legato_u((ticks)<<4|semitones))
+            elif fx == 0xe8:  # quick legato up
+                opcodes.append(quick_legato_u(fxval))
+            elif fx == 0xe9:  # quick legato down
+                opcodes.append(quick_legato_d(fxval))
+            elif fx == 0xec:  # cut
+                opcodes.append(b_cut(fxval))
             else:
                 row_warn(row, "UNKNOWN")
                 add_unknown_fx('ADPCM-B', fx)
@@ -680,14 +749,11 @@ def convert_b_row(row, channel):
         # post-note opcodes are FX that rely on the row's note
         # to be already processed
         for fx, fxval in row.fx:
-            if fx == 0xe1:  # slide up
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(b_note_slide_u(fxval))
-            elif fx == 0xe2:  # slide down
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(b_note_slide_d(fxval))
+            if fx in [0xe1, 0xe2] and fxval not in [-1, 0]:
+                if fx == 0xe1:  # slide up
+                    opcodes.append(note_slide_u(fxval))
+                elif fx == 0xe2:  # slide down
+                    opcodes.append(note_slide_d(fxval))
 
     return jmp_to_order, opcodes
 

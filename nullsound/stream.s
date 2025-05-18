@@ -36,6 +36,10 @@ _op_offset_'op: .dw op
         .equ    op_id_'op, ((_op_offset_'op - nss_opcodes) >> 1)
         .endm
 
+        .macro  .nss_op_unused
+        .dw     nss_nop
+        .endm
+
 ;;;
 ;;; Sound stream state tracker
 ;;; -------------------
@@ -474,16 +478,18 @@ stream_stop::
 ;;; NSS opcodes lookup table
 ;;; ------
 ;;; The functions below all follow the same interface
-;;; bc [IN]: arguments of the current NSS opcode in the stream
-;;;          bc gets incremented to all the parse arguments, and
-;;;          on function exit, bc must point to the next NSS opcode
+;;; hl [IN]: arguments of the current NSS opcode in the stream
+;;;          when the function for a NSS opcode is called, hl points
+;;;          to the arguments of that opcode.
+;;;          on function exit, hl must point to the next NSS opcode
 ;;;          in the stream
 ;;; a [OUT]: 1: processing of the next opcode can continue
 ;;;          0: processing must stop (the playback must wait for
 ;;;             the timer for sync, or the stream is finished)
 ;;;
-;;; [a and bc modified - other registers must be saved]
+;;; [a and hl modified - other registers must be saved]
 nss_opcodes:
+        ;; 0x00
         .nss_op write_port_a
         .nss_op write_port_b
         .nss_op nss_jmp
@@ -492,6 +498,7 @@ nss_opcodes:
         .nss_op wait_n_rows
         .nss_op nss_call
         .nss_op nss_ret
+        ;; 0x08
         .nss_op nss_nop
         .nss_op row_speed
         .nss_op row_groove
@@ -500,6 +507,7 @@ nss_opcodes:
         .nss_op adpcm_b_note_on
         .nss_op adpcm_b_note_off
         .nss_op fm_ctx_1
+        ;; 0x10
         .nss_op fm_ctx_2
         .nss_op fm_ctx_3
         .nss_op fm_ctx_4
@@ -508,6 +516,7 @@ nss_opcodes:
         .nss_op fm_note_off
         .nss_op adpcm_a_ctx_1
         .nss_op adpcm_a_ctx_2
+        ;; 0x18
         .nss_op adpcm_a_ctx_3
         .nss_op adpcm_a_ctx_4
         .nss_op adpcm_a_ctx_5
@@ -516,6 +525,7 @@ nss_opcodes:
         .nss_op adpcm_a_on
         .nss_op adpcm_a_off
         .nss_op op1_lvl
+        ;; 0x20
         .nss_op op2_lvl
         .nss_op op3_lvl
         .nss_op op4_lvl
@@ -524,57 +534,73 @@ nss_opcodes:
         .nss_op ssg_ctx_2
         .nss_op ssg_ctx_3
         .nss_op ssg_macro
+        ;; 0x28
         .nss_op ssg_note_on
         .nss_op ssg_note_off
         .nss_op ssg_vol
         .nss_op fm_vol
         .nss_op ssg_env_period
-        .nss_op ssg_vibrato
-        .nss_op ssg_slide_up
-        .nss_op ssg_slide_down
-        .nss_op fm_vibrato
-        .nss_op fm_note_slide_up
-        .nss_op fm_note_slide_down
+        .nss_op_unused
+        .nss_op_unused
+        .nss_op_unused
+        ;; 0x30
+        .nss_op_unused
+        .nss_op_unused
+        .nss_op_unused
         .nss_op adpcm_b_vol
         .nss_op adpcm_a_vol
         .nss_op fm_pan
-        .nss_op nss_nop4
-        .nss_op ssg_vol_slide_down
-        .nss_op fm_pitch_slide_down
+        .nss_op_unused
+        .nss_op_unused
+        ;; 0x38
+        .nss_op_unused
         .nss_op ssg_delay
         .nss_op fm_delay
         .nss_op adpcm_a_delay
         .nss_op adpcm_b_ctx
-        .nss_op fm_portamento
-        .nss_op fm_pitch_slide_up
+        .nss_op_unused
+        .nss_op_unused
         .nss_op ssg_pitch
-        .nss_op b_pitch_slide_up
-        .nss_op ssg_pitch_slide_up
-        .nss_op adpcm_b_portamento
-        .nss_op ssg_pitch_slide_down
-        .nss_op ssg_portamento
+        ;; 0x40
+        .nss_op_unused
+        .nss_op_unused
+        .nss_op_unused
+        .nss_op_unused
+        .nss_op_unused
         .nss_op fm_cut
         .nss_op ssg_cut
         .nss_op adpcm_a_cut
+        ;; 0x48
         .nss_op adpcm_b_cut
         .nss_op adpcm_b_delay
         .nss_op adpcm_a_retrigger
         .nss_op adpcm_a_pan
         .nss_op adpcm_b_pan
-        .nss_op adpcm_b_vibrato
+        .nss_op_unused
         .nss_op nss_call_table
         .nss_op fm_note_on_and_wait
+        ;; 0x50
         .nss_op ssg_note_on_and_wait
         .nss_op adpcm_a_on_and_wait
-        .nss_op nss_nop3
-        .nss_op adpcm_b_note_slide_up
-        .nss_op adpcm_b_note_slide_down
+        .nss_op_unused
         .nss_op arpeggio
         .nss_op arpeggio_speed
-        .nss_op quick_legato
+        .nss_op arpeggio_off
+        .nss_op quick_legato_up
+        .nss_op quick_legato_down
+        ;; 0x58
+        .nss_op vol_slide_off
         .nss_op vol_slide_up
         .nss_op vol_slide_down
-        .nss_op vol_slide_off
+        .nss_op note_slide_off
+        .nss_op note_slide_up
+        .nss_op note_slide_down
+        .nss_op note_pitch_slide_up
+        .nss_op note_pitch_slide_down
+        ;; 0x60
+        .nss_op note_portamento
+        .nss_op vibrato
+        .nss_op vibrato_off
 
 
 
@@ -854,8 +880,5 @@ _ret_set_process:
 ;;; Empty operation
 ;;; ------
 nss_nop::
-nss_nop2::
-nss_nop3::
-nss_nop4::
         ld      a, #1
         ret

@@ -24,13 +24,13 @@
         .include "align.inc"
         .include "ym2610.inc"
         .include "struct-fx.inc"
+        .include "pipeline.inc"
 
 
         .lclequ SSG_STATE_SIZE,(state_mirrored_ssg_end-state_mirrored_ssg_start)
         .lclequ SSG_MAX_VOL,0xf
 
         ;; getters for SSG state
-        .lclequ NOTE,(state_ssg_note-state_mirrored_ssg)
         .lclequ DETUNE,(state_ssg_detune-state_mirrored_ssg)
         .lclequ NOTE_POS16,(state_ssg_note_pos16-state_mirrored_ssg)
         .lclequ NOTE_FINE_COARSE,(state_ssg_note_fine_coarse-state_mirrored_ssg)
@@ -44,26 +44,14 @@
         .lclequ REG_VOL, (state_ssg_reg_vol-state_mirrored_ssg)
         .lclequ OUT_VOL, (state_ssg_out_vol-state_mirrored_ssg)
 
-        ;; pipeline state for SSG channel
-        .lclequ STATE_PLAYING,          0x01
-        .lclequ STATE_EVAL_MACRO,       0x02
-        .lclequ STATE_LOAD_NOTE,        0x04
-        .lclequ STATE_LOAD_WAVEFORM,    0x08
-        .lclequ STATE_LOAD_VOL,         0x10
-        .lclequ STATE_LOAD_REGS,        0x20
-        .lclequ STATE_STOP_NOTE,        0x40
-        .lclequ STATE_NOTE_STARTED,     0x80
-        .lclequ BIT_PLAYING,            0
-        .lclequ BIT_EVAL_MACRO,         1
-        .lclequ BIT_LOAD_NOTE,          2
-        .lclequ BIT_LOAD_WAVEFORM,      3
-        .lclequ BIT_LOAD_VOL,           4
-        .lclequ BIT_LOAD_REGS,          5
-        .lclequ BIT_STOP_NOTE,          6
-        .lclequ BIT_NOTE_STARTED,       7
+        ;; specific pipeline state for SSG channel
+        .lclequ STATE_LOAD_WAVEFORM, 0x20
+        .lclequ BIT_LOAD_WAVEFORM,      5
+
 
 
         .area  DATA
+
 
 ;;; SSG playback state tracker
 ;;; ------
@@ -89,23 +77,27 @@ state_mirrored_enabled:
 state_mirrored_ssg_a:
 ;;; state
 state_mirrored_ssg_start:
-;;; stream data
-state_ssg_vol:                  .blkb   1       ; configured volume
-state_mirrored_ssg:
-;;; stream pipeline
-state_ssg_pipeline:             .blkb   1       ; actions to run at every tick (eval macro, load note, vol, other regs)
-;;; FX state trackers
-state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
-state_ssg_trigger:              .blkb   TRIGGER_SIZE
-state_ssg_fx_vol_slide:         .blkb   VOL_SLIDE_SIZE
-state_ssg_fx_slide:             .blkb   SLIDE_SIZE
+;;; additional note and FX state tracker
+state_ssg_note_fx:              .blkb   1       ; enabled note FX for this channel
+state_ssg_note_cfg:             .blkb   1       ; configured note
+state_ssg_note16:               .blkb   2       ; current decimal note
+state_ssg_fx_note_slide:        .blkb   SLIDE_SIZE
 state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
 state_ssg_fx_arpeggio:          .blkb   ARPEGGIO_SIZE
 state_ssg_fx_legato:            .blkb   LEGATO_SIZE
+;;; stream pipeline
+state_mirrored_ssg:
+state_ssg_pipeline:             .blkb   1       ; actions to run at every tick (eval macro, load note, vol, other regs)
+state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
+;;; volume state tracker
+state_ssg_vol_cfg:              .blkb   1       ; configured volume
+state_ssg_vol16:                .blkb   2       ; current decimal volume
+;;; FX state trackers
+state_ssg_fx_vol_slide:         .blkb   SLIDE_SIZE
+state_ssg_trigger:              .blkb   TRIGGER_SIZE
 ;;; SSG-specific state
 ;;; Note
 state_ssg_note_pos16:           .blkb   2       ; fixed-point note after the FX pipeline
-state_ssg_note:                 .blkb   1       ; NSS note to be played on the SSG channel
 state_ssg_detune:               .blkb   2       ; fixed-point semitone detune
 state_ssg_note_fine_coarse:     .blkb   2       ; YM2610 note factors (fine+coarse)
 state_mirrored_ssg_props:
@@ -131,6 +123,8 @@ state_mirrored_ssg_c:
 state_ssg_volume_attenuation::       .blkb   1
 
 _state_ssg_end:
+
+
 
         .area  CODE
 
@@ -160,8 +154,9 @@ init_nss_ssg_state_tracker::
         ld      bc, #SSG_STATE_SIZE
 _ssg_init:
         ;; FX defaults
-        ld      ARPEGGIO_SPEED(iy), #1
-        ld      VOL_SLIDE_MAX(iy), #SSG_MAX_VOL
+        ld      NOTE_CTX+SLIDE_MAX(iy), #((8*12)-1) ; max note
+        ld      VOL_CTX+SLIDE_MAX(iy), #SSG_MAX_VOL ; max volume for channel
+        ld      ARPEGGIO_SPEED(iy), #1   ; default arpeggio speed
         add     iy, bc
         dec     d
         jr      nz, _ssg_init
@@ -280,6 +275,7 @@ _update_loop:
         ;; bail out if the current channel is not in use
         ld      a, PIPELINE(ix)
         or      a, FX(ix)
+        or      a, NOTE_FX(ix)
         cp      #0
         jp      z, _end_ssg_channel_pipeline
 
@@ -297,37 +293,51 @@ _ssg_pipeline_post_macro::
 
         ;; Pipeline action: evaluate one FX step for each enabled FX
 
+        ;; misc FX
         bit     BIT_FX_TRIGGER, FX(ix)
         jr      z, _ssg_post_fx_trigger
         ld      hl, #state_ssg_action_funcs
         call    eval_trigger_step
 _ssg_post_fx_trigger:
-        bit     BIT_FX_LEGATO, FX(ix)
-        jr      z, _ssg_post_fx_legato
-        call    eval_legato_step
+
+        ;; iy: FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #VOL_CTX
+        add     iy, bc
+
+        bit     BIT_FX_SLIDE, FX(ix)
+        jr      z, _ssg_post_fx_vol_slide
+        call    eval_slide_step
+        set     #BIT_LOAD_VOL, PIPELINE(ix)
+_ssg_post_fx_vol_slide:
+
+        ;; iy: note FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #NOTE_CTX
+        add     iy, bc
+
+        bit     BIT_FX_SLIDE, NOTE_FX(ix)
+        jr      z, _ssg_post_fx_slide
+        call    eval_slide_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
-_ssg_post_fx_legato:
-        bit     BIT_FX_VIBRATO, FX(ix)
+_ssg_post_fx_slide:
+        bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _ssg_post_fx_vibrato
-        call    eval_ssg_vibrato_step
+        call    eval_vibrato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _ssg_post_fx_vibrato:
-        bit     BIT_FX_ARPEGGIO, FX(ix)
+        bit     BIT_FX_ARPEGGIO, NOTE_FX(ix)
         jr      z, _ssg_post_fx_arpeggio
         call    eval_arpeggio_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _ssg_post_fx_arpeggio:
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _ssg_post_fx_slide
-        ld      hl, #NOTE
-        call    eval_slide_step
+        bit     BIT_FX_LEGATO, NOTE_FX(ix)
+        jr      z, _ssg_post_fx_legato
+        call    eval_legato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
-_ssg_post_fx_slide:
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _ssg_post_fx_vol_slide
-        call    eval_vol_slide_step
-        set     #BIT_LOAD_VOL, PIPELINE(ix)
-_ssg_post_fx_vol_slide:
+_ssg_post_fx_legato:
 
         ;; Pipeline action: make sure no load note takes place when not playing
         bit     BIT_PLAYING, PIPELINE(ix)
@@ -449,40 +459,30 @@ _ssg_end_macro:
 ;;; ------
 ;;; current note (integer) + all the note effects (fixed point)
 compute_ssg_fixed_point_note::
-        ;; hl: from currently configured note (fixed point)
-        ld      a, #0
-        ld      l, a
-        ld      h, NOTE(ix)
+        ;; hl: current decimal note
+        ld      l, NOTE16(ix)
+        ld      h, NOTE16+1(ix)
 
-        ;; bc: slide offset if the slide FX is enabled
-        bit     BIT_FX_SLIDE, FX(ix)
-        jr      z, _ssg_post_add_slide
-        ld      l, SLIDE_POS16(ix)
-        ld      h, SLIDE_POS16+1(ix)
-_ssg_post_add_slide::
-
-        ;; hl: detuned semitone
+        ;; + detuned semitone
         ld      c, DETUNE(ix)
         ld      b, DETUNE+1(ix)
         add     hl, bc
 
-        ;; hl: arpeggio offset
+        ;; + arpeggio FX offset
         ld      c, #0
         ld      b, ARPEGGIO_POS8(ix)
         add     hl, bc
 
-        ;; h: current note + arpeggio shift
+        ;; + macro arpeggio shift
         ld      a, ARPEGGIO(ix)
         add     h
         ld      h, a
 
-        ld      a, FX(ix)
-
-        ;; bc: add vibrato offset if the vibrato FX is enabled
-        bit     0, a
+        ;; + vibrato offset if the vibrato FX is enabled
+        bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _ssg_post_add_vibrato
-        ld      c, VIBRATO_POS16(ix)
-        ld      b, VIBRATO_POS16+1(ix)
+        ld      c, NOTE_CTX+VIBRATO_POS16(ix)
+        ld      b, NOTE_CTX+VIBRATO_POS16+1(ix)
         add     hl, bc
 _ssg_post_add_vibrato::
 
@@ -581,11 +581,8 @@ compute_ym2610_ssg_note::
 ;;; [b modified]
 compute_ym2610_ssg_vol::
         ;; a: note volume for channel
-        ld      a, VOL(ix)
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
-        jr      z, _ssg_post_vol
-        ld      a, VOL_SLIDE_POS16+1(ix)
-_ssg_post_vol:
+        ld      a, VOL16+1(ix)
+
         ;; a: volume converted to attenuation
         sub     #SSG_MAX_VOL
 
@@ -742,23 +739,6 @@ ssg_macro::
         ret
 
 
-;;; Update the vibrato for the current SSG channel
-;;; ------
-;;; ix: mirrored state of the current SSG channel
-eval_ssg_vibrato_step::
-        push    hl
-        push    de
-        push    bc
-
-        call    vibrato_eval_step
-
-        pop     bc
-        pop     de
-        pop     hl
-
-        ret
-
-
 ;;; Release the note on a SSG channel and update the pipeline state
 ;;; ------
 ssg_stop_playback:
@@ -852,36 +832,33 @@ _ssg_vol_end:
 ;;; ------
 ssg_configure_note_on:
         push    bc
-        push    af              ; +note
         ;; if a slide is ongoing, this is treated as a slide FX update
-        bit     BIT_FX_SLIDE, FX(ix)
+        bit     BIT_FX_SLIDE, NOTE_FX(ix)
         jr      z, _ssg_cfg_note_update
-        pop     bc              ; -note
-        ld      c, NOTE(ix)
+        ld      bc, #NOTE_CTX
         call    slide_update
         ;; if a note is currently playing, do nothing else, the
         ;; portamento will be updated at the next pipeline run...
         bit     BIT_NOTE_STARTED, PIPELINE(ix)
         jr      nz, _ssg_cfg_note_end
-        ;; ... else a new instrument was loaded, reload this note as well
+        ;; ... else prepare the note for reload as well
         jr      _ssg_cfg_note_prepare_ym2610
 _ssg_cfg_note_update:
         ;; update the current note and prepare the ym2610
-        pop     af              ; -note
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      NOTE(ix), a
+        ld      NOTE16+1(ix), a
+        ld      NOTE16(ix), #0
 _ssg_cfg_note_prepare_ym2610:
         ;; init macro position
         ld      a, MACRO_DATA(ix)
         ld      MACRO_POS(ix), a
         ld      a, MACRO_DATA+1(ix)
         ld      MACRO_POS+1(ix), a
-
         ;; reload all registers at the next pipeline run
-        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
-
 _ssg_cfg_note_end:
         pop     bc
 
@@ -892,12 +869,17 @@ _ssg_cfg_note_end:
 ;;; ------
 ssg_configure_vol:
         ;; if a volume slide is ongoing, treat it as a volume slide FX update
-        bit     BIT_FX_VOL_SLIDE, FX(ix)
+        bit     BIT_FX_SLIDE, FX(ix)
         jr      z, _ssg_cfg_vol_update
-        call    vol_slide_update
+        push    bc
+        ld      bc, #VOL_CTX
+        call    slide_update
+        pop     bc
         jr      _ssg_cfg_vol_end
 _ssg_cfg_vol_update:
         ld      VOL(ix), a
+        ld      VOL16+1(ix), a
+        ld      VOL16(ix), #0
         ;; reload configured vol at the next pipeline run
         set     BIT_LOAD_VOL, PIPELINE(ix)
 _ssg_cfg_vol_end:
@@ -981,126 +963,6 @@ ssg_env_period::
         ld      c, a
         call    ym2610_write_port_a
 
-        pop     bc
-
-        ld      a, #1
-        ret
-
-
-;;; SSG_VIBRATO
-;;; Enable vibrato for the current SSG channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-ssg_vibrato::
-        ;; TODO: move this part to common vibrato_init
-
-        ;; hl == 0 means disable vibrato
-        ld      a, (hl)
-        cp      #0
-        jr      nz, _setup_ssg_vibrato
-
-        ;; disable vibrato FX
-        res     BIT_FX_VIBRATO, FX(ix)
-
-        ;; reload configured note at the next pipeline run
-        set     BIT_LOAD_NOTE, PIPELINE(ix)
-
-        inc     hl
-        jr      _post_ssg_setup
-
-_setup_ssg_vibrato:
-        call    vibrato_init
-
-_post_ssg_setup:
-
-        ld      a, #1
-        ret
-
-
-;;; SSG_SLIDE_UP
-;;; Enable slide up effect for the current SSG channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-ssg_slide_up::
-        push    bc
-        ld      b, #0
-        ld      c, #NOTE
-        call    slide_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; SSG_SLIDE_DOWN
-;;; Enable slide down effect for the current SSG channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
-ssg_slide_down::
-        push    bc
-        ld      b, #1
-        ld      c, #NOTE
-        call    slide_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; SSG_PITCH_SLIDE_UP
-;;; Enable slide up effect for the current SSG channel
-;;; ------
-;;; [ hl ]: speed (8bits)
-ssg_pitch_slide_up::
-        push    bc
-        ld      b, #0
-        ld      c, #NOTE
-        call    slide_pitch_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; SSG_PITCH_SLIDE_DOWN
-;;; Enable slide up effect for the current SSG channel
-;;; ------
-;;; [ hl ]: speed (8bits)
-ssg_pitch_slide_down::
-        push    bc
-        ld      b, #1
-        ld      c, #NOTE
-        call    slide_pitch_init
-        ld      a, #1
-        pop     bc
-        ret
-
-
-;;; SSG_PORTAMENTO
-;;; Enable slide to the next note to be loaded into the pipeline
-;;; ------
-;;; [ hl ]: speed
-ssg_portamento::
-        ;; current note (start of portamento)
-        ld      a, NOTE_POS16+1(ix)
-
-        call    slide_portamento_init
-
-        ld      a, #1
-        ret
-
-
-;;; SSG_VOL_SLIDE_DOWN
-;;; Enable volume slide down effect for the current SSG channel
-;;; ------
-;;; [ hl ]: speed (4bits)
-ssg_vol_slide_down::
-        push    bc
-        push    de
-
-        ld      bc, #0x40
-        ld      d, #15
-        ld      a, #1
-        call    vol_slide_init
-
-        pop     de
         pop     bc
 
         ld      a, #1

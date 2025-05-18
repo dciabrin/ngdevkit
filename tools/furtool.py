@@ -442,10 +442,10 @@ def read_ssg_macro(length, bs):
                    # "den": 2
                    }
 
-    code_load_bit = {"vol": 1<<4, # BIT_LOAD_VOL
-                     "wave": 1<<3, # BIT_LOAD_WAVEFORM
-                     "env": 1<<5, # BIT_LOAD_REGS
-                     "noiseFreq": 1<<5, # BIT_LOAD_REGS
+    code_load_bit = {"vol": 1<<3, # BIT_LOAD_VOL
+                     "wave": 1<<5, # BIT_LOAD_WAVEFORM
+                     "env": 1<<4, # BIT_LOAD_REGS
+                     "noiseFreq": 1<<4, # BIT_LOAD_REGS
                      "arp": 1<<2, # BIT_LOAD_NOTE
                      }
 
