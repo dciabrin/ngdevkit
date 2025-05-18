@@ -65,8 +65,5 @@ snd_command_01_prepare_for_rom_switch::
 ;;; Reset sound driver
 ;;; reset stack and start the sound driver
 snd_command_03_reset_driver::
-        di
-        ld      sp, #0xffff
-        ld      hl, #snd_start_driver
-        push    hl
-        retn
+        ld      bc, #0
+        jp      snd_init_driver_from_nmi
