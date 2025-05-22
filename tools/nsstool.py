@@ -25,15 +25,13 @@ import zlib
 from dataclasses import dataclass, field, astuple, make_dataclass
 from struct import pack, unpack_from
 from furtool import binstream, load_module, read_module, read_samples, read_instruments, module_id_from_path
+from furtool import fm_instrument, ssg_macro, adpcm_a_instrument, adpcm_b_instrument
 
 VERBOSE = False
 
 
 def error(s):
-    sys.exit("error: " + s)
-
-def warn(s):
-    print("WARNING: %s"%s, file=sys.stderr)
+    sys.exit("ERROR: " + s)
 
 def dbg(s):
     if VERBOSE:
@@ -46,6 +44,7 @@ class fur_pattern:
     """Notes and effects for one channel of a particular pattern in the song"""
     channel: int = 0
     index: int = 0
+    fxcols: int = 1
     rows: list = field(default_factory=list, repr=False)
 
 @dataclass
@@ -77,8 +76,16 @@ def to_nss_note(furnace_note):
 
 
 #
-# Debugging functions
+# Furnace error reporting functions
 #
+
+location_order = 0
+location_channel = 0
+location_row = 0
+location_data = None
+location_fxs = 0
+location_pos = (0,0)
+
 
 def row_str(r, cols):
     semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
@@ -102,23 +109,37 @@ def row_str(r, cols):
     return "%s %s %s%s"%(notestr,insstr,volstr,fxstr)
 
 
-dbg_order = 0
-dbg_row = 0
-dbg_channel = 0
-dbg_fxs = 0
+def set_location_context(m, p, order, channel, row):
+    global location_order, location_channel, location_row, location_data, location_fxs, location_pos
+    pat_id = m.orders[order][channel]
+    fur_pat = p[(pat_id,channel)]
+    location_order, location_channel, location_row = order, channel, row
+    location_data = fur_pat.rows[row]
+    location_fxs = fur_pat.fxcols
+    location_pos = (0,0)
 
-def dbg_pattern(p, m):
-    cols = m.fxcolumns[p.channel]
-    for r in p.rows:
-        print(row_str(r, cols))
+
+def fmt_location_context():
+    ch_str = ['F1','F2','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
+    loc = "order %02X, row %3d (%s)"%(location_order, location_row,ch_str[location_channel])
+    ansi_start = "\033[31;1;4m"
+    ansi_stop = "\033[0m"
+    fmt_row = row_str(location_data, location_fxs)
+    beg, size = location_pos
+    end = beg + size
+    err_row = fmt_row[:beg] + ansi_start + fmt_row[beg:end] + ansi_stop + fmt_row[end:]
+    return "%s, \"%s\""%(loc, err_row)
 
 
-unknown_fx = {}
-def add_unknown_fx(channel, fx):
-    global unknown_fx
-    s = unknown_fx.get(channel, set())
-    s.add("%02x"%fx)
-    unknown_fx[channel] = s
+def row_warn(msg):
+    loc = fmt_location_context()
+    print("WARNING: %s: %s"%(loc, msg), file=sys.stderr)
+
+
+def row_error(msg):
+    loc = fmt_location_context()
+    print("ERROR: %s: %s"%(loc, msg), file=sys.stderr)
+
 
 #
 # Furnace parsers
@@ -184,7 +205,7 @@ def read_pattern(m, bs):
     # no more data for this pattern, the remaining rows are empty
     remainder = m.pattern_len - len(all_rows)
     all_rows.extend([empty_row(fxcols)] * remainder)
-    return fur_pattern(channel, index, all_rows)
+    return fur_pattern(channel, index, fxcols, all_rows)
 
 
 def read_all_patterns(m, bs):
@@ -248,7 +269,7 @@ def register_nss_ops():
         ("s_ctx_1" , ),
         ("s_ctx_2" , ),
         ("s_ctx_3" , ),
-        ("s_macro" , ["macro"]),
+        ("s_macro" , ["inst"]),
         # 0x28
         ("s_note"  , ["note"]),
         ("s_stop"  , ),
@@ -319,7 +340,8 @@ def register_nss_ops():
 
 
         # reserved opcodes
-        ("nss_label", ["pat"])
+        ("nss_label", ["pat"]),
+        ("nss_loc", ["order", "channel", "row"])
     )
     for opcode, op in enumerate(nss_opcodes):
         if op:
@@ -349,427 +371,315 @@ class pat_offset:
     _opcode: int = field(default=0, repr=False)
 
 
-def convert_pan(fx, fxval):
-    if fx == 0x08:  # pan
-        pan_l = 0x80 if (fxval & 0xf0) else 0
-        pan_r = 0x40 if (fxval & 0x0f) else 0
-    elif fx == 0x80:  # old pan
-        pan_l = 0x80 if fxval in [0x00, 0x80] else 0
-        pan_r = 0x40 if fxval in [0x80, 0xff] else 0
-    return pan_l|pan_r;
-
 
 #
-# Furnace module conversion functions
+# Furnace module conversion class functions
 #
-def convert_fm_row(row, channel):
-    ctx_t = {0: fm_ctx_1, 1: fm_ctx_2, 2: fm_ctx_3, 3: fm_ctx_4}
-    jmp_to_order = -1
-    opcodes = []
-    if not is_empty(row):
-        # context
-        opcodes.append(ctx_t[channel]())
-        # opcodes that must be executed before a vol/instr/note
-        for fx, fxval in row.fx:
-            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
-                opcodes.append(vol_slide_off())
-            elif fx == 0xed:  # note delay
-                opcodes.append(fm_delay(fxval))
-        # volume (must be in the NSS stream before instrument (check?))
-        if row.vol != -1:
-            opcodes.append(fm_vol(row.vol))
-        # instrument
-        if row.ins != -1:
-            opcodes.append(fm_instr(row.ins))
-        # effects
-        for fx, fxval in row.fx:
-            if fx == -1:      # empty fx
-                pass
-            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
-                pass
-            elif fx in [0xed]: # pre-instrument FX
-                pass
-            elif fx in [0xe1, 0xe2]: # post-note FX
-                pass
-            elif fx == 0x0b:  # Jump to order
-                jmp_to_order = fxval
-            elif fx == 0x0d:  # Jump to next order
-                jmp_to_order = 256
-            elif fx == 0xff:  # Stop song
-                jmp_to_order = 257
-            elif fx == 0x00:  # arpeggio
-                if fxval in [-1, 0]:
-                    opcodes.append(arpeggio_off())
-                else:
-                    opcodes.append(arpeggio(fxval))
-            elif fx == 0x0f:  # Speed
-                opcodes.append(speed(fxval))
-            elif fx == 0x09:  # Groove
-                opcodes.append(groove(fxval))
-            elif fx == 0x12:  # OP1 level
-                opcodes.append(op1_lvl(fxval))
-            elif fx == 0x13:  # OP2 level
-                opcodes.append(op2_lvl(fxval))
-            elif fx == 0x14:  # OP3 level
-                opcodes.append(op3_lvl(fxval))
-            elif fx == 0x15:  # OP4 level
-                opcodes.append(op4_lvl(fxval))
-            elif fx == 0xe5:  # pitch
-                opcodes.append(fm_pitch(fxval))
-            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
-                if fxval > 0x0f:
-                    opcodes.append(vol_slide_u(fxval>>4))
-                else:
-                    opcodes.append(vol_slide_d(fxval))
-            elif fx in [0x01, 0x02] and fxval in [-1, 0]:
-                opcodes.append(note_slide_off())
-            elif fx == 0x01:  # pitch slide up
-                opcodes.append(note_pitch_slide_u(fxval))
-            elif fx == 0x02:  # pitch slide down
-                opcodes.append(note_pitch_slide_d(fxval))
-            elif fx == 0x03:  # portamento
-                opcodes.append(note_porta(fxval))
-            elif fx == 0x04:  # vibrato
-                if fxval in [-1, 0]:
-                    opcodes.append(vibrato_off())
-                else:
-                    opcodes.append(vibrato(fxval))
-            elif fx in [0x08, 0x80]: # panning
-                pan_mask = convert_pan(fx, fxval)
-                opcodes.append(fm_pan(pan_mask))
-            elif fx == 0xe0:  # arpeggio speed
-                # fxval == -1 means default arpeggio speed
-                fxval = max(fxval, 1)
-                opcodes.append(arpeggio_speed(fxval))
-            elif fx in [0xe1, 0xe2] and fxval in [-1, 0]:
-                opcodes.append(note_slide_off())
-            elif fx == 0xe6:  # quick legato up/down
-                ticks, semitones = fxval>>4, fxval&0xf
-                if 8 <= ticks <= 15:
-                    opcodes.append(quick_legato_d((ticks-8)<<4|semitones))
-                else:
-                    opcodes.append(quick_legato_u((ticks)<<4|semitones))
-            elif fx == 0xe8:  # quick legato up
-                opcodes.append(quick_legato_u(fxval))
-            elif fx == 0xe9:  # quick legato down
-                opcodes.append(quick_legato_d(fxval))
-            elif fx == 0xec:  # cut
-                opcodes.append(fm_cut(fxval))
+
+@dataclass
+class row_actions:
+    """NSS opcodes and branching from a single Furnace row"""
+    location: object = None
+    jmp_to_order: int = -1
+    flow_fx: list = field(default_factory=list)
+    pre_fx: list = field(default_factory=list)
+    ins: object = None
+    vol: object = None
+    fx: list = field(default_factory=list)
+    note: object = None
+    post_fx: list = field(default_factory=list)
+
+
+class channel_nss_factory:
+    """factory for channel-specific NSS opcodes"""
+    def __init__(self, ctx_op, instr_op, vol_op, max_vol, pan_op, pitch_op,
+                 note_on_op, note_off_op, retrigger_op, cut_op, delay_op):
+        self.ctx_op = ctx_op
+        self.instr_op = instr_op
+        self.vol_op = vol_op
+        self.max_vol = max_vol
+        self.pan_op = pan_op
+        self.pitch_op = pitch_op
+        self.note_on_op = note_on_op
+        self.note_off_op = note_off_op
+        self.retrigger_op = retrigger_op
+        self.cut_op = cut_op
+        self.delay_op = delay_op
+
+    def mk_no_impl(name):
+        def fun(fx):
+            row_warn("%s FX not implemented for this channel"%name)
+            return None
+        return fun
+
+    def mk_na(name):
+        def fun(fx):
+            row_warn("%s FX not applicable for this channel"%name)
+            return None
+        return fun
+
+    def fm_factory(channel):
+        ctx_t = {0: fm_ctx_1, 1: fm_ctx_2, 2: fm_ctx_3, 3: fm_ctx_4}
+        return channel_nss_factory(ctx_t[channel], fm_instr, fm_vol, 0x7f,
+                                   fm_pan, fm_pitch, fm_note, fm_stop,
+                                   channel_nss_factory.mk_no_impl("retrigger"), fm_cut, fm_delay)
+
+    def ssg_factory(channel):
+        ctx_t = {4: s_ctx_1, 5: s_ctx_2, 6: s_ctx_3}
+        return channel_nss_factory(ctx_t[channel], s_macro, s_vol, 0xf,
+                                   channel_nss_factory.mk_na("panning"), s_pitch, s_note, s_stop,
+                                   channel_nss_factory.mk_no_impl("retrigger"), s_cut, s_delay)
+
+    def a_factory(channel):
+        def a_note_on(x):
+            return a_start()
+        ctx_t = {7: a_ctx_1, 8: a_ctx_2, 9: a_ctx_3, 10: a_ctx_4, 11: a_ctx_5, 12: a_ctx_6}
+        return channel_nss_factory(ctx_t[channel], a_instr, a_vol, 0x1f,
+                                   a_pan, channel_nss_factory.mk_na("pitch"), a_note_on, s_stop,
+                                   a_retrigger, a_cut, a_delay)
+
+    def b_factory(channel):
+        return channel_nss_factory(b_ctx, b_instr, b_vol, 0xff,
+                                   b_pan, channel_nss_factory.mk_no_impl("pitch"), b_note, b_stop,
+                                   channel_nss_factory.mk_no_impl("retrigger"), b_cut, b_delay)
+
+    def ctx(self):
+        return self.ctx_op()
+
+    def instr(self, i):
+        return self.instr_op(i)
+
+    def vol(self, v):
+        vclamp = min(self.max_vol, v)
+        if v != vclamp:
+            row_warn("volume exceeded for channel, clamped to %02X"%vclamp)
+        return self.vol_op(vclamp)
+
+    def pan(self, p):
+        return self.pan_op(p)
+
+    def pitch(self, p):
+        return self.pitch_op(p)
+
+    def note_on(self, n):
+        return self.note_on_op(n)
+
+    def note_off(self):
+        return self.note_off_op()
+
+    def retrigger(self, r):
+        return self.retrigger_op(r)
+
+    def cut(self, r):
+        return self.cut_op(r)
+
+    def delay(self, r):
+        return self.delay_op(r)
+
+
+factories=[]
+
+def register_nss_factories():
+    f=channel_nss_factory
+    factories.extend([
+        f.fm_factory(0), f.fm_factory(1), f.fm_factory(2), f.fm_factory(3),
+        f.ssg_factory(4), f.ssg_factory(5), f.ssg_factory(6),
+        f.a_factory(7), f.a_factory(8), f.a_factory(9), f.a_factory(10), f.a_factory(11), f.a_factory(12),
+        f.b_factory(13)
+    ])
+
+
+def convert_row(row, channel):
+    global location_pos
+
+    factory = factories[channel]
+    out = row_actions()
+
+    if is_empty(row):
+        return out.jmp_to_order, []
+
+    out.location = nss_loc(location_order, location_channel, location_row)
+    out.flow_fx = factory.ctx()
+
+    # note
+    location_pos = (0,3)
+    if row.note != -1:
+        if row.note == 180:
+            out.note = factory.note_off()
+        else:
+            out.note = factory.note_on(to_nss_note(row.note))
+
+    # instrument
+    location_pos = (4,2)
+    if row.ins != -1:
+        out.ins = factory.instr(row.ins)
+
+    # volume
+    location_pos = (7,2)
+    if row.vol != -1:
+        out.vol = factory.vol(row.vol)
+
+    # fx
+    location_pos = (5, 4)
+    for fx, fxval in row.fx:
+        location_pos = (location_pos[0]+5, 4)
+        if fx == -1:
+            pass
+        # arpeggio
+        elif fx == 0x00:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a note opcode
+                out.pre_fx.append(arpeggio_off())
             else:
-                add_unknown_fx('FM', fx)
-
-        # note
-        if row.note != -1:
-            if row.note == 180:
-                opcodes.append(fm_stop())
+                out.fx.append(arpeggio(fxval))
+        # pitch slide up
+        elif fx == 0x01:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a note opcode
+                out.pre_fx.append(note_slide_off())
             else:
-                opcodes.append(fm_note(to_nss_note(row.note)))
-
-        # post-note opcodes are FX that rely on the row's note
-        # to be already processed
-        for fx, fxval in row.fx:
-            if fx in [0xe1, 0xe2] and fxval not in [-1, 0]:
-                if fx == 0xe1:  # slide up
-                    opcodes.append(note_slide_u(fxval))
-                elif fx == 0xe2:  # slide down
-                    opcodes.append(note_slide_d(fxval))
-
-    return jmp_to_order, opcodes
-
-def row_warn(row, msg):
-    ch_str = ['F1','F2','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
-    loc = "order %02X, row %3d (%s)"%(dbg_order, dbg_row,ch_str[dbg_channel])
-    warn("%s: %s: %s"%(loc, msg, row_str(row, dbg_fxs)))
-
-def s_vol_clamp(row):
-    # TODO report proper location
-    newvol = max(0, min(15, row.vol))
-    if row.vol != newvol:
-        rowstr = row_str(row, dbg_fxs)
-        # warn("clamped volume to %02X: %s"%(newvol, rowstr))
-        row_warn(row, "volume clamped to %02X"%newvol)
-    return newvol
-
-def convert_s_row(row, channel):
-    ctx_t = {4: s_ctx_1, 5: s_ctx_2, 6: s_ctx_3}
-    jmp_to_order = -1
-    opcodes = []
-    if not is_empty(row):
-        # context
-        opcodes.append(ctx_t[channel]())
-        # opcodes that must be executed before a vol/instr/note
-        for fx, fxval in row.fx:
-            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
-                opcodes.append(vol_slide_off())
-            if fx == 0xed:  # note delay
-                opcodes.append(s_delay(fxval))
-        # instrument
-        if row.ins != -1:
-            opcodes.append(s_macro(row.ins))
-        # volume
-        if row.vol != -1:
-            # bound checks w.r.t SSG limit
-            row.vol = s_vol_clamp(row)
-            opcodes.append(s_vol(row.vol))
-        # effects
-        for fx, fxval in row.fx:
-            if fx == -1:      # empty fx
-                pass
-            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
-                pass
-            elif fx in [0xed]: # pre-instrument FX
-                pass
-            elif fx in [0xe1, 0xe2]: # post-note FX
-                pass
-            elif fx == 0x00:  # arpeggio
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(arpeggio(fxval))
-            elif fx == 0x08:  # panning
-                row_warn(row, "panning FX invalid for SSG")
-            elif fx == 0x0b:  # Jump to order
-                jmp_to_order = fxval
-            elif fx == 0x0d:  # Jump to next order
-                jmp_to_order = 256
-            elif fx == 0xff:  # Stop song
-                jmp_to_order = 257
-            elif fx == 0x0f:  # Speed
-                opcodes.append(speed(fxval))
-            elif fx == 0x09:  # Groove
-                opcodes.append(groove(fxval))
-            elif fx == 0xe5:  # set pitch (tune)
-                opcodes.append(s_pitch(fxval))
-            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
-                if fxval > 0x0f:
-                    opcodes.append(vol_slide_u(fxval>>4))
-                else:
-                    opcodes.append(vol_slide_d(fxval))
-            elif fx in [0x01, 0x02] and fxval in [-1, 0]:
-                opcodes.append(note_slide_off())
-            elif fx == 0x01:  # pitch slide up
-                opcodes.append(note_pitch_slide_u(fxval))
-            elif fx == 0x02:  # pitch slide down
-                opcodes.append(note_pitch_slide_d(fxval))
-            elif fx == 0x03:  # portamento
-                opcodes.append(note_porta(fxval))
-            elif fx == 0x04:  # vibrato
-                if fxval in [-1, 0]:
-                    opcodes.append(vibrato_off())
-                else:
-                    opcodes.append(vibrato(fxval))
-            elif fx == 0xe0:  # arpeggio speed
-                # fxval == -1 means default arpeggio speed
-                fxval = max(fxval, 1)
-                opcodes.append(arpeggio_speed(fxval))
-            elif fx in [0xe1, 0xe2] and fxval in [-1, 0]:
-                opcodes.append(note_slide_off())
-            elif fx == 0xe6:  # quick legato up/down
-                ticks, semitones = fxval>>4, fxval&0xf
-                if 8 <= ticks <= 15:
-                    opcodes.append(quick_legato_d((ticks-8)<<4|semitones))
-                else:
-                    opcodes.append(quick_legato_u((ticks)<<4|semitones))
-            elif fx == 0xe8:  # quick legato up
-                opcodes.append(quick_legato_u(fxval))
-            elif fx == 0xe9:  # quick legato down
-                opcodes.append(quick_legato_d(fxval))
-            elif fx == 0xec:  # cut
-                opcodes.append(s_cut(fxval))
+                out.fx.append(note_pitch_slide_u(fxval))
+        # pitch slide down
+        elif fx == 0x02:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a note opcode
+                out.pre_fx.append(note_slide_off())
             else:
-                add_unknown_fx('SSG', fx)
-
-        # note
-        if row.note != -1:
-            if row.note == 180:
-                opcodes.append(s_stop())
+                out.fx.append(note_pitch_slide_d(fxval))
+        # portamento
+        elif fx == 0x03:
+            out.fx.append(note_porta(fxval))
+        # vibrato
+        elif fx == 0x04:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a note opcode
+                out.pre_fx.append(vibrato_off())
             else:
-                opcodes.append(s_note(to_nss_note(row.note)))
-
-        # post-note opcodes are FX that rely on the row's note
-        # to be already processed
-        for fx, fxval in row.fx:
-            if fx in [0xe1, 0xe2] and fxval not in [-1, 0]:
-                if fx == 0xe1:  # slide up
-                    opcodes.append(note_slide_u(fxval))
-                elif fx == 0xe2:  # slide down
-                    opcodes.append(note_slide_d(fxval))
-
-    return jmp_to_order, opcodes
-
-
-def convert_a_row(row, channel):
-    ctx_t = {7: a_ctx_1, 8: a_ctx_2, 9: a_ctx_3, 10: a_ctx_4, 11: a_ctx_5, 12: a_ctx_6}
-    jmp_to_order = -1
-    opcodes = []
-    if not is_empty(row):
-        # context
-        opcodes.append(ctx_t[channel]())
-        # opcodes that must be executed before a vol/instr/note
-        for fx, fxval in row.fx:
-            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
-                opcodes.append(vol_slide_off())
-            elif fx == 0xed:  # note delay
-                opcodes.append(a_delay(fxval))
-        # instrument
-        if row.ins != -1:
-            opcodes.append(a_instr(row.ins))
-        # volume
-        if row.vol != -1:
-            opcodes.append(a_vol(row.vol))
-        # effects
-        for fx, fxval in row.fx:
-            if fx == -1:      # empty fx
-                pass
-            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
-                pass
-            elif fx in [0xed]: # pre-instrument FX
-                pass
-            elif fx == 0x0b:  # Jump to order
-                jmp_to_order = fxval
-            elif fx == 0x0d:  # Jump to next order
-                jmp_to_order = 256
-            elif fx == 0xff:  # Stop song
-                jmp_to_order = 257
-            elif fx == 0x0c:  # retrigger
-                opcodes.append(a_retrigger(fxval))
-            elif fx == 0x0f:  # Speed
-                opcodes.append(speed(fxval))
-            elif fx == 0x09:  # Groove
-                opcodes.append(groove(fxval))
-            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
-                if fxval > 0x0f:
-                    opcodes.append(vol_slide_u(fxval>>4))
-                else:
-                    opcodes.append(vol_slide_d(fxval))
-            elif fx in [0x08, 0x80]: # panning
-                pan_mask = convert_pan(fx, fxval)
-                opcodes.append(a_pan(pan_mask))
-            elif fx == 0xec:  # cut
-                opcodes.append(a_cut(fxval))
+                out.fx.append(vibrato(fxval))
+        # panning
+        elif fx == 0x08:
+            pan_l = 0x80 if (fxval & 0xf0) else 0
+            pan_r = 0x40 if (fxval & 0x0f) else 0
+            pan_op = factory.pan(pan_l|pan_r)
+            if pan_op:
+                out.fx.append(pan_op)
+        # groove
+        elif fx == 0x09:
+            out.fx.append(groove(fxval))
+        # jump to order
+        elif fx == 0x0b:
+            out.jmp_to_order = fxval
+        # jump to next order
+        elif fx == 0x0d:
+            out.jmp_to_order = 256
+        # speed
+        elif fx == 0x0f:
+            out.fx.append(speed(fxval))
+        # FM OP1 level
+        elif fx == 0x12:
+            out.fx.append(op1_lvl(fxval))
+        # FM OP2 level
+        elif fx == 0x13:
+            out.fx.append(op2_lvl(fxval))
+        # FM OP3 level
+        elif fx == 0x14:
+            out.fx.append(op3_lvl(fxval))
+        # FM OP4 level
+        elif fx == 0x15:
+            out.fx.append(op4_lvl(fxval))
+        # volume slide up/down
+        elif fx == 0x0a:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a vol opcode
+                out.pre_fx.append(vol_slide_off())
+            elif fxval > 0x0f:
+                out.fx.append(vol_slide_u(fxval>>4))
             else:
-                add_unknown_fx('ADPCM-A', fx)
-
-        # note
-        if row.note != -1:
-            if row.note == 180:
-                opcodes.append(a_stop())
+                out.fx.append(vol_slide_d(fxval))
+        # retrigger
+        elif fx == 0x0c:
+            trigger_op = factory.retrigger(fxval)
+            if trigger_op:
+                out.fx.append(trigger_op)
+        # panning (old variation)
+        elif fx == 0x80:
+            pan_l = 0x80 if fxval in [0x00, 0x80] else 0
+            pan_r = 0x40 if fxval in [0x80, 0xff] else 0
+            pan_op = factory.pan(pan_l|pan_r)
+            if pan_op:
+                out.fx.append(pan_op)
+        # arpeggio speed
+        elif fx == 0xe0:
+            # fxval == -1 means default arpeggio speed
+            fxval = max(fxval, 1)
+            out.fx.append(arpeggio_speed(fxval))
+        # slide up
+        elif fx == 0xe1:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a note opcode
+                out.pre_fx.append(note_slide_off())
             else:
-                opcodes.append(a_start())
-    return jmp_to_order, opcodes
-
-
-def convert_b_row(row, channel):
-    jmp_to_order = -1
-    opcodes = []
-    if not is_empty(row):
-        # opcodes that must be executed before a vol/instr/note
-        for fx, fxval in row.fx:
-            if fx == 0x0a and fxval in [-1, 0]:  # volume slide off
-                opcodes.append(vol_slide_off())
-            elif fx == 0xed:  # note delay
-                opcodes.append(b_delay(fxval))
-        # instrument
-        if row.ins != -1:
-            opcodes.append(b_instr(row.ins))
-        # volume
-        if row.vol != -1:
-            opcodes.append(b_vol(row.vol))
-        # effects
-        for fx, fxval in row.fx:
-            if fx == -1:      # empty fx
-                pass
-            elif fx == 0x0a and fxval in [-1, 0]:  # pre-instrument FX
-                pass
-            elif fx in [0xed]: # pre-instrument FX
-                pass
-            elif fx in [0xe1, 0xe2]: # post-note FX
-                pass
-            elif fx == 0x0b:  # Jump to order
-                jmp_to_order = fxval
-            elif fx == 0x0d:  # Jump to next order
-                jmp_to_order = 256
-            elif fx == 0xff:  # Stop song
-                jmp_to_order = 257
-            elif fx == 0x00:  # arpeggio
-                # fxval == -1 means disable slide
-                fxval = max(fxval, 0)
-                opcodes.append(arpeggio(fxval))
-            elif fx == 0x0f:  # Speed
-                opcodes.append(speed(fxval))
-            elif fx == 0x09:  # Groove
-                opcodes.append(groove(fxval))
-            elif fx == 0x0a and fxval not in [-1, 0]: # volume slide
-                if fxval > 0x0f:
-                    opcodes.append(vol_slide_u(fxval>>4))
-                else:
-                    opcodes.append(vol_slide_d(fxval))
-            elif fx in [0x01, 0x02] and fxval in [-1, 0]:
-                opcodes.append(note_slide_off())
-            elif fx == 0x01:  # pitch slide up
-                opcodes.append(note_pitch_slide_u(fxval))
-            elif fx == 0x02:  # pitch slide down
-                opcodes.append(note_pitch_slide_d(fxval))
-            elif fx == 0x03:  # portamento
-                opcodes.append(note_porta(fxval))
-            elif fx == 0x04:  # vibrato
-                if fxval in [-1, 0]:
-                    opcodes.append(vibrato_off())
-                else:
-                    opcodes.append(vibrato(fxval))
-            elif fx in [0x08, 0x80]: # panning
-                pan_mask = convert_pan(fx, fxval)
-                opcodes.append(b_pan(pan_mask))
-            elif fx == 0xe0:  # arpeggio speed
-                # fxval == -1 means default arpeggio speed
-                fxval = max(fxval, 1)
-                opcodes.append(arpeggio_speed(fxval))
-            elif fx == 0xe6:  # quick legato up/down
-                ticks, semitones = fxval>>4, fxval&0xf
-                if 8 <= ticks <= 15:
-                    opcodes.append(quick_legato_d((ticks-8)<<4|semitones))
-                else:
-                    opcodes.append(quick_legato_u((ticks)<<4|semitones))
-            elif fx == 0xe8:  # quick legato up
-                opcodes.append(quick_legato_u(fxval))
-            elif fx == 0xe9:  # quick legato down
-                opcodes.append(quick_legato_d(fxval))
-            elif fx == 0xec:  # cut
-                opcodes.append(b_cut(fxval))
+                # opcode must be executed before a note opcode
+                out.post_fx.append(note_slide_u(fxval))
+        # slide down
+        elif fx == 0xe2:
+            if fxval in [-1, 0]:
+                out.pre_fx.append(note_slide_off())
             else:
-                row_warn(row, "UNKNOWN")
-                add_unknown_fx('ADPCM-B', fx)
-
-        # note
-        if row.note != -1:
-            if row.note == 180:
-                opcodes.append(b_stop())
+                out.post_fx.append(note_slide_d(fxval))
+        # pitch
+        elif fx == 0xe5:
+            pitch_op = factory.pitch(fxval)
+            if pitch_op:
+                out.fx.append(pitch_op)
+        # quick legato up/down
+        elif fx == 0xe6:
+            ticks, semitones = fxval>>4, fxval&0xf
+            if 8 <= ticks <= 15:
+                out.fx.append(quick_legato_d((ticks-8)<<4|semitones))
             else:
-                opcodes.append(b_note(to_nss_note(row.note)))
+                out.fx.append(quick_legato_u((ticks)<<4|semitones))
+        # quick legato up
+        elif fx == 0xe8:
+            out.fx.append(quick_legato_u(fxval))
+        # quick legato down
+        elif fx == 0xe9:
+            out.fx.append(quick_legato_d(fxval))
+        # note cut
+        elif fx == 0xec:
+            out.fx.append(factory.cut(fxval))
+        # note delay
+        elif fx == 0xed:
+            # opcode must be executed before a note opcode
+            out.pre_fx.append(factory.delay(fxval))
+        # stop song
+        elif fx == 0xff:
+            out.jmp_to_order = 257
+        else:
+            row_warn("unsupported FX")
 
-        # post-note opcodes are FX that rely on the row's note
-        # to be already processed
-        for fx, fxval in row.fx:
-            if fx in [0xe1, 0xe2] and fxval not in [-1, 0]:
-                if fx == 0xe1:  # slide up
-                    opcodes.append(note_slide_u(fxval))
-                elif fx == 0xe2:  # slide down
-                    opcodes.append(note_slide_d(fxval))
+    all_ops = [o if isinstance(o, list) else [o] if o else [] for o in
+               (out.location, out.flow_fx, out.pre_fx, out.ins, out.vol, out.fx, out.note, out.post_fx)]
+    flattened_ops = sum(all_ops, [])
 
-    return jmp_to_order, opcodes
+    return out.jmp_to_order, flattened_ops
+
+
 
 
 cached_nss = {}
 def raw_nss(m, p, bs, channels, compact):
-    global dbg_order, dbg_row
+    global location_order, location_row
 
     # a cache of already parsed rows data
     def row_to_nss(func, pat, pos):
-        global cached_nss, dbg_channel, dbg_fxs
+        global cached_nss, location_channel, location_fxs, location_data
         idx=(pat.channel, pat.index, pos)
         if idx not in cached_nss:
-            dbg_channel = pat.channel
-            dbg_fxs = m.fxcolumns[pat.channel]
-            cached_nss[idx] = func(pat.rows[pos], pat.channel)
+            location_channel = pat.channel
+            location_fxs = pat.fxcols
+            location_data = pat.rows[pos]
+            cached_nss[idx] = func(location_data, pat.channel)
         return cached_nss[idx]
 
     # unoptimized nss opcodes generated from the Furnace song
@@ -837,38 +747,29 @@ def raw_nss(m, p, bs, channels, compact):
         for index in range(pattern_length):
             # nss opcodes to add at the end of each processed Furnace row
             opcodes = []
-            dbg_order, dbg_row = order, index
+            location_order, location_row = order, index
 
             # FM channels
             for channel in f_channels:
-                j, f_opcodes = row_to_nss(convert_fm_row, order_patterns[channel], index)
+                j, f_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
                 if channel in selected_f:
                     opcodes.extend(f_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
             # SSG channels
             for channel in s_channels:
-                # dbg_channel = channel
-                # row = order_patterns[channel].rows[index]
-                # j, s_opcodes = convert_s_row(row, channel)
-                j, s_opcodes = row_to_nss(convert_s_row, order_patterns[channel], index)
+                j, s_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
                 if channel in selected_s:
                     opcodes.extend(s_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
             # ADPCM-A channels
             for channel in a_channels:
-                # dbg_channel = channel
-                # row = order_patterns[channel].rows[index]
-                # j, a_opcodes = convert_a_row(row, channel)
-                j, a_opcodes = row_to_nss(convert_a_row, order_patterns[channel], index)
+                j, a_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
                 if channel in selected_a:
                     opcodes.extend(a_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
             # ADPCM-B channel
             for channel in b_channel:
-                # dbg_channel = channel
-                # row = order_patterns[channel].rows[index]
-                # j, b_opcodes = convert_b_row(row, channel)
-                j, b_opcodes = row_to_nss(convert_b_row, order_patterns[channel], index)
+                j, b_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
                 if channel in selected_b:
                     opcodes.extend(b_opcodes)
                 jmp_to_order = max(jmp_to_order, j)
@@ -924,9 +825,135 @@ def raw_nss(m, p, bs, channels, compact):
     return nss
 
 
+
+
 #
-# NSS optimization passes
+# NSS compilation passes
 #
+
+def check_instruments_before_first_note(m, p, nss):
+    fm_ctx_map = {fm_ctx_1: 0, fm_ctx_2: 1, fm_ctx_3: 2, fm_ctx_4: 3}
+    fm_ctx = 0
+    s_ctx_map = {s_ctx_1: 0, s_ctx_2: 1, s_ctx_3: 2}
+    s_ctx = 0
+    a_ctx_map = {a_ctx_1: 0, a_ctx_2: 1, a_ctx_3: 2, a_ctx_4: 3, a_ctx_5: 4, a_ctx_6: 5}
+    a_ctx = 0
+
+    fm_is = [-1, -1, -1, -1]
+    s_is = [-1, -1, -1]
+    a_is = [-1, -1, -1, -1, -1, -1]
+    b_i = -1
+
+    fm_ok = True
+    s_ok = True
+    a_ok = True
+    b_ok = True
+
+    def pass_error(op):
+        global location_pos
+        location_pos = (4,2)
+        row_error("initial note played without instrument configured")
+
+    def check_instrument_before_first_note_pass(op, out):
+        nonlocal fm_ctx
+        nonlocal s_ctx
+        nonlocal a_ctx
+        nonlocal b_i
+        nonlocal fm_is
+        nonlocal s_is
+        nonlocal a_is
+        nonlocal b_i
+        nonlocal fm_ok
+        nonlocal s_ok
+        nonlocal a_ok
+        nonlocal b_ok
+        if type(op) == nss_loc:
+            set_location_context(m, p, op.order, op.channel, op.row)
+        elif type(op) in fm_ctx_map.keys():
+            fm_ctx = fm_ctx_map[type(op)]
+        elif type(op) == fm_instr:
+            if fm_is[fm_ctx] != op.inst:
+                fm_is[fm_ctx] = op.inst
+        elif type(op) == fm_note and fm_ok:
+            if fm_is[fm_ctx] == -1:
+                pass_error(op)
+                fm_ok = False
+        elif type(op) in s_ctx_map.keys():
+            s_ctx = s_ctx_map[type(op)]
+        elif type(op) == s_macro:
+            if s_is[s_ctx] != op.inst:
+                s_is[s_ctx] = op.inst
+        elif type(op) == s_note and s_ok:
+            if s_is[s_ctx] == -1:
+                pass_error(op)
+                s_ok = False
+        elif type(op) in a_ctx_map.keys():
+            a_ctx = a_ctx_map[type(op)]
+        elif type(op) == a_instr:
+            if a_is[a_ctx] != op.inst:
+                a_is[a_ctx] = op.inst
+        elif type(op) == a_start and a_ok:
+            if a_is[a_ctx] == -1:
+                pass_error(op)
+                a_ok = False
+        elif type(op) == b_instr:
+            if b_i != op.inst:
+                b_i = op.inst
+        elif type(op) == b_note and b_ok:
+            if b_i == -1:
+                pass_error(op)
+                b_ok = False
+        out.append(op)
+
+    out = run_control_flow_pass(check_instrument_before_first_note_pass, nss)
+    return fm_ok and s_ok and a_ok and b_ok
+
+
+def check_instruments_valid_for_channel(m, p, ins, nss):
+    def mk_chk(type_to_check):
+        def predicate(ins_op):
+            if ins_op.inst>=len(ins):
+                row_error("instrument does not exist")
+                return False
+            fur_ins = ins[ins_op.inst]
+            check = type(fur_ins) == type_to_check
+            if not check:
+                row_error("instrument type is invalid for this channel")
+            return check
+        return predicate
+
+    fm_predicate = mk_chk(fm_instrument)
+    s_predicate = mk_chk(ssg_macro)
+    a_predicate = mk_chk(adpcm_a_instrument)
+    b_predicate = mk_chk(adpcm_b_instrument)
+
+    fm_ok = True
+    s_ok = True
+    a_ok = True
+    b_ok = True
+
+    def check_instrument_valid_for_channel_pass(op, out):
+        global location_pos
+        nonlocal fm_ok
+        nonlocal s_ok
+        nonlocal a_ok
+        nonlocal b_ok
+        if type(op) == nss_loc:
+            set_location_context(m, p, op.order, op.channel, op.row)
+            location_pos = (4,2)
+        elif type(op) == fm_instr and fm_ok:
+            fm_ok = fm_predicate(op)
+        elif type(op) == s_macro and s_ok:
+            s_ok = s_predicate(op)
+        elif type(op) == a_instr and a_ok:
+            a_ok = a_predicate(op)
+        elif type(op) == b_instr and b_ok:
+            b_ok = b_predicate(op)
+        out.append(op)
+
+    out = run_control_flow_pass(check_instrument_valid_for_channel_pass, nss)
+    return fm_ok and s_ok and a_ok and b_ok
+
 
 def merge_adjacent_waits(nss):
     compact = []
@@ -1046,8 +1073,8 @@ def compact_instr(nss):
             fm_ctx = fm_ctx_map[type(op)]
             out.append(op)
         elif type(op) == s_macro:
-            if s_is[s_ctx] != op.macro:
-                s_is[s_ctx] = op.macro
+            if s_is[s_ctx] != op.inst:
+                s_is[s_ctx] = op.inst
                 out.append(op)
         elif type(op) in s_ctx_map.keys():
             s_ctx = s_ctx_map[type(op)]
@@ -1071,20 +1098,23 @@ def compact_instr(nss):
 
 
 def insert_missing_vol(nss):
-    # note: we don't need to set a default volume for SSG as
-    # the SSG macro always contains a volume
     fm_ctx_map = {fm_ctx_1: 0, fm_ctx_2: 1, fm_ctx_3: 2, fm_ctx_4: 3}
     fm_ctx = 0
     a_ctx_map = {a_ctx_1: 0, a_ctx_2: 1, a_ctx_3: 2, a_ctx_4: 3, a_ctx_5: 4, a_ctx_6: 5}
     a_ctx = 0
+    s_ctx_map = {s_ctx_1: 0, s_ctx_2: 1, s_ctx_3: 2}
+    s_ctx = 0
     vols_fm = [False, False, False, False]
+    vols_ssg = [False, False, False]
     vols_a = [False, False, False, False, False, False]
     vol_b = False
 
     def insert_missing_vol_pass(op, out):
         nonlocal fm_ctx
         nonlocal a_ctx
+        nonlocal s_ctx
         nonlocal vols_fm
+        nonlocal vols_ssg
         nonlocal vols_a
         nonlocal vol_b
 
@@ -1094,6 +1124,9 @@ def insert_missing_vol(nss):
         elif type(op) in a_ctx_map.keys():
             a_ctx = a_ctx_map[type(op)]
             out.append(op)
+        elif type(op) in s_ctx_map.keys():
+            s_ctx = s_ctx_map[type(op)]
+            out.append(op)
         elif type(op) == fm_vol:
             vols_fm[fm_ctx]=True
             out.append(op)
@@ -1101,6 +1134,14 @@ def insert_missing_vol(nss):
             if not vols_fm[fm_ctx]:
                 out.append(fm_vol(0x7f))
                 vols_fm[fm_ctx]=True
+            out.append(op)
+        elif type(op) == s_vol:
+            vols_ssg[s_ctx]=True
+            out.append(op)
+        elif type(op) == s_note:
+            if not vols_ssg[s_ctx]:
+                out.append(s_vol(0x0f))
+                vols_ssg[s_ctx]=True
             out.append(op)
         elif type(op) == a_vol:
             vols_a[a_ctx]=True
@@ -1311,10 +1352,11 @@ def simulate_ssg_autoenv(nss, ins):
             s_ctx=0
             out.append(op)
         elif type(op) == s_macro:
-            if s_is[s_ctx] != op.macro:
-                s_is[s_ctx] = op.macro
+            # print(op, hex(op.inst))
+            if s_is[s_ctx] != op.inst:
+                s_is[s_ctx] = op.inst
                 # False if autoenv isn't defined
-                s_autoenv[s_ctx]=ins[op.macro].autoenv
+                s_autoenv[s_ctx]=ins[op.inst].autoenv
                 s_period[s_ctx]=-1
                 out.append(op)
         elif type(op) in s_ctx_map.keys():
@@ -1344,6 +1386,10 @@ def simulate_ssg_autoenv(nss, ins):
 
     out = run_control_flow_pass(autoenv_pass, nss)
     return out
+
+
+def remove_locations(nss):
+    return [op for op in nss if not isinstance(op, nss_loc)]
 
 
 def remove_unreferenced_labels(nss):
@@ -1394,13 +1440,13 @@ def resolve_jmp_and_call_opcodes(nss):
 
 def stream_size_in_effective_opcodes(stream):
     def control_flow(op):
-        return type(op) in [jmp, call, pat_offset, call_tbl, call_entry, nss_ret, nss_label, nss_end, wait_n, wait_last]
+        return type(op) in [nss_loc, jmp, call, pat_offset, call_tbl, call_entry, nss_ret, nss_label, nss_end, wait_n, wait_last]
     return len([op for op in stream if not control_flow(op)])
 
 
 def stream_size_in_bytes(stream):
     def op_size(op):
-        if isinstance(op, nss_label):
+        if type(op) in [nss_label, nss_loc]:
             return 0
         else:
             # size: data size (without metadata fields)
@@ -1470,6 +1516,8 @@ def nss_footer(name, fd):
 def nss_to_asm(nss, m, name, fd):
     def asm_slice(nss):
         for op in nss:
+            if isinstance(op, nss_loc):
+                continue
             if isinstance(op, nss_label):
                 if op.pat == "_start":
                     print("        ;; start of NSS stream", file=fd)
@@ -1522,7 +1570,19 @@ def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
 
     nss.insert(0, nss_label("_start"))
 
+    dbg("Check passes:")
+    dbg(" - check that instruments are valid for channel")
+    if not check_instruments_valid_for_channel(m, p, ins, nss):
+        return False, []
+
+    dbg(" - check that initial notes have an instrument set")
+    if not check_instruments_before_first_note(m, p, nss):
+        return False, []
+
     dbg("Transformation passes:")
+    dbg(" - remove location opcodes after checks have passed")
+    nss = remove_locations(nss)
+
     dbg(" - remove unreference NSS labels")
     nss = remove_unreferenced_labels(nss)
 
@@ -1560,7 +1620,7 @@ def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
     dbg(" - resolve jmp and call opcodes")
     nss = resolve_jmp_and_call_opcodes(nss)
 
-    return nss
+    return True, nss
 
 
 def channels_bitfield(channels):
@@ -1600,11 +1660,6 @@ def main():
     arguments = parser.parse_args()
     VERBOSE = arguments.verbose
 
-    if arguments.output:
-        outfd = open(arguments.output, "w")
-    else:
-        outfd = sys.__stdout__
-
     if arguments.name != None:
         name = arguments.name
     else:
@@ -1617,6 +1672,7 @@ def main():
         error("invalid channel filter")
 
     register_nss_ops()
+    register_nss_factories()
 
     dbg("Loading Furnace module %s"%arguments.FILE)
     bs = load_module(arguments.FILE)
@@ -1627,7 +1683,15 @@ def main():
     channels = [int(c, 16) for c in sorted(list(arguments.channels.lower()))]
 
     if arguments.compact:
-        streams = [generate_nss_stream(m, p, bs, ins, [c], i) for i, c in enumerate(channels)]
+        res = [generate_nss_stream(m, p, bs, ins, [c], i) for i, c in enumerate(channels)]
+        checkok = [c for c, s in res]
+        if not all(checkok):
+            sys.exit(1)
+        if arguments.output:
+            outfd = open(arguments.output, "w")
+        else:
+            outfd = sys.__stdout__
+        streams = [s for c, s in res]
         channels, streams = remove_empty_streams(channels, streams)
         # NSS compact header (number of streams, channels bitfield, stream pointers)
         size = (1 +                  # number of streams
@@ -1641,17 +1705,19 @@ def main():
         for i, ch, stream in zip(range(len(channels)), channels, streams):
             nss_to_asm(stream, m, stream_name(name, ch), outfd)
     else:
-        stream = generate_nss_stream(m, p, bs, ins, channels, -1)
+        checkok, stream = generate_nss_stream(m, p, bs, ins, channels, -1)
+        if not checkok:
+            sys.exit(1)
+        if arguments.output:
+            outfd = open(arguments.output, "w")
+        else:
+            outfd = sys.__stdout__
         # NSS inline marker + channels bitfield, stream size
         size = 1 + 2 + stream_size_in_bytes(stream)
         asm_header(stream, m, name, bank, size, outfd)
         nss_inline_header(channels, name, outfd)
         nss_to_asm(stream, m, False, outfd)
     nss_footer(name, outfd)
-
-    # warn about any unknown FX during the conversion to NSS
-    for ch in unknown_fx.keys():
-        warn("unknown FX for %s: %s" % (ch, ", ".join(sorted(unknown_fx[ch]))))
 
 
 
