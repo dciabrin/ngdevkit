@@ -382,6 +382,7 @@ class row_actions:
     location: object = None
     jmp_to_order: int = -1
     flow_fx: list = field(default_factory=list)
+    ctx: object = None
     pre_fx: list = field(default_factory=list)
     ins: object = None
     vol: object = None
@@ -496,10 +497,10 @@ def convert_row(row, channel):
     out = row_actions()
 
     if is_empty(row):
-        return out.jmp_to_order, []
+        return out
 
     out.location = nss_loc(location_order, location_channel, location_row)
-    out.flow_fx = factory.ctx()
+    out.ctx = factory.ctx()
 
     # note
     location_pos = (0,3)
@@ -565,7 +566,7 @@ def convert_row(row, channel):
                 out.fx.append(pan_op)
         # groove
         elif fx == 0x09:
-            out.fx.append(groove(fxval))
+            out.flow_fx.append(groove(fxval))
         # jump to order
         elif fx == 0x0b:
             out.jmp_to_order = fxval
@@ -574,7 +575,7 @@ def convert_row(row, channel):
             out.jmp_to_order = 256
         # speed
         elif fx == 0x0f:
-            out.fx.append(speed(fxval))
+            out.flow_fx.append(speed(fxval))
         # FM OP1 level
         elif fx == 0x12:
             out.fx.append(op1_lvl(fxval))
@@ -658,17 +659,12 @@ def convert_row(row, channel):
         else:
             row_warn("unsupported FX")
 
-    all_ops = [o if isinstance(o, list) else [o] if o else [] for o in
-               (out.location, out.flow_fx, out.pre_fx, out.ins, out.vol, out.fx, out.note, out.post_fx)]
-    flattened_ops = sum(all_ops, [])
-
-    return out.jmp_to_order, flattened_ops
-
+    return out
 
 
 
 cached_nss = {}
-def raw_nss(m, p, bs, channels, compact):
+def raw_nss(m, p, bs, channels, compact, capture):
     global location_order, location_row
 
     # a cache of already parsed rows data
@@ -681,6 +677,12 @@ def raw_nss(m, p, bs, channels, compact):
             location_data = pat.rows[pos]
             cached_nss[idx] = func(location_data, pat.channel)
         return cached_nss[idx]
+
+    def row_actions_to_nss(a):
+        all_ops = [o if isinstance(o, list) else [o] if o else [] for o in
+                   (a.location, a.flow_fx, a.ctx, a.pre_fx, a.ins, a.vol, a.fx, a.note, a.post_fx)]
+        flattened_ops = sum(all_ops, [])
+        return flattened_ops
 
     # unoptimized nss opcodes generated from the Furnace song
     nss = []
@@ -749,36 +751,25 @@ def raw_nss(m, p, bs, channels, compact):
             opcodes = []
             location_order, location_row = order, index
 
-            # FM channels
-            for channel in f_channels:
-                j, f_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
-                if channel in selected_f:
-                    opcodes.extend(f_opcodes)
-                jmp_to_order = max(jmp_to_order, j)
-            # SSG channels
-            for channel in s_channels:
-                j, s_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
-                if channel in selected_s:
-                    opcodes.extend(s_opcodes)
-                jmp_to_order = max(jmp_to_order, j)
-            # ADPCM-A channels
-            for channel in a_channels:
-                j, a_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
-                if channel in selected_a:
-                    opcodes.extend(a_opcodes)
-                jmp_to_order = max(jmp_to_order, j)
-            # ADPCM-B channel
-            for channel in b_channel:
-                j, b_opcodes = row_to_nss(convert_row, order_patterns[channel], index)
-                if channel in selected_b:
-                    opcodes.extend(b_opcodes)
-                jmp_to_order = max(jmp_to_order, j)
+            # Get all the NSS opcodes produced by all the tracks for the current row
+            all_actions = [row_to_nss(convert_row, order_patterns[c], index) for c in range(14)]
+
+            # If needed, capture missing flow_fx from filtered channels and
+            # make sure those fx are not lost by reinjecting them into
+            # a channel that is part of the NSS output
+            if capture:
+                flows = [a.flow_fx for i, a in enumerate(all_actions) if a.flow_fx and i not in channels]
+                all_actions[channels[0]].flow_fx.extend(sum(flows,[]))
 
             # all channels are processed for this pos.
-            # add all generated opcodes plus a time sync
-            pattern_opcodes.extend(opcodes + [wait_n(1)])
+            # add all generated opcodes for all channels in a flat,
+            # plus a time sync to denote the end of row
+            # pattern_opcodes.extend(opcodes + [wait_n(1)])
+            channels_opcodes = [row_actions_to_nss(a) for i, a in enumerate(all_actions) if i in channels]
+            pattern_opcodes.extend(sum(channels_opcodes, []) + [wait_n(1)])
 
             # stop processing further rows if a JMP fx was used
+            jmp_to_order = next((a.jmp_to_order for a in all_actions if a.jmp_to_order != -1), -1)
             if jmp_to_order != -1:
                 break
 
@@ -1557,9 +1548,10 @@ def remove_empty_streams(channels, streams):
 tempo_injected=False
 def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
     compact = stream_idx >= 0
+    capture_flow_fx = stream_idx == 0
 
     dbg("Convert Furnace patterns to unoptimized NSS opcodes")
-    nss = raw_nss(m, p, bs, channels, compact)
+    nss = raw_nss(m, p, bs, channels, compact, capture_flow_fx)
 
     # insert a tempo opcode on the first track that is used in the Furnace module
     global tempo_injected
