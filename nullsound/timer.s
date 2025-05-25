@@ -60,7 +60,13 @@ init_timer_state_tracker::
         ret
 
 
+;;; Acknowledge and re-arm YM2610 timers
+;;; all registers must be preserved, no shadow register must be
+;;; used as they are currently reserved for processing NMI
+;;; ------
 update_timer_state_tracker::
+        push    af
+        push    bc
         ld      a, #TIMER_CONSUMER_ALL
         ld      (state_timer_tick_reached), a
         ;; keep track of the new interrupt
@@ -89,6 +95,8 @@ update_timer_state_tracker::
         ;; interrupt handler
         call    ym2610_restore_context_port_a
 
+        pop     bc
+        pop     af
         ret
 
 

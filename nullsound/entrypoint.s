@@ -59,11 +59,7 @@
 ;;;
         .org    0x0038
         di
-        ex      af, af'
-        exx
         call    update_timer_state_tracker
-        exx
-        ex      af', af
         ei
         reti
 
