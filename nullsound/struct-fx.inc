@@ -173,6 +173,7 @@ _trigger_size:
         .lclequ BIT_FX_VIBRATO,         2
         .lclequ BIT_FX_ARPEGGIO,        3
         .lclequ BIT_FX_LEGATO,          4
+        .lclequ BIT_FX_QUICK_LEGATO,    5
 
         ;; Trigger FX function interface
         .lclequ TRIGGER_LOAD_NOTE_FUNC,         0

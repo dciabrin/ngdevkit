@@ -601,6 +601,8 @@ nss_opcodes:
         .nss_op note_portamento
         .nss_op vibrato
         .nss_op vibrato_off
+        .nss_op legato
+        .nss_op legato_off
 
 
 

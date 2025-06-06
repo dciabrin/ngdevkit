@@ -62,7 +62,7 @@ This document details the current level of support for Furnace features in NSS. 
 | F2 | Single tick pitch slide down | 💜     |      |
 | 03 | Portamento                   | 💚     |      |
 | E1 | Note slide up                | 💚     |      |
-| EA | Toggle legato                | 💜     |      |
+| EA | Toggle legato                | 💚     |      |
 | E2 | Note slide down              | 💚     |      |
 | E6 | Quick legato (compatibility) | 🚫     |      |
 | E8 | Quick legato up              | 💚     |      |

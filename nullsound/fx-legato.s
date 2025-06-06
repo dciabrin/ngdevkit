@@ -61,6 +61,7 @@ _legato_post_sign:
         ld      LEGATO_DELAY(ix), a
 
         set     BIT_FX_LEGATO, NOTE_FX(ix)
+        set     BIT_FX_QUICK_LEGATO, NOTE_FX(ix)
 
         pop     bc
         inc     hl
@@ -88,9 +89,14 @@ _legato_update_pos:
         ;; to recompute the note and tune values without shift, so force it here
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 
-        ;; stop FX
+        ;; stop FX if that was a quick legato
+        ;; (otherwise a dedicated opcode must be used to disable legato)
         ld      LEGATO_TRANSPOSE(ix), #0
+        bit     BIT_FX_QUICK_LEGATO, NOTE_FX(ix)
+        jr      nz, _legato_update_end
         res     BIT_FX_LEGATO, NOTE_FX(ix)
+_legato_update_end:
+        res     BIT_FX_QUICK_LEGATO, NOTE_FX(ix)
 
         ret
 
@@ -117,3 +123,23 @@ quick_legato_down::
         ;; a: direction
         xor     a
         jp      legato_init
+
+
+;;; LEGATO
+;;; Enable the legato mode for current channel
+;;; ------
+;;;   ix  : state for channel
+;;; hl modified
+legato::
+        set     BIT_FX_LEGATO, NOTE_FX(ix)
+        ret
+
+
+;;; LEGATO_OFF
+;;; Disable the legato mode for current channel
+;;; ------
+;;;   ix  : state for channel
+;;; hl modified
+legato_off::
+        res     BIT_FX_LEGATO, NOTE_FX(ix)
+        ret

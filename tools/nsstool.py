@@ -337,6 +337,8 @@ def register_nss_ops():
         ("note_porta",  ["speed"]),
         ("vibrato",     ["speed_depth"]),
         ("vibrato_off", ),
+        ("legato",      ),
+        ("legato_off",  ),
 
 
         # reserved opcodes
@@ -646,6 +648,14 @@ def convert_row(row, channel):
         # quick legato down
         elif fx == 0xe9:
             out.fx.append(quick_legato_d(fxval))
+        # legato
+        elif fx == 0xea:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a note opcode
+                out.pre_fx.append(legato_off())
+            else:
+                # opcode must be executed before a note opcode
+                out.post_fx.append(legato())
         # note cut
         elif fx == 0xec:
             out.fx.append(factory.cut(fxval))

@@ -677,7 +677,7 @@ _fm_post_fx_vibrato:
         call    eval_arpeggio_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _fm_post_fx_arpeggio:
-        bit     BIT_FX_LEGATO, NOTE_FX(ix)
+        bit     BIT_FX_QUICK_LEGATO, NOTE_FX(ix)
         jr      z, _fm_post_fx_legato
         call    eval_legato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
@@ -991,10 +991,16 @@ fm_configure_note_on:
         jr      _fm_cfg_note_prepare_ym2610
 _fm_cfg_note_update:
         ;; update the current note and prepare the ym2610
-        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      NOTE(ix), a
         ld      NOTE16+1(ix), a
         ld      NOTE16(ix), #0
+        ;; do not stop the current note if a legato is in progress
+        bit     BIT_FX_LEGATO, NOTE_FX(ix)
+        jr      z, _fm_post_cfg_note_update
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+        jr      _fm_cfg_note_end
+_fm_post_cfg_note_update:
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
 _fm_cfg_note_prepare_ym2610:
         ;; stop playback on the channel, and let the pipeline restart it
         ld      a, (state_fm_ym2610_channel)

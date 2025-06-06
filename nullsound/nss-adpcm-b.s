@@ -203,7 +203,7 @@ _b_post_fx_vibrato:
         call    eval_arpeggio_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _b_post_fx_arpeggio:
-        bit     BIT_FX_LEGATO, NOTE_FX(ix)
+        bit     BIT_FX_QUICK_LEGATO, NOTE_FX(ix)
         jr      z, _b_post_fx_legato
         call    eval_legato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
@@ -451,10 +451,16 @@ adpcm_b_configure_note_on:
         jr      _b_cfg_note_prepare_ym2610
 _b_cfg_note_update:
         ;; update the current note and prepare the ym2610
-        res     BIT_NOTE_STARTED, PIPELINE(ix)
         ld      NOTE(ix), a
         ld      NOTE16+1(ix), a
         ld      NOTE16(ix), #0
+        ;; do not stop the current note if a legato is in progress
+        bit     BIT_FX_LEGATO, NOTE_FX(ix)
+        jr      z, _b_post_cfg_note_update
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+        jr      _b_cfg_note_end
+_b_post_cfg_note_update:
+        res     BIT_NOTE_STARTED, PIPELINE(ix)
 _b_cfg_note_prepare_ym2610:
         ;; stop playback on the channel, and let the pipeline restart it
         ld      b, #REG_ADPCM_B_START_STOP
