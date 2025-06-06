@@ -98,7 +98,7 @@ This document details the current level of support for Furnace features in NSS. 
 | FD | Set virtual tempo numerator   | 🚫     |      |
 | FE | Set virtual tempo denominator | 🚫     |      |
 | 0B | Jump to order                 | 💚     |      |
-| 0D | Jump to next pattern          | 💜     |      |
+| 0D | Jump to next pattern          | 💚     |      |
 | FF | Stop song                     | 💚     |      |
 
 
