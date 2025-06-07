@@ -290,7 +290,14 @@ class adpcm_b_sample:
 
 
 @dataclass
-class pcm_sample:
+class pcm8_sample:
+    name: str = ""
+    data: bytearray = field(default=b"", repr=False)
+    frequency: int = 0
+    loop: bool = False
+
+@dataclass
+class pcm16_sample:
     name: str = ""
     data: bytearray = field(default=b"", repr=False)
     frequency: int = 0
@@ -564,7 +571,7 @@ def compile_macro_sequence(keys, blocks, loadbits):
 
 
 def get_sample_format(smp, sample, itype):
-    if isinstance(smp[sample],pcm_sample):
+    if type(smp[sample]) in [pcm8_sample, pcm16_sample]:
         # the sample is encoded in PCM, so it has to be converted
         # to be played back on the hardware.
         warning("sample '%s' is encoded in PCM, converting to ADPCM-%s"%\
@@ -677,6 +684,9 @@ def read_sample(prefix, bs, sample_idx):
     elif stype == 16: # PCM16 (requires conversion to ADPCM)
         data_bytes = adpcm_samples * 2
         data_padding = 0  # adpcmtool codecs automatically adds padding
+    elif stype == 8: # PCM8 (requires conversion to ADPCM)
+        data_bytes = adpcm_samples
+        data_padding = 0  # adpcmtool codecs automatically adds padding
     else:
         error("sample '%s' is of unsupported type: %d"%(str(name), stype))
     bs.u1()  # unused loop direction
@@ -688,17 +698,24 @@ def read_sample(prefix, bs, sample_idx):
     insname = "%s_%02x_%s"%(prefix, sample_idx, re.sub(r"\W|^(?=\d)", "_", name).lower())
     ins = {5: adpcm_a_sample,
            6: adpcm_b_sample,
-           16: pcm_sample}[stype](insname, data)
+           8: pcm8_sample,
+           16: pcm16_sample}[stype](insname, data)
     ins.loop = loop_start != -1 and loop_end != -1
     ins.frequency = c4_freq
+
     return ins
 
 
 def convert_sample(pcm_sample, totype):
     codec = {37: ym2610_adpcma,
              38: ym2610_adpcmb}[totype]()
-    pcm16s = unpack('<%dh' % (len(pcm_sample.data)>>1), pcm_sample.data)
-    adpcms=codec.encode(pcm16s)
+    if isinstance(pcm_sample, pcm8_sample):
+        # NOTE: PCM8 seems to always be signed in Furnace
+        pcm8s = unpack('<%db' % (len(pcm_sample.data)), pcm_sample.data)
+        adpcms=codec.encode_s8(pcm8s)
+    else:
+        pcm16s = unpack('<%dh' % (len(pcm_sample.data)>>1), pcm_sample.data)
+        adpcms=codec.encode_s16(pcm16s)
     adpcms_packed = [(adpcms[i] << 4 | adpcms[i+1]) for i in range(0, len(adpcms), 2)]
     # convert sample to the right class
     converted = {37: adpcm_a_sample,
@@ -723,7 +740,7 @@ def check_for_unused_samples(smp, bs):
     # module might have unused samples, leave them in the output
     # if these are pcm_samples, convert them to adpcm_a to avoid errors
     for i,s in enumerate(smp):
-        if isinstance(s, pcm_sample):
+        if type(s) in [pcm8_sample, pcm16_sample]:
             smp[i] = convert_sample(s, 37)
 
 def asm_fm_instrument(ins, fd):

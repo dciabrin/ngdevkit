@@ -135,14 +135,21 @@ def convert_to_adpcm(sample, path):
     try:
         w = wave.open(path, 'rb')
         assert w.getnchannels() == 1, "Only mono WAV file is supported"
-        assert w.getsampwidth() == 2, "Only 16bits per sample is supported"
         assert w.getcomptype() == 'NONE', "Only uncompressed WAV file is supported"
         nframes = w.getnframes()
         data = w.readframes(nframes)
     except Exception as e:
         error("Could not convert sample '%s' to ADPCM: %s"%(path, e))
-    pcm16s = unpack('<%dh' % (len(data)>>1), data)
-    adpcms=codec.encode(pcm16s)
+
+    if w.getsampwidth() == 1:
+        # WAV file format, 8bits is always unsigned
+        pcm8s = unpack('<%dB' % (len(data)), data)
+        adpcms=codec.encode_u8(pcm8s)
+    else:
+        # WAV file format, 16bits is always signed
+        pcm16s = unpack('<%dh' % (len(data)>>1), data)
+        adpcms=codec.encode_s16(pcm16s)
+
     adpcms_packed = [(adpcms[i] << 4 | adpcms[i+1]) for i in range(0, len(adpcms), 2)]
     return bytes(adpcms_packed)
 

@@ -141,10 +141,23 @@ class ym2610_adpcma(object):
 
         return decoded_sample12
 
-    def encode(self, pcm16s):
-        self.reset()
-        # ADPCM-A encodes 12-bits samples, so downscale the input first
+    def encode_u8(self, pcm8s):
+        # ADPCM-A expects 12-bits input samples
+        pcm12s = [(s-128) << 4 for s in pcm8s]
+        return self.encode(pcm12s)
+
+    def encode_s8(self, pcm8s):
+        # ADPCM-A expects 12-bits input samples
+        pcm12s = [s << 4 for s in pcm8s]
+        return self.encode(pcm12s)
+
+    def encode_s16(self, pcm16s):
+        # ADPCM-A expects 12-bits input samples
         pcm12s = [s >> 4 for s in pcm16s]
+        return self.encode(pcm12s)
+
+    def encode(self, pcm12s):
+        self.reset()
         # YM2610 only plays back multiples of 256 bytes
         # (512 adpcm samples). If the input is not aligned, add some padding
         ceil = ((len(pcm12s)+511)//512)*512;
@@ -241,6 +254,19 @@ class ym2610_adpcmb(object):
 
         return decoded_sample16
 
+    def encode_u8(self, pcm8s):
+        # ADPCM-B expects 16-bits input samples
+        pcm16s = [(s-128) << 8 for s in pcm8s]
+        return self.encode(pcm16s)
+
+    def encode_s8(self, pcm8s):
+        # ADPCM-B expects 16-bits input samples
+        pcm16s = [s << 8 for s in pcm8s]
+        return self.encode(pcm16s)
+
+    def encode_s16(self, pcm16s):
+        return self.encode(pcm16s)
+
     def encode(self, pcm16s):
         self.reset()
         # YM2610 only plays back multiples of 256 bytes
@@ -264,8 +290,8 @@ def encode(input, output, codec):
         # input sanity checks
         if w.getnchannels() > 1:
             error("Only mono WAV file is supported")
-        if w.getsampwidth() != 2:
-            error("Only 16bits per sample is supported")
+        if w.getsampwidth() not in [1, 2]:
+            error("Only 8bits or 16bits per sample is supported")
         if w.getcomptype() != 'NONE':
             error("Only uncompressed WAV file is supported")
         wavrate = w.getframerate()
@@ -286,10 +312,14 @@ def encode(input, output, codec):
         w.close()
 
     insize = len(rawdata)
-    samples = struct.unpack('<%dh' % (insize >> 1), rawdata)
-    dbg("Input is %s bytes long, or %d PCM samples" % (insize, insize >> 1))
-    # encode input 16-bits samples into ADPCM-A or ADPCM-B 4-bits samples
-    adpcms = codec.encode(list(samples))
+    dbg("Input is %s bytes long, or %d PCM samples" % (insize, insize/w.getsampwidth()))
+    # encode input samples into ADPCM-A or ADPCM-B 4-bits samples
+    if w.getsampwidth() == 1:
+        samples = struct.unpack('<%dB' % (insize), rawdata)
+        adpcms = codec.encode_u8(list(samples))
+    else:
+        samples = struct.unpack('<%dh' % (insize>>1), rawdata)
+        adpcms = codec.encode_s16(list(samples))
     # pack the resulting adpcm samples into bytes (2 samples per byte)
     adpcms_packed = [(adpcms[i] << 4 | adpcms[i+1]) for i in range(0, len(adpcms), 2)]
     outsize = len(adpcms_packed)
