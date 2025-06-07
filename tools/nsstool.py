@@ -438,7 +438,7 @@ class channel_nss_factory:
             return a_start()
         ctx_t = {7: a_ctx_1, 8: a_ctx_2, 9: a_ctx_3, 10: a_ctx_4, 11: a_ctx_5, 12: a_ctx_6}
         return channel_nss_factory(ctx_t[channel], a_instr, a_vol, 0x1f,
-                                   a_pan, channel_nss_factory.mk_na("pitch"), a_note_on, s_stop,
+                                   a_pan, channel_nss_factory.mk_na("pitch"), a_note_on, a_stop,
                                    a_retrigger, a_cut, a_delay)
 
     def b_factory(channel):
