@@ -21,6 +21,10 @@
 
 #include <ngdevkit/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Public helpers and macros
  */
@@ -478,5 +482,8 @@ extern const dip_str12_t* bios_dip_enum_choices(u8 region, u8 num);
 #define dip_eu_enum_8_choice &bios_dip_enum_choices(BIOS_COUNTRY_EU, 8)
 #define dip_eu_enum_9_choice &bios_dip_enum_choices(BIOS_COUNTRY_EU, 9)
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __NGDEVKIT_NG_DIP_H__ */

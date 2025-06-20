@@ -1,6 +1,6 @@
 /*
  * BIOS state variables in memory
- * Copyright (c) 2020-2024 Damien Ciabrini
+ * Copyright (c) 2020-2025 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -21,6 +21,10 @@
 #define __NGDEVKIT_BIOS_RAM_H__
 
 #include <ngdevkit/types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // BIOS checks
 extern u8 bios_z80rom_check;
@@ -139,6 +143,9 @@ extern u8 bios_4p_requested;
 extern u8 bios_4p_mode;
 extern u8 bios_4p_plugged;
 
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * RAM addresses for all the variables declared above

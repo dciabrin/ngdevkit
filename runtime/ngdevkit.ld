@@ -1,6 +1,6 @@
 /*
  * linkscript for Neo Geo
- * Copyright (c) 2015-2023 Damien Ciabrini
+ * Copyright (c) 2015-2025 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -17,10 +17,12 @@
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* add crt0 here to ensure it is always included and come first,
- * even when gcc is called with -nostartfiles
+
+/* Note: this linkscript can produce an ELF that is suitable for
+ * being transformed into a PROM (cartridge) or BIN file (CDROM).
+ * both targets require a dedicated crt0, that is passed to the
+ * linker via the ngdevkit specfile in use.
  */
-STARTUP(ngdevkit-crt0.o)
 
 /* Add implementation of syscalls as expected by newlib */
 GROUP(-lsyscalls)
@@ -75,8 +77,10 @@ SECTIONS {
     coin_sound = DEFINED(coin_sound)? coin_sound : 0;
     player_start = DEFINED(player_start)? player_start : 0;
 
-    /* Make sure crt0 is linked first */
+    /* Make sure crt0 is linked first, either one of crt0 or cd-crt0
+     * must be used as input file to the linker */
     *ngdevkit-crt0.o(.text)
+    *ngdevkit-cd-crt0.o(.text)
 
     /* ROM software DIP switches */
     *(.text.softdip)
@@ -204,28 +208,79 @@ SECTIONS {
    */
   PROVIDE(_end = . );
 
+  /* C++ specific section for global data initialization
+   * Note: for ROMs that use bank-switching, global variables
+   * from banked files are not initialized.
+   */
+  __ctors_start = (__data2_end + 3) / 4 * 4;
+  .ctors __ctors_start (READONLY) : AT(__ctors_start) {
+    /* marker for start of constructor list */
+    KEEP (*crtbegin.o(.ctors))
+    /* user constructor to be called for global variable init */
+    KEEP (*(EXCLUDE_FILE (*crtend.o) .ctors))
+    /* user constructor with ordering annotation */
+    KEEP (*(SORT(EXCLUDE_FILE (*__bank*) .ctors.*)))
+    /* marker for end of constructor list, from crtend.o */
+    KEEP (*(.ctors))
+  } >ROM1 =0xffffffff
+  __ctors_end = __ctors_start + SIZEOF(.ctors);
+
+  /* C++ specific section for global data finalization
+   * Note: for ROMs that use bank-switching, global variables
+   * from banked files are not finalized.
+   */
+  __dtors_start = (__ctors_end + 3) / 4 * 4;
+  .dtors __dtors_start (READONLY) : AT(__dtors_start) {
+    /* marker for start of destructor list */
+    KEEP (*crtbegin.o(.dtors))
+    /* user destructor to be called for global variable fini */
+    KEEP (*(EXCLUDE_FILE (*crtend.o) .dtors))
+    /* user destructor with ordering annotation */
+    KEEP (*(SORT(EXCLUDE_FILE (*__bank*) .dtors.*)))
+    /* marker for end of destructor list */
+    KEEP (*(.dtors))
+  } >ROM1 =0xffffffff
+  __dtors_end = __dtors_start + SIZEOF(.dtors);
+
+  /* global initializations that place before running main()
+   * This is used among other things for C++ to run constructors for
+   * global variables
+   */
+  __init_start = __dtors_end;
+  .init __init_start : AT(__init_start) {
+    /* global _init function prologue */
+    KEEP (*ngdevkit-crti.o(.init))
+    KEEP (*(SORT_NONE(EXCLUDE_FILE (*ngdevkit-crtn.o) .init)))
+    /* global _init function epilogue */
+    KEEP (*ngdevkit-crtn.o(.init))
+  } >ROM1 =0xffffffff
+  __init_end = __init_start + SIZEOF(.init);
+  __fini_start = __init_end;
+  .fini __fini_start : AT(__fini_start) {
+    KEEP (*(SORT_NONE(.fini)))
+  } >ROM1 =0xffffffff
+  __fini_end = __fini_start + SIZEOF(.fini);
 
   /* The last part of the ROM contains all the cartridge's code.
    * It is allocated right after the global variables (.data).
    * Note: we first link everything that is not explicitely tagged
    * to end up in the bank-switched P-ROM.
    */
-   __text_start = (__data2_end + 3) / 4 * 4;
+  __text_start = (__fini_end + 3) / 4 * 4;
   .text __text_start : AT(__text_start) {
     /* The devkit's static libraries are linked first */
+    *crtstuff.o(.text .text.*)
+    *crtbeg.o(.text .text.*)
+    *crtend.o(.text .text.*)
     *libgcc.a:*(.text .text.*)
     *libc.a:*(.text .text.*)
     *libsyscalls.a:*(.text .text.*)
     *libngdevkit.a:*(.text .text.*)
 
-    /* Legacy C global initializers/finalizers */
-    KEEP(*(.init))
-    KEEP(*(.fini))
-
-    /* C++ specific sections */
-    EXCLUDE_FILE (*__bank*) *crtbegin.o(.text .text.*)
-    EXCLUDE_FILE (*__bank*) *crtend.o(.text .text.*)
-    EXCLUDE_FILE (*__bank*) *(.ctors .dtors .eh_frame .jcr)
+    /* Debug: C++ exception header table, used for unwinding stack (untested) */
+    *(.eh_frame_hdr)
+    *(.eh_frame_entry .eh_frame_entry.*)
+    KEEP (*(.eh_frame)) *(.eh_frame.*)
 
     /* Remaining code */
     EXCLUDE_FILE (*__bank*) *(.text .text.*)
@@ -242,7 +297,7 @@ SECTIONS {
    * below holds all the read-only data and the code that will
    * be bank-switched at runtime
    */
-  .text2 : {
+  .text2 (READONLY) : {
     /* All the read-only data that are meant to be bank-switched */
     *(.roda .rodata .rodata.*)
 
@@ -252,4 +307,28 @@ SECTIONS {
     *(.text.*)
   } >ROM2 =0xffffffff
   __text_end = .;
+
+  /* Debug: DWARF debug sections */
+  /* primary debug info (functions, types...) */
+  .debug_info     0 : { *(.debug_info) }
+  /* schema of data in .debug_info */
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  /* map addresses to .debug_info data */
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_rnglists 0 : { *(.debug_rnglists) }
+  /* source code location */
+  .debug_line     0 : { *(.debug_line .debug_line.* .debug_line_end) }
+  /* dwarf 5 segment for source code location */
+  .debug_line_str 0 : { *(.debug_line_str) }
+  /* source code functions */
+  .debug_frame    0 : { *(.debug_frame) }
+  /* map values to memory address ranges */
+  .debug_loclists 0 : { *(.debug_loclists) }
+  /* strings used by dwarf segments */
+  .debug_str      0 : { *(.debug_str) }
+
+  /* /\* Debug: C++ exception header table, used for unwinding stack (untested) *\/ */
+  /* .eh_frame_hdr   : { *(.eh_frame_hdr) *(.eh_frame_entry .eh_frame_entry.*) } */
+  /* .eh_frame       : { KEEP (*(.eh_frame)) *(.eh_frame.*) } */
+  /DISCARD/ : { *(.comment) }
 }

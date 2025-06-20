@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020 Damien Ciabrini
+ * Copyright (c) 2015-2025 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -18,6 +18,10 @@
 
 #ifndef __NGDEVKIT_NG_FIX_H__
 #define __NGDEVKIT_NG_FIX_H__
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /// Start of character tiles in GAME ROM
 #ifndef SROM_TXT_TILE_OFFSET
@@ -64,5 +68,9 @@ extern void ng_center_text_tall_args(u8 y, u8 palette, u16 start_tile, const cha
     ng_center_text_tall_args((y), (pal), SROM_TXT_TALL_TILE_OFFSET, (text))
 
 #define ng_cls() ng_cls_args(0, SROM_EMPTY_TILE)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __NGDEVKIT_NG_FIX_H__ */

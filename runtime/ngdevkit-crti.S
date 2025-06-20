@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2020-2025 Damien Ciabrini
+ * Bootstrap for Neo-Geo - prologue for global init/fini section
+ * Copyright (c) 2025 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -16,18 +17,16 @@
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __NGDEVKIT_NG_VIDEO_H__
-#define __NGDEVKIT_NG_VIDEO_H__
+        /* NOTE: these replicate libgcc's definition */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+	.section .init
+	.globl  _init
+	.type   _init,@function
+_init:
+	linkw %fp,#0
 
-/// Wait until the vertical blank (end of screen refresh) is reached
-extern void ng_wait_vblank();
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* __NGDEVKIT_NG_VIDEO_H__ */
+	.section .fini
+	.globl  _fini
+	.type   _fini,@function
+_fini:
+	linkw %fp,#0

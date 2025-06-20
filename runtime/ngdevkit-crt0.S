@@ -1,6 +1,6 @@
 /*
  * Bootstrap code for Neo-Geo
- * Copyright (c) 2015-2024 Damien Ciabrini
+ * Copyright (c) 2015-2025 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -241,14 +241,25 @@ rom_title_default:
         /* Init the C part of the game cartridge */
         jsr init_c_runtime
 
+        /* We can now enable interrupts, the default handler
+         * rearms the watchdog automatically from this point
+         */
+        move	#0x2000, %sr
+
+        /* run global init prior to game's main entry point
+         * This is used by C++ to call global constructors.
+         * As we don't know how much time this takes, we depend
+         * on the default handler to rearm the watchdog.
+         */
+        jsr     _init.l
+
         /* Switch to fix tiles from user bank */
         move.b	#1, REG_CRTFIX
 
-        /* Enable interrupts and call game's main */
-        move	#0x2000, %sr
+        /* Call game's main title screen */
         jsr	main_mvs_title.l
 
-        /* if main returns, give back control to USER */
+        /* If main returns, give back control to USER */
         rts
 
 rom_eye_catcher_default:
@@ -265,14 +276,25 @@ rom_game_default:
         /* Init the C part of the game cartridge */
         jsr init_c_runtime
 
+        /* We can now enable interrupts, the default handler
+         * rearms the watchdog automatically from this point
+         */
+        move	#0x2000, %sr
+
+        /* run global init prior to game's main entry point
+         * This is used by C++ to call global constructors.
+         * As we don't know how much time this takes, we depend
+         * on the default handler to rearm the watchdog.
+         */
+        jsr     _init.l
+
         /* Switch to fix tiles from user bank */
         move.b	#1, REG_CRTFIX
 
-        /* Enable interrupts and call game's main */
-        move	#0x2000, %sr
+        /* Call game's main */
         jsr	main.l
 
-        /* if main returns, give back control to USER */
+        /* If main returns, give back control to USER */
         rts
 
 /*

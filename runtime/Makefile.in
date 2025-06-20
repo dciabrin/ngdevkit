@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-OBJS=libsyscalls.a libngdevkit.a ngdevkit-crt0.o ngdevkit-cd-crt0.o
+OBJS=libsyscalls.a libngdevkit.a ngdevkit-crt0.o ngdevkit-crti.o ngdevkit-crtn.o ngdevkit-cd-crt0.o
 SYSCALL_OBJS=\
   close \
   _exit \
@@ -57,12 +57,12 @@ libngdevkit.a: $(NGDEVKIT_OBJS:%=libngdevkit/%.o)
 	$(NGAR) cru $@ $^ && $(NGRANLIB) $@
 
 ngdevkit:
-	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls \1/' | \
-	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit.ld%s \1/' > $@
+	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls \1/' \
+	-e 's/\(crtbegin.o%s\)/-T ngdevkit.ld%s ngdevkit-crt0.o%s ngdevkit-crti.o%s \1/' \
+	-e 's/\(crtend.o%s\)/\1 ngdevkit-crtn.o%s/' > $@
 
-ngdevkit-cd:
-	$(NGGCC) -dumpspecs | sed -e 's/\(-lc\)/\1 -lsyscalls \1/' | \
-	sed -e 's/\(crtbegin.o%s\)/-T ngdevkit-cd.ld%s \1/' > $@
+ngdevkit-cd: ngdevkit
+	sed -e 's/ngdevkit-crt0.o/ngdevkit-cd-crt0.o/' $< > $@
 
 %.o: %.c
 	$(NGGCC) -std=c99 -fomit-frame-pointer -I../include -c $< -o $@
@@ -80,7 +80,7 @@ install-dirs:
 	SPECSDIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-libgcc-file-name) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
 	$(INSTALL) -d $$OBJDIR && $(INSTALL) -d $$SPECSDIR
 
-install-objs: install-dirs $(OBJS) ngdevkit.ld ngdevkit-cd.ld
+install-objs: install-dirs $(OBJS) ngdevkit.ld
 	DIR=$(DESTDIR)$(prefix)/$$(dirname $$($(NGGCC) --print-file-name=crt0.o) | sed -n 's%^.*\(m68k-neogeo-elf/lib/gcc\)%\1%p') && \
 	$(INSTALL) $(filter-out install-dirs,$^) $$DIR
 
