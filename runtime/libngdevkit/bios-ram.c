@@ -64,19 +64,22 @@ u8 bios_statcurnt = 0;              /// 0x10fdac
 u8 bios_statchange = 0;             /// 0x10fdad
 
 // System Related
-u8 bios_user_request = 0;           /// 0x10fdae
-u8 bios_user_mode = 0;              /// 0x10fdaf
-u8 bios_credit_dec1 = 0;            /// 0x10fdb0
-u8 bios_credit_dec2 = 0;            /// 0x10fdb1
-u8 bios_credit_dec3 = 0;            /// 0x10fdb2
-u8 bios_credit_dec4 = 0;            /// 0x10fdb3
-u8 bios_start_flag = 0;             /// 0x10fdb4
-u8 _bios_unknown02 = 0;             /// 1 byte
-u8 bios_player_mod1 = 0;            /// 0x10fdb6
-u8 bios_player_mod2 = 0;            /// 0x10fdb7
-u8 bios_player_mod3 = 0;            /// 0x10fdb8
-u8 bios_player_mod4 = 0;            /// 0x10fdb9
-u8 _bios_unknown03[4] = {};         /// 4 bytes
+u8 bios_user_request = 0;            /// 0x10fdae
+u8 bios_user_mode = 0;               /// 0x10fdaf
+u8 bios_credit_dec1 = 0;             /// 0x10fdb0
+u8 bios_credit_dec2 = 0;             /// 0x10fdb1
+u8 bios_credit_dec3 = 0;             /// 0x10fdb2
+u8 bios_credit_dec4 = 0;             /// 0x10fdb3
+u8 bios_start_flag = 0;              /// 0x10fdb4
+u8 _bios_unknown02 = 0;              /// 1 byte
+u8 bios_player_mod1 = 0;             /// 0x10fdb6
+u8 bios_player_mod2 = 0;             /// 0x10fdb7
+u8 bios_player_mod3 = 0;             /// 0x10fdb8
+u8 bios_player_mod4 = 0;             /// 0x10fdb9
+u8 bios_bookkeeping_player_mod1 = 0; /// 0x10fdba
+u8 bios_bookkeeping_player_mod2 = 0; /// 0x10fdbb
+u8 bios_bookkeeping_player_mod3 = 0; /// 0x10fdbc
+u8 bios_bookkeeping_player_mod4 = 0; /// 0x10fdbd
 
 // MESS OUT Related
 u32 bios_mess_point = 0;            /// 0x10fdbe
@@ -109,21 +112,24 @@ u8 bios_compulsion_frame_timer = 0; /// 0x10fddb
 u8 _bios_unknown07[164] = {};       /// 164 bytes
 
 // BIOS internals
-u8  bios_devmode[8] = {};           /// 0x10fe80
+u8 bios_devmode[8] = {};            /// 0x10fe80
 u32 bios_frame_counter = 0;         /// 0x10fe88
-u8  _bios_unknown08[51] = {};       /// 50 bytes
-u8  bios_bram_used = 0;             /// 0x10febf
-u8  _bios_unknown09[5] = {};        /// 5 bytes
-u8  bios_title_mode = 0;            /// 0x10fec5
-u8  _bios_unknown10[22] = {};       /// 22 bytes
-u8  bios_statcurnt_raw = 0;         /// 0x10fedc
-u8  bios_statchange_raw = 0;        /// 0x10fedd
-u8  _bios_unknown11[3] = {};        /// 3 bytes
-u8  bios_frame_skip = 0;            /// 0x10fee1
-u8  _bios_unknown12 = 0;            /// 1 byte
-u8  bios_int1_skip = 0;             /// 0x10fee3
-u8  bios_int1_frame_counter = 0;    /// 0x10fee4
-u8  _bios_unknown13[19] = {};       /// 19 bytes
+u8 bios_vblank_sync = 0;            /// 0x10fe8c
+u8 bios_no_coin_sound = 0;          /// 0x10fe8d
+u8 _bios_unknown08[49] = {};        /// 49 bytes
+u8 bios_bram_write_in_progress = 0; /// 0x10febf
+u8 _bios_unknown09[5] = {};         /// 5 bytes
+u8 bios_title_mode = 0;             /// 0x10fec5
+u8 _bios_unknown10[21] = {};        /// 21 bytes
+u8 bios_z80_setup_in_progress = 0;  /// 0x10fedb
+u8 bios_statcurnt_raw = 0;          /// 0x10fedc
+u8 bios_statchange_raw = 0;         /// 0x10fedd
+u8 _bios_unknown11[2] = {};         /// 2 bytes
+u8 bios_compulsion_timer_over = 0;  /// 0x10fee0
+u16 bios_frame_skip = 0;             /// 0x10fee1
+u8 bios_int1_skip = 0;              /// 0x10fee3
+u8 bios_int1_frame_counter = 0;     /// 0x10fee4
+u8 _bios_unknown13[19] = {};        /// 19 bytes
 
 // 4 players extension
 u8 bios_4p_requested = 0;           /// 0x10fef8

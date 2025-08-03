@@ -58,17 +58,21 @@
 #define BIOS_STATCURNT  0x10fdac
 #define BIOS_STATCHANGE 0x10fdad
 
-#define BIOS_USER_REQUEST 0x10fdae
-#define BIOS_USER_MODE    0x10fdaf
-#define BIOS_CREDIT_DEC1  0x10fdb0
-#define BIOS_CREDIT_DEC2  0x10fdb1
-#define BIOS_CREDIT_DEC3  0x10fdb2
-#define BIOS_CREDIT_DEC4  0x10fdb3
-#define BIOS_START_FLAG   0x10fdb4
-#define BIOS_PLAYER_MOD1  0x10fdb6
-#define BIOS_PLAYER_MOD2  0x10fdb7
-#define BIOS_PLAYER_MOD3  0x10fdb8
-#define BIOS_PLAYER_MOD4  0x10fdb9
+#define BIOS_USER_REQUEST            0x10fdae
+#define BIOS_USER_MODE               0x10fdaf
+#define BIOS_CREDIT_DEC1             0x10fdb0
+#define BIOS_CREDIT_DEC2             0x10fdb1
+#define BIOS_CREDIT_DEC3             0x10fdb2
+#define BIOS_CREDIT_DEC4             0x10fdb3
+#define BIOS_START_FLAG              0x10fdb4
+#define BIOS_PLAYER_MOD1             0x10fdb6
+#define BIOS_PLAYER_MOD2             0x10fdb7
+#define BIOS_PLAYER_MOD3             0x10fdb8
+#define BIOS_PLAYER_MOD4             0x10fdb9
+#define BIOS_BOOKKEEPING_PLAYER_MOD1 0x10fdba
+#define BIOS_BOOKKEEPING_PLAYER_MOD2 0x10fdbb
+#define BIOS_BOOKKEEPING_PLAYER_MOD3 0x10fdbc
+#define BIOS_BOOKKEEPING_PLAYER_MOD4 0x10fdbd
 
 #define BIOS_MESS_POINT 0x10fdbe
 #define BIOS_MESS_BUSY  0x10fdc2
@@ -92,15 +96,19 @@
 #define BIOS_COMPULSION_TIMER       0x10fdda
 #define BIOS_COMPULSION_FRAME_TIMER 0x10fddb
 
-#define BIOS_DEVMODE            0x10fe80
-#define BIOS_FRAME_COUNTER      0x10fe88
-#define BIOS_BRAM_USED          0x10febf
-#define BIOS_TITLE_MODE         0x10fec5
-#define BIOS_STATCURNT_RAW      0x10fedc
-#define BIOS_STATCHANGE_RAW     0x10fedd
-#define BIOS_FRAME_SKIP         0x10fee1
-#define BIOS_INT1_SKIP          0x10fee3
-#define BIOS_INT1_FRAME_COUNTER 0x10fee4
+#define BIOS_DEVMODE                0x10fe80
+#define BIOS_FRAME_COUNTER          0x10fe88
+#define BIOS_VBLANK_SYNC            0x10fe8c
+#define BIOS_NO_COIN_SOUND          0x10fe8d
+#define BIOS_BRAM_WRITE_IN_PROGRESS 0x10febf
+#define BIOS_TITLE_MODE             0x10fec5
+#define BIOS_Z80_SETUP_IN_PROGRESS  0x10fedb
+#define BIOS_STATCURNT_RAW          0x10fedc
+#define BIOS_STATCHANGE_RAW         0x10fedd
+#define BIOS_COMPULSION_TIMER_OVER  0x10fee0
+#define BIOS_FRAME_SKIP             0x10fee1
+#define BIOS_INT1_SKIP              0x10fee3
+#define BIOS_INT1_FRAME_COUNTER     0x10fee4
 
 #define BIOS_4P_REQUESTED 0x10fef8
 #define BIOS_4P_MODE      0x10fefa

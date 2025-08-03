@@ -17,6 +17,8 @@
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* https://wiki.neogeodev.org/index.php?title=BIOS_RAM_locations */
+
 #ifndef __NGDEVKIT_BIOS_RAM_H__
 #define __NGDEVKIT_BIOS_RAM_H__
 
@@ -25,6 +27,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 
 // BIOS checks
 extern u8 bios_z80rom_check;
@@ -100,6 +103,10 @@ extern u8 bios_player_mod1;
 extern u8 bios_player_mod2;
 extern u8 bios_player_mod3;
 extern u8 bios_player_mod4;
+extern u8 bios_bookkeeping_player_mod1;
+extern u8 bios_bookkeeping_player_mod2;
+extern u8 bios_bookkeeping_player_mod3;
+extern u8 bios_bookkeeping_player_mod4;
 
 // MESS OUT
 extern u32 bios_mess_point;
@@ -130,11 +137,15 @@ extern u8 bios_compulsion_frame_timer;
 // BIOS internals
 extern u8 bios_devmode[8];
 extern u32 bios_frame_counter;
-extern u8 bios_bram_used;
+extern u8 bios_vblank_sync;
+extern u8 bios_no_coin_sound;
+extern u8 bios_bram_write_in_progress;
 extern u8 bios_title_mode;
+extern u8 bios_z80_setup_in_progress;
 extern u8 bios_statcurnt_raw;
 extern u8 bios_statchange_raw;
-extern u8 bios_frame_skip;
+extern u8 bios_compulsion_timer_over;
+extern u16 bios_frame_skip;
 extern u8 bios_int1_skip;
 extern u8 bios_int1_frame_counter;
 
