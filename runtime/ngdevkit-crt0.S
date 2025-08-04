@@ -87,10 +87,14 @@ _start:
 	dc.l	dip_eu_rom
 
 	/* ROM Entry Point */
-	jmp     USER.l
-	jmp     PLAYER_START.l
-	jmp     DEMO_END.l
-	jmp     COIN_SOUND.l
+USER:
+	jmp     wrapper_user.l
+PLAYER_START:
+	jmp     wrapper_player_start.l
+DEMO_END:
+	jmp     wrapper_demo_end.l
+COIN_SOUND:
+	jmp     wrapper_coin_sound.l
 
 	/* ...to be described... */
 	.fill	70, 1, 0xff
@@ -308,7 +312,7 @@ rom_game_default:
         dc.l	rom_eye_catcher       /* 1: EyeCatcher */
         dc.l	rom_game              /* 2: Game */
         dc.l	rom_title             /* 3: Title */
-USER:
+wrapper_user:
         /* Rearm watchdog */
         move.b	%d0, REG_WATCHDOGW
 
@@ -324,7 +328,7 @@ USER:
         jmp	SYSTEM_RETURN
 
 
-PLAYER_START:
+wrapper_player_start:
 	move.b  %d0, REG_WATCHDOGW
 	movem.l	%d0-%d7/%a0-%a7, -(%sp)
 	move.l	#player_start, %d0
@@ -343,11 +347,12 @@ PLAYER_START:
 	rts
 
 
-DEMO_END:
+wrapper_demo_end:
+        /* TODO */
         rts
 
 
-COIN_SOUND:
+wrapper_coin_sound:
 	move.b  %d0, REG_WATCHDOGW
 	movem.l	%d0-%d7/%a0-%a7, -(%sp)
 	move.l	#coin_sound, %d0
