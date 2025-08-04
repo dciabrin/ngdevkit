@@ -39,12 +39,16 @@ NGDEVKIT_OBJS=\
   soft-dip-us \
   soft-dip-eu \
   bios-ram \
+  bios-backup-ram \
   ng_text_tall_args \
   ng_text_args \
   ng_center_text_tall_args \
   ng_center_text_args \
   ng_cls_args \
   ng_wait_vblank
+
+NGDEVKIT_CFLAGS=-I../include -std=c99 -fomit-frame-pointer
+NGDEVKIT_OPTS=-O0
 
 all: $(OBJS) ngdevkit ngdevkit-cd
 
@@ -65,7 +69,7 @@ ngdevkit-cd: ngdevkit
 	sed -e 's/ngdevkit-crt0.o/ngdevkit-cd-crt0.o/' $< > $@
 
 %.o: %.c
-	$(NGGCC) -std=c99 -fomit-frame-pointer -I../include -c $< -o $@
+	$(NGGCC) $(NGDEVKIT_CFLAGS) $(NGDEVKIT_OPTS) -I../include -c $< -o $@
 
 %.o: %.S
 	$(NGGCC) -I../include -c $< -o $@

@@ -40,6 +40,8 @@ MEMORY {
   RAM  (rw)    : ORIGIN = 0x100000, LENGTH = 0xf300
   /* The end of the RAM is reserved for BIOS usage (786 bytes) */
   BIOSRAM (rw) : ORIGIN = 0x10fcee, LENGTH = 0x312
+  /* Backup RAM address space, on MVS only */
+  BIOSBRAM (rw) : ORIGIN = 0xd00000, LENGTH = 6816
 }
 
 SECTIONS {
@@ -140,6 +142,13 @@ SECTIONS {
      */
     *libngdevkit.a:bios-ram.o(.bss)
   } >BIOSRAM =0xffffffff
+
+  /* The Backup RAM only contains .bss data. This segment is defined
+   * to allow C code to reference specific BRAM location as C variables
+   */
+  .bss.bram : SUBALIGN(0) {
+    *libngdevkit.a:bios-backup-ram.o(.bss)
+  } >BIOSBRAM
 
   /* By default, the start of .bss in memory comes right after the
    * backup RAM. If the latter is unused or its address is configured
