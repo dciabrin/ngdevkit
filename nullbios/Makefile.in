@@ -27,10 +27,16 @@ all: $(BIOS)
 
 NULLSOUNDSRCDIR=../nullsound
 NULLSOUND=../nullsound/nullsound.lib
+BIOS_OBJS=credits controllers gfx
 Z80_OBJS=user_commands
 Z80_HEX=nullsound_driver.ihx
 
 VERSION=@PACKAGE_VERSION@
+
+BIOSCFLAGS=-I../include -std=c99 -fomit-frame-pointer
+BIOSOPTS=-O2
+BIOSLDFLAGS=-nostartfiles -T bios.ld -L../runtime
+
 
 $(BIOS): $(PROMS) $(ZROM) $(SROM) $(MROM)
 	cd rom && /bin/echo -e "\
@@ -59,14 +65,20 @@ $(ZROM): | rom
 rom:
 	mkdir $@
 
-sp-s2.elf: sp-s2.o
-	$(NGGCC) -nostartfiles -T bios.ld $^ -o $@
+bios-backup-ram.o: BIOSOPTS=-O0
+bios-ram.o: BIOSOPTS=-O0
+
+%.o: %.c
+	$(NGGCC) $(BIOSCFLAGS) $(BIOSOPTS) -c $< -o $@
+
+sp-s2.elf: sp-s2.o $(BIOS_OBJS:%=%.o)
+	$(NGGCC) $(BIOSLDFLAGS) $^ -lngdevkit -o $@
 
 sp-s2.o: biosstart.S
 	$(NGGCC) -DBIOS_ROM_HARDWARE=1 -DBIOS_ROM_COUNTRY=2 -I../include -c $< -o $@
 
-aes-bios.elf: aes-bios.o
-	$(NGGCC) -nostartfiles -T bios.ld $^ -o $@
+aes-bios.elf: aes-bios.o $(BIOS_OBJS:%=%.o)
+	$(NGGCC) $(BIOSLDFLAGS) $^ -lngdevkit -o $@
 
 aes-bios.o: biosstart.S
 	$(NGGCC) -DBIOS_ROM_HARDWARE=0 -DBIOS_ROM_COUNTRY=2 -I../include -c $< -o $@

@@ -19,6 +19,7 @@
 
 #include <ngdevkit/asm/registers.h>
 #include <ngdevkit/asm/bios-ram.h>
+#include <ngdevkit/asm/bios-backup-ram.h>
 
 #define ROM_NGH      0x108
 #define ROM_BRAM_PTR 0x10e
@@ -31,15 +32,8 @@
 #define DEMO_END     0x12e
 #define COIN_SOUND   0x134
 
-#define COIN_DEPOSIT_PREVIOUS 0xd00020
-#define COIN_DEPOSIT_CURRENT  0xd00021
-#define P1_CREDITS_BCD        0xd00034
-#define P2_CREDITS_BCD        0xd00035
-#define SLOT1_NGH             0xd00124
-#define SLOT1_SOFT_DIP        0xd00220
-#define SLOT1_BRAM_DATA       0xd00320
 
-
+        .global soft_reset
 /*
  * 68k exception vector table, 256 "vectors", 0x400 bytes
  * After the system boot, this vector table is swapped with the
@@ -89,29 +83,43 @@ GAME_CARTRIDGE_VECTORS:
         .endr
 
 /*
- * BIOS public calls, exported in a jmp table
+ * BIOS API, exported in a jmp table
  */
         .org    0x438
-        jmp     SYSTEM_INT1.l           /* VBlank handler during boot     */
-        jmp     SYSTEM_INT2.l           /* Timer handler                  */
-        jmp     SYSTEM_RETURN.l         /* Return from USER subroutine    */
-        jmp     SYSTEM_IO.l             /* Status of coins, joysticks...  */
-        jmp     CREDIT_CHECK.l          /* Check credit for players       */
-        jmp     CREDIT_DOWN.l           /* Decrement credits              */
-        jmp     NO_OP                   /* READ_CALENDAR on MVS           */
-        jmp     NO_OP                   /* SETUP_CALENDAR on MVS          */
-        jmp     NO_OP                   /* CARD                           */
-        jmp     NO_OP                   /* CARD_ERROR                     */
-        jmp     NO_OP                   /* HOW_TO_PLAY                    */
-        jmp     NO_OP                   /* CHECKSUM                       */
-.if 0
-        .org    0x4c2
-        jmp     FIX_CLEAR
-        jmp     LSP_1st
-        jmp     MESS_OUT
-        jmp     CONTROLLER_SETUP
-        jmp     NO_OP
-.endif
+SYSTEM_INT1:
+        jmp     impl_system_int1.l
+SYSTEM_INT2:
+        jmp     impl_system_int2.l
+SYSTEM_RETURN:
+        jmp     impl_system_return.l
+SYSTEM_IO:
+        jmp     impl_system_io.l
+CREDIT_CHECK:
+        jmp     impl_credit_check.l
+CREDIT_DOWN:
+        jmp     impl_credit_down.l
+READ_CALENDAR:
+        jmp     impl_noop
+SETUP_CALENDAR:
+        jmp     impl_noop
+CARD:
+        jmp     impl_noop
+CARD_ERROR:
+        jmp     impl_noop
+HOW_TO_PLAY:
+        jmp     impl_noop
+CHECKSUM:
+        jmp     impl_noop
+FIX_CLEAR:
+        jmp     impl_fix_clear
+LST_1st:
+        jmp     impl_lst_1st
+MESS_OUT:
+        jmp     impl_mess_out
+CONTROLLER_SETUP:
+        jmp     impl_controller_setup
+NO_OP:
+        jmp     impl_noop
 
 
         /* ... only code past this point ... */
@@ -128,17 +136,11 @@ RESET:
         move.b  %d0, REG_WATCHDOGW
 
         /* Set initial system information in RAM */
-
-        /* Init credits information, and assume credits
-         * are always stored in P1_CREDITS_BCD
-         */
-        move.b  #0, BIOS_STATCURNT
-        move.b  #0, BIOS_STATCURNT_RAW
-        move.b  #0, P1_CREDITS_BCD
 #if BIOS_ROM_HARDWARE != 0
         move.b  #0x80, BIOS_MVS_FLAG
         jsr     load_soft_dip
         jsr     load_game_data_from_bram
+        jsr     credits_init_counters_and_locks
 #else
         move.b  #0x0, BIOS_MVS_FLAG
 #endif
@@ -179,7 +181,7 @@ soft_reset:
 #endif
 
         /* If there are no credits left, reset to demo mode */
-        cmp.b   #0, P1_CREDITS_BCD
+        cmp.b   #0, BRAM_P1_CREDITS_BCD
         bne     .Lcredit_left
         move.b  #2, BIOS_USER_REQUEST
 .Lcredit_left:
@@ -190,7 +192,7 @@ soft_reset:
 /**
  * Default VBlank handler
  */
-SYSTEM_INT1:
+impl_system_int1:
         /* Acknowlege IRQ, re-arm watchdog and return */
 	move.w  #4, REG_IRQACK
 	move.b  %d0, REG_WATCHDOGW
@@ -200,7 +202,7 @@ SYSTEM_INT1:
 /**
  * Default Timer handler
  */
-SYSTEM_INT2:
+impl_system_int2:
         /* Acknowlege IRQ, re-arm watchdog and return */
 	move.w  #2, REG_IRQACK
 	move.b  %d0, REG_WATCHDOGW
@@ -212,170 +214,27 @@ SYSTEM_INT2:
  * USER jmp to here, so the ret should go back
  * to to the last jsr USER done in function RESET
  */
-SYSTEM_RETURN:
+impl_system_return:
         rts
 
 /**
- * Ignore
+ * No-op function for not-implemented features
  */
-NO_OP:
+impl_fix_clear:
+impl_lst_1st:
+impl_mess_out:
+impl_controller_setup:
+impl_noop:
         rts
 
 
-SYSTEM_IO:
-        /* player 1 input */
-        move.b  BIOS_P1CURRENT, %d1
-        move.b  %d1, BIOS_P1PREVIOUS
-        move.b  REG_P1CNT, %d0
-        not.b   %d0
-        move.b  %d0, BIOS_P1CURRENT
-        eor.b   %d0, %d1
-        and.b   %d1, %d0
-        move.b  %d0, BIOS_P1CHANGE
+impl_system_io:
+        jsr     controllers_update_status
+        jsr     credits_update_status
+        jsr     credits_check_game_start
 
-        /* player 2 input */
-        move.b  BIOS_P2CURRENT, %d1
-        move.b  %d1, BIOS_P2PREVIOUS
-        move.b  REG_P2CNT, %d0
-        not.b   %d0
-        move.b  %d0, BIOS_P2CURRENT
-        eor.b   %d0, %d1
-        and.b   %d1, %d0
-        move.b  %d0, BIOS_P2CHANGE
-
-#if BIOS_ROM_HARDWARE != 0
-        /* coin deposit status (only check P1 and P2)*/
-        move.b  COIN_DEPOSIT_CURRENT, %d1
-        move.b  %d1, COIN_DEPOSIT_PREVIOUS
-        move.b  REG_STATUS_A, %d0
-        not.b   %d0
-        andi.b  #0x3, %d0
-        move.b  %d0, COIN_DEPOSIT_CURRENT
-        eor.b   %d0, %d1
-        and.b   %d1, %d0
-        move.b  %d0, 0x10fdd2
-        /* %d0 has bits set to 1 for rising change */
-        cmpi.b  #0, %d0
-        beq     .Lnocoin_inserted
-        /* when credit is inserted the following actions take place:
-         *   . bump credit count
-         *   . reset the compulsion start timer
-         *   . call the game's "coin_sound" callback function
-         * [only when the game is not running yet]
-         *   . prepare a restart to game's title (user request 3)
-         *   . reset the stack and soft reset to game's title
-         */
-        move.b  P1_CREDITS_BCD, %d1
-        move.b  #1, %d0
-        abcd    %d0, %d1
-        move.b  %d1, P1_CREDITS_BCD
-        move.b  #0x30, BIOS_COMPULSION_TIMER
-        move.b  #60, BIOS_COMPULSION_FRAME_TIMER
-        jsr     COIN_SOUND.l
-        cmpi.b  #2, BIOS_USER_MODE
-        beq     .Lstart_status
-        move.b  #3, BIOS_USER_REQUEST
-        lea.l   0x10f300, %sp
-        pea.l   soft_reset
-        rts
-.Lnocoin_inserted:
-
-        cmpi.b  #0, P1_CREDITS_BCD
-        beq     .Lnostart
-        /* decrement compulsory start timer */
-        cmpi.b  #0, BIOS_COMPULSION_TIMER
-        beq     .Lstart_pressed
-        cmpi.b  #0, BIOS_COMPULSION_FRAME_TIMER
-        bne     .Ldec_timer
-        move.b  BIOS_COMPULSION_TIMER, %d1
-        move.b  #1, %d0
-        sbcd    %d0, %d1
-        move.b  %d1, BIOS_COMPULSION_TIMER
-        move.b  #60, BIOS_COMPULSION_FRAME_TIMER
-.Ldec_timer:
-        sub.b   #1, BIOS_COMPULSION_FRAME_TIMER
-#endif
-
-.Lstart_status:
-        /* start status */
-        move.b  REG_STATUS_B, %d0
-        andi.b  #0xf, %d0
-        not.b   %d0
-        /* bits 1 and 3 from reg_status_b (start buttons)
-         * to bit 1 and 2 in %d0 (for bios_start_flag)
-         */
-        move.b  %d0, %d1
-        andi.b  #0x4, %d1
-        lsr.b   #1, %d1
-        andi.b  #0x1, %d0
-        or.b    %d1, %d0
-        move.b  BIOS_STATCURNT, %d1
-        move.b  %d1, BIOS_STATCURNT_RAW
-        move.b  %d0, BIOS_STATCURNT
-        eor.b   %d0, %d1
-        and.b   %d1, %d0
-        move.b  %d0, BIOS_STATCHANGE
-        cmpi.b  #0, %d0
-        beq     .Lnostart
-.Lstart_pressed:
-        /* when start is pressed and credits are available:
-         *   . game's "player_start" callback is executed
-         *   . the callback sees which player wants to start
-         *     via bits set in bios_start_flag
-         *   . the callback engages "game mode" by
-         *     setting bios_user_mode set to 2.
-         * [only when game mode is engaged]
-         *   . credits are decremented for each bit still set
-         *     in bios_start_flag when the callback exits
-         * [before the game is started - MVS only]
-         *   . hitting 2UP start means that two players want
-         *     to start, and it only runs the callback if
-         *     enough credits are available
-         */
-#if BIOS_ROM_HARDWARE != 0
-        cmp.b   #2, BIOS_USER_MODE
-        beq     .Lend_of_coin_prechecks
-        btst    #1, %d0
-        beq     .L2up_no_pressed
-        bset    #0, %d0
-        cmp.b   #2, P1_CREDITS_BCD
-        blt     .Lnostart
-.L2up_no_pressed:
-        cmp.b   #1, P1_CREDITS_BCD
-        blt     .Lnostart
-#endif
-.Lend_of_coin_prechecks:
-        move.b  %d0, BIOS_START_FLAG
-        jsr     PLAYER_START.l
-        cmp.b   #2, BIOS_USER_MODE
-        bne     .Lnostart
-#if BIOS_ROM_HARDWARE != 0
-        jsr     CREDIT_DOWN.l
-#endif
-.Lnostart:
         rts
 
-
-CREDIT_CHECK:
-        /* TODO */
-        rts
-
-
-CREDIT_DOWN:
-        move.b  #1, %d0
-        btst.b  #0, BIOS_START_FLAG
-        beq     .Lp1_not_running
-        move.b  P1_CREDITS_BCD, %d1
-        sbcd    %d0, %d1
-        move.b  %d1, P1_CREDITS_BCD
-.Lp1_not_running:
-        btst.b  #1, BIOS_START_FLAG
-        beq     .Lp2_not_running
-        move.b  P1_CREDITS_BCD, %d1
-        sbcd    %d0, %d1
-        move.b  %d1, P1_CREDITS_BCD
-.Lp2_not_running:
-        rts
 
 
 load_soft_dip:

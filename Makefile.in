@@ -79,14 +79,14 @@ distclean-toolchain:
 build-tools:
 	$(EXTRA_BUILD_CMD) && \
 	set -e; \
-	for i in nullsound nullbios runtime include tools; do \
+	for i in nullsound runtime nullbios include tools; do \
 	  $(MAKE) -C $$i; \
 	done
 
 install-tools:
 	$(EXTRA_BUILD_CMD) && \
 	set -e; \
-	for i in nullsound nullbios runtime include tools; do \
+	for i in nullsound runtime nullbios include tools; do \
 	  $(MAKE) -C $$i install; \
 	done
 
@@ -96,7 +96,7 @@ install-pkgconfig:
 
 clean-tools:
 	set -e; \
-	for i in nullsound nullbios runtime include tools; do \
+	for i in nullsound runtime nullbios include tools; do \
 	  $(MAKE) -C $$i clean; \
 	done
 
