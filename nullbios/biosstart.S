@@ -49,14 +49,14 @@
 	dc.l	RESET		        /* TRAPV instruction		  */
 	dc.l	RESET			/* Privilege violation		  */
 	dc.l	RESET			/* Trace			  */
-	dc.l	NO_OP			/* Line 1010 - FPU opcode emu     */
-	dc.l	NO_OP			/* Line 1111 - FPU opcode emu     */
+	dc.l	bios_noop		/* Line 1010 - FPU opcode emu     */
+	dc.l	bios_noop		/* Line 1111 - FPU opcode emu     */
 	.fill	3,   4, 0xffffffff	/* -- unassigned, reserved -- 	  */
-	dc.l	NO_OP			/* Uninitialized interrupt vector */
+	dc.l	bios_noop		/* Uninitialized interrupt vector */
 	.fill	8,   4, 0xffffffff	/* -- unassigned, reserved --	  */
-	dc.l	NO_OP			/* Spurious interrupt		  */
-	dc.l	SYSTEM_INT1     	/* Lvl 1 autovector (VBlank IRQ)  */
-	dc.l	SYSTEM_INT2     	/* Lvl 2 autovector (Timer IRQ)   */
+	dc.l	bios_noop		/* Spurious interrupt		  */
+	dc.l	bios_system_int1     	/* Lvl 1 autovector (VBlank IRQ)  */
+	dc.l	bios_system_int2     	/* Lvl 2 autovector (Timer IRQ)   */
  	dc.l	0x00000000		/* Lvl 3 autovector (Cold reset)  */
 	.fill	4,   4, 0x00000000	/* Lvl 4..7 autovectors (unused)  */
 	.fill	16,  4, 0xffffffff	/* TRAP #n instruction (unused)   */
@@ -86,40 +86,57 @@ GAME_CARTRIDGE_VECTORS:
  * BIOS API, exported in a jmp table
  */
         .org    0x438
-SYSTEM_INT1:
+bios_system_int1:
         jmp     impl_system_int1.l
-SYSTEM_INT2:
+bios_system_int2:
         jmp     impl_system_int2.l
-SYSTEM_RETURN:
+bios_system_return:
         jmp     impl_system_return.l
-SYSTEM_IO:
+bios_system_io:
         jmp     impl_system_io.l
-CREDIT_CHECK:
+bios_credit_check:
         jmp     impl_credit_check.l
-CREDIT_DOWN:
+bios_credit_down:
         jmp     impl_credit_down.l
-READ_CALENDAR:
-        jmp     impl_noop
-SETUP_CALENDAR:
-        jmp     impl_noop
-CARD:
-        jmp     impl_noop
-CARD_ERROR:
-        jmp     impl_noop
-HOW_TO_PLAY:
-        jmp     impl_noop
-CHECKSUM:
-        jmp     impl_noop
-FIX_CLEAR:
-        jmp     impl_fix_clear
-LST_1st:
-        jmp     impl_lst_1st
-MESS_OUT:
-        jmp     impl_mess_out
-CONTROLLER_SETUP:
-        jmp     impl_controller_setup
-NO_OP:
-        jmp     impl_noop
+bios_read_calendar:
+        jmp     not_implemented.l
+bios_setup_calendar:
+        jmp     not_implemented.l
+bios_card:
+        jmp     not_implemented.l
+bios_card_error:
+        jmp     not_implemented.l
+bios_how_to_play:
+        jmp     not_implemented.l
+bios_checksum:
+        jmp     not_implemented.l
+_unused_jmptable_slots:
+        .rept   11
+        jmp	bios_noop.l
+        .endr
+bios_fix_clear:
+        jmp     not_implemented.l
+bios_lsp_1st:
+        jmp     not_implemented.l
+bios_mess_out:
+        jmp     not_implemented.l
+bios_controller_setup:
+        jmp     not_implemented.l
+
+        .skip 24
+bios_cd_data_ready:
+        jmp     not_implemented.l
+bios_cd_data_transfer:
+        jmp     not_implemented.l
+bios_cd_unknown:
+        jmp     not_implemented.l
+
+/**
+ * General-purpose no-op function
+ * can be used as default callback or a no-op action
+        */
+bios_noop:
+        rts
 
 
         /* ... only code past this point ... */
@@ -217,17 +234,11 @@ impl_system_int2:
 impl_system_return:
         rts
 
+
 /**
- * No-op function for not-implemented features
+ * SYSTEM_IO
+ * nullbios implementation
  */
-impl_fix_clear:
-impl_lst_1st:
-impl_mess_out:
-impl_controller_setup:
-impl_noop:
-        rts
-
-
 impl_system_io:
         jsr     controllers_update_status
         jsr     credits_update_status
@@ -235,6 +246,12 @@ impl_system_io:
 
         rts
 
+
+/**
+ * No-op function for not-implemented features
+ */
+not_implemented:
+        jmp     bios_noop
 
 
 load_soft_dip:

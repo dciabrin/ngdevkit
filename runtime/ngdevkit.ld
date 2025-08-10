@@ -42,6 +42,8 @@ MEMORY {
   BIOSRAM (rw) : ORIGIN = 0x10fcee, LENGTH = 0x312
   /* Backup RAM address space, on MVS only */
   BIOSBRAM (rw) : ORIGIN = 0xd00000, LENGTH = 6816
+  /* BIOS API jump table address space */
+  BIOSROM (rw) : ORIGIN = 0xc00402, LENGTH = 1254
 }
 
 SECTIONS {
@@ -89,6 +91,12 @@ SECTIONS {
     . = ALIGN(4);
   } >ROM1 =0xffffffff
   __text_boot_end = .;
+
+  /* BIOS API functions are allocated in a specific address space
+   */
+  .text.bios (NOLOAD) : SUBALIGN(0) {
+    *libngdevkit.a:*(.text.bios)
+  } >BIOSROM =0
 
   /* Allocate the read only data first (e.g. strings, constant
    * global variables). Those are meant to stay in ROM at runtime.
