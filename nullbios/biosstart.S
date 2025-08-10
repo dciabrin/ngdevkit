@@ -115,9 +115,9 @@ _unused_jmptable_slots:
         jmp	bios_noop.l
         .endr
 bios_fix_clear:
-        jmp     not_implemented.l
+        jmp     impl_fix_clear.l
 bios_lsp_1st:
-        jmp     not_implemented.l
+        jmp     impl_lsp_1st.l
 bios_mess_out:
         jmp     not_implemented.l
 bios_controller_setup:

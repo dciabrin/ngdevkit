@@ -44,4 +44,10 @@
              : "d" ((y))     \
              : "cc")
 
+#define SET_CONST_W(var, cst) \
+__asm__ ("move.w %1, %0" : "=r" (var) : "i" (cst) :);
+
+#define SET_CONST_ADDR(var, cst) \
+__asm__ ("movea.l %1, %0" : "=r" (var) : "i" (cst) :);
+
 #endif /* __NULLBIOS_UTILS_H__ */
