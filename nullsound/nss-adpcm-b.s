@@ -108,7 +108,7 @@ _state_adpcm_b_end:
         .area  CODE
 
 
-;;; context: channel action functions for FM
+;;; context: channel action functions for ADPCM-B
 state_b_action_funcs::
         .dw     adpcm_b_configure_note_on
         .dw     adpcm_b_configure_vol
@@ -454,18 +454,25 @@ _b_cfg_note_update:
         ld      NOTE(ix), a
         ld      NOTE16+1(ix), a
         ld      NOTE16(ix), #0
-        ;; do not stop the current note if a legato is in progress
+        ;; legato have a special treatment below, otherwise prepare
+        ;; state for playing a new note from the start
         bit     BIT_FX_LEGATO, NOTE_FX(ix)
         jr      z, _b_post_cfg_note_update
+        ;; legato is like regular note start when no note is playing...
+        bit     BIT_PLAYING, PIPELINE(ix)
+        jr      z, _b_cfg_start_new_note
+        ;; ... otherwise it just consist in reloading a note frequency
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         jr      _b_cfg_note_end
 _b_post_cfg_note_update:
         res     BIT_NOTE_STARTED, PIPELINE(ix)
 _b_cfg_note_prepare_ym2610:
-        ;; stop playback on the channel, and let the pipeline restart it
+        ;; stop playback on the current channel, and let the pipeline
+        ;; restart the ADPCM-B note from start, including its macro state
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #1           ; reset flag (clears start and repeat in YM2610)
         call    ym2610_write_port_a
+_b_cfg_start_new_note:
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
@@ -496,7 +503,7 @@ _b_cfg_vol_end:
 
 
 ;;; ADPCM_B_NOTE_ON
-;;; Emit a specific note (frequency) on an FM channel
+;;; Emit a specific note (frequency) on the ADPCM-B channel
 ;;; ------
 ;;; [ hl ]: note
 adpcm_b_note_on::

@@ -93,10 +93,10 @@ _legato_update_pos:
         ;; (otherwise a dedicated opcode must be used to disable legato)
         ld      LEGATO_TRANSPOSE(ix), #0
         bit     BIT_FX_QUICK_LEGATO, NOTE_FX(ix)
-        jr      nz, _legato_update_end
+        jr      z, _legato_update_end
         res     BIT_FX_LEGATO, NOTE_FX(ix)
-_legato_update_end:
         res     BIT_FX_QUICK_LEGATO, NOTE_FX(ix)
+_legato_update_end:
 
         ret
 

@@ -848,20 +848,26 @@ _ssg_cfg_note_update:
         ld      NOTE(ix), a
         ld      NOTE16+1(ix), a
         ld      NOTE16(ix), #0
-        ;; do not stop the current note if a legato is in progress
+        ;; legato have a special treatment below, otherwise prepare
+        ;; state for playing a new note from the start
         bit     BIT_FX_LEGATO, NOTE_FX(ix)
         jr      z, _ssg_post_cfg_note_update
+        ;; legato is like regular note start when no note is playing...
+        bit     BIT_PLAYING, PIPELINE(ix)
+        jr      z, _ssg_cfg_start_new_note
+        ;; ... otherwise it just consist in reloading a note frequency
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         jr      _ssg_cfg_note_end
 _ssg_post_cfg_note_update:
         res     BIT_NOTE_STARTED, PIPELINE(ix)
 _ssg_cfg_note_prepare_ym2610:
-        ;; init macro position
+        ;; reset the SSG macro, and let the pipeline restart the
+        ;; SSG note from the start
         ld      a, MACRO_DATA(ix)
         ld      MACRO_POS(ix), a
         ld      a, MACRO_DATA+1(ix)
         ld      MACRO_POS+1(ix), a
-        ;; reload all registers at the next pipeline run
+_ssg_cfg_start_new_note:
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a

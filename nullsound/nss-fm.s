@@ -994,19 +994,26 @@ _fm_cfg_note_update:
         ld      NOTE(ix), a
         ld      NOTE16+1(ix), a
         ld      NOTE16(ix), #0
-        ;; do not stop the current note if a legato is in progress
+        ;; legato have a special treatment below, otherwise prepare
+        ;; state for playing a new note from the start
         bit     BIT_FX_LEGATO, NOTE_FX(ix)
         jr      z, _fm_post_cfg_note_update
+        ;; legato is like regular note start when no note is playing...
+        bit     BIT_PLAYING, PIPELINE(ix)
+        jr      z, _fm_cfg_start_new_note
+        ;; ... otherwise it just consist in reloading a note frequency
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         jr      _fm_cfg_note_end
 _fm_post_cfg_note_update:
         res     BIT_NOTE_STARTED, PIPELINE(ix)
 _fm_cfg_note_prepare_ym2610:
-        ;; stop playback on the channel, and let the pipeline restart it
+        ;; stop playback on the current channel, and let the pipeline
+        ;; restart the FM note from start, including the start of macro state
         ld      a, (state_fm_ym2610_channel)
         ld      c, a
         ld      b, #REG_FM_KEY_ON_OFF_OPS
         call    ym2610_write_port_a
+_fm_cfg_start_new_note:
         ld      a, PIPELINE(ix)
         or      #(STATE_PLAYING|STATE_EVAL_MACRO|STATE_LOAD_NOTE)
         ld      PIPELINE(ix), a
