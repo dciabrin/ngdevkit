@@ -80,7 +80,7 @@ jobs:
         run: |
           brew tap dciabrin/ngdevkit
           brew install python3 --overwrite
-          brew install automake ngdevkit-toolchain zip pkg-config
+          brew install automake ngdevkit-toolchain zip pkg-config sdl2 sdl2_image
           $(brew --prefix python)/libexec/bin/pip install pygame --break-system-packages
 
       - name: Build
@@ -88,7 +88,7 @@ jobs:
 
       - name: Install dependencies for ngdevkit-examples
         run: |
-          brew install ngdevkit-gngeo imagemagick sox glew sdl2 sdl2_image
+          brew install ngdevkit-gngeo imagemagick sox glew
           $(brew --prefix python)/libexec/bin/pip install pyyaml --break-system-packages
 
       - name: Test by compiling ngdevkit-examples
