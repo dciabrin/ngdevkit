@@ -22,6 +22,9 @@
         .include "ym2610.inc"
 
 
+        .lclequ  CTX_NO_REGISTER, 0xff
+
+
         .area DATA
 
 
@@ -55,7 +58,7 @@ ym2610_write_port_a::
         out     (PORT_YM2610_A_VALUE), a
         call    _ym2610_wait_data_write
         ;; reentrant: clear register context
-        ld      a, #0xff
+        ld      a, #CTX_NO_REGISTER
         ld      (state_ym2610_context_port_a), a
         pop     af
         ret
@@ -121,8 +124,11 @@ ym2610_wait_available::
 ;;; (all registers are preserved)
 ym2610_restore_context_port_a::
         ld      a, (state_ym2610_context_port_a)
+        cp      #CTX_NO_REGISTER
+        jr      z, _end_restore_context
         out     (PORT_YM2610_A_ADDR), a
         call    _ym2610_wait_address_write
+_end_restore_context:
         ret
 
 
