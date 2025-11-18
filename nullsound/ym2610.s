@@ -63,6 +63,25 @@ ym2610_write_port_a::
         pop     af
         ret
 
+;;; ym2610_write_port_a_no_ctx
+;;; --------------------------
+;;; IN:
+;;;    b: register address in ym2610
+;;;    c: data to set
+;;; (all registers are preserved)
+ym2610_write_port_a_no_ctx::
+        push    af
+        ;; select register address
+        ld      a, b
+        out     (PORT_YM2610_A_ADDR), a
+        call    _ym2610_wait_address_write
+        ;; set data in the selected register
+        ld      a, c
+        out     (PORT_YM2610_A_VALUE), a
+        call    _ym2610_wait_data_write
+        pop     af
+        ret
+
 ;;; ym2610_write_port_b
 ;;; -------------------
 ;;; IN:

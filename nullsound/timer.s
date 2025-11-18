@@ -86,9 +86,11 @@ update_timer_state_tracker::
         call    ym2610_wait_available
 
         ;; reset interrupt timer B
+        ;; YM2610 register context is only captured by regular code,
+        ;; i.e. outside of the interrupt handler
         ld      b, #REG_TIMER_FLAGS
         ld      c, #0x2a
-        call    ym2610_write_port_a
+        call    ym2610_write_port_a_no_ctx
 
         ;; step2: at this stage, if we interrupted a ym2610_write_port_a,
         ;; restore the YM2610 register context before returning from the
