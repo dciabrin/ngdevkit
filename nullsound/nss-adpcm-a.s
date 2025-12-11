@@ -31,16 +31,16 @@
         .lclequ ADPCM_A_MAX_VOL,0x1f
 
         ;; getters for ADPCM-A state
+        .lclequ INSTR_VOL, (state_a_instr_vol-state_a)
         .lclequ OUT_VOL, (state_a_out_vol-state_a)
         .lclequ PAN, (state_a_pan-state_a)
 
         .equ    NSS_ADPCM_A_INSTRUMENT_PROPS,   4
         .equ    NSS_ADPCM_A_NEXT_REGISTER,      8
 
-        ;; specific pipeline state for SSG channel
+        ;; specific pipeline state for ADPCM-A channel
         .lclequ STATE_START_NOTE, 0x04
         .lclequ BIT_START_NOTE,      2
-
 
 
         .area  DATA
@@ -48,27 +48,29 @@
 
 ;;; ADPCM playback state tracker
 ;;; ------
-        ;; This padding ensures the entire _state_ssg data sticks into
-        ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   ALIGN_OFFSET_ADPCM_A
 
-_state_adpcm_start:
+.align_begin state_adpcm
+;;; { ...
 
 ;;; ADPCM-A1
 state_a1:
-;;; state
+;;; { ...
 state_a_start:
-;;; stream pipeline
-state_a:
-state_a_pipeline:               .blkb   1       ; actions to run at every tick (load note, vol, other regs)
-state_a_fx:                     .blkb   1       ; enabled FX for this channel
+
 ;;; volume state tracker
 state_a_vol_cfg:                .blkb   1       ; configured volume
 state_a_vol16:                  .blkb   2       ; current decimal volume
 ;;; FX state trackers
+state_a_fx:                     .blkb   1       ; enabled FX for this channel
 state_a_fx_vol_slide:           .blkb   SLIDE_SIZE
 state_a_fx_trigger:             .blkb   TRIGGER_SIZE
+
+;;; actions to run at the end of every tick
+state_a:
+state_a_pipeline:               .blkb   1       ; action: load note, load vol, load other regs
+
 ;;; ADPCM-A-specific state
+state_a_instr_vol:              .blkb   1       ; instrument volume
 state_a_out_vol:                .blkb   1       ; ym2610 volume after the FX pipeline
 ;;; pan
 state_a_pan:                    .blkb   1       ; configured pan (b7: left, b6: right)
@@ -89,7 +91,12 @@ state_a5:
 ;;; ADPCM-A6
 state_a6:
 .blkb   ADPCM_A_STATE_SIZE
+
+;;; ... }
 state_a6_end:
+
+;;; ... }
+.align_end state_adpcm
 
 ;;; context: current adpcm channel for opcode actions
 state_adpcm_a_channel::
@@ -100,7 +107,6 @@ state_adpcm_a_channel::
 state_adpcm_a_volume_attenuation::   .blkb   1
 
 
-_state_adpcm_end:
 
 
 
@@ -128,7 +134,7 @@ init_nss_adpcm_state_tracker::
         ld      bc, #(state_a6_end-1-state_a_start)
         ldir
         ;; init flags
-        ld      iy, #state_a1
+        ld      iy, #state_a_pipeline
         ld      bc, #ADPCM_A_STATE_SIZE
         ld      d, #6
 _a_init:
@@ -417,9 +423,9 @@ _adpcm_a_loop:
         dec     d
         jp      nz, _adpcm_a_loop
 
-        ;; d: ADPCM-A channel
-        ld      a, (state_adpcm_a_channel)
-        ld      d, a
+        ;; instrument volume
+        ld      a, (hl)
+        ld      INSTR_VOL(ix), a
 
         pop     de
         pop     hl
@@ -583,10 +589,20 @@ _adpcm_a_clamp_level:
 
 ;;; Compute the YM2610 output volume from the current channel
 ;;; ------
+;;; IN:
+;;;    ix: FM pipeline
+;;;    iy: Volume FX
 ;;; modified: c
 compute_ym2610_a_vol::
-        ;; c: note vol for current channel
-        ld      c, VOL16+1(ix)
+        ;; c: instrument attenuation [-0x1f..0]
+        ld      a, #-0x1f
+        add     INSTR_VOL(ix)
+        ld      c, a
+
+        ;; c: current volume after instrument attenuation [-0x1f..0x1f]
+        ld      a, VOL16+1(ix)
+        add     c
+        ld      c, a
 
         ;; attenuation to match the configured ADPCM-A output level
         ld      a, (state_adpcm_a_volume_attenuation)

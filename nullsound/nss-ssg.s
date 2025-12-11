@@ -55,11 +55,9 @@
 
 ;;; SSG playback state tracker
 ;;; ------
-        ;; This padding ensures the entire _state_ssg data sticks into
-        ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   ALIGN_OFFSET_SSG
 
-_state_ssg_start:
+.align_begin state_ssg
+;;; { ...
 
 ;;; context: current SSG channel for opcode actions
 state_ssg_channel::
@@ -75,26 +73,32 @@ state_mirrored_enabled:
 
 ;;; SSG A
 state_mirrored_ssg_a:
+;;; { ...
 ;;; state
+
 state_mirrored_ssg_start:
-;;; additional note and FX state tracker
-state_ssg_note_fx:              .blkb   1       ; enabled note FX for this channel
+;;; note state tracker
 state_ssg_note_cfg:             .blkb   1       ; configured note
 state_ssg_note16:               .blkb   2       ; current decimal note
+;;; note FX state tracker
+state_ssg_note_fx:              .blkb   1       ; enabled note FX for this channel
 state_ssg_fx_note_slide:        .blkb   SLIDE_SIZE
 state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
 state_ssg_fx_arpeggio:          .blkb   ARPEGGIO_SIZE
 state_ssg_fx_legato:            .blkb   LEGATO_SIZE
-;;; stream pipeline
-state_mirrored_ssg:
-state_ssg_pipeline:             .blkb   1       ; actions to run at every tick (eval macro, load note, vol, other regs)
-state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
+
 ;;; volume state tracker
 state_ssg_vol_cfg:              .blkb   1       ; configured volume
 state_ssg_vol16:                .blkb   2       ; current decimal volume
-;;; FX state trackers
+;;; common FX state tracker
+state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
 state_ssg_fx_vol_slide:         .blkb   SLIDE_SIZE
 state_ssg_trigger:              .blkb   TRIGGER_SIZE
+
+;;; actions to run at the end of every tick
+state_mirrored_ssg:
+state_ssg_pipeline:             .blkb   1       ; actions: eval macro, load note, load vol, load other regs
+
 ;;; SSG-specific state
 ;;; Note
 state_ssg_note_pos16:           .blkb   2       ; fixed-point note after the FX pipeline
@@ -111,18 +115,24 @@ state_ssg_macro_data:           .blkb   2       ; address of the start of the ma
 state_ssg_macro_pos:            .blkb   2       ; address of the current position in the macro program
 state_ssg_macro_load:           .blkb   2       ; function to load the SSG registers modified by the macro program
 state_ssg_out_vol:              .blkb   1       ; ym2610 volume for SSG channel after the FX pipeline
+
+;;; ... }
 state_mirrored_ssg_end:
+
 ;;; SSG B
 state_mirrored_ssg_b:
         .blkb   SSG_STATE_SIZE
+
 ;;; SSG C
 state_mirrored_ssg_c:
         .blkb   SSG_STATE_SIZE
 
+;;; ... }
+.align_end state_ssg
+
+
 ;;; Global volume attenuation for all SSG channels
 state_ssg_volume_attenuation::       .blkb   1
-
-_state_ssg_end:
 
 
 
@@ -141,12 +151,12 @@ state_ssg_action_funcs:
 ;;; ------
 ;;; bc, de, hl modified
 init_nss_ssg_state_tracker::
-        ld      hl, #_state_ssg_start
+        ld      hl, #_state_ssg_begin
         ld      d, h
         ld      e, l
         inc     de
         ld      (hl), #0
-        ld      bc, #_state_ssg_end-2-_state_ssg_start
+        ld      bc, #_state_ssg_end-2-_state_ssg_begin
         ldir
         ;; init non-zero default values
         ld      d, #4

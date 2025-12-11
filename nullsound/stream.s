@@ -540,33 +540,33 @@ nss_opcodes:
         .nss_op ssg_vol
         .nss_op fm_vol
         .nss_op ssg_env_period
-        .nss_op_unused
-        .nss_op_unused
-        .nss_op_unused
+        .nss_op fm2_ops_off
+        .nss_op fm2_op1_vol
+        .nss_op fm2_op2_vol
         ;; 0x30
-        .nss_op_unused
-        .nss_op_unused
+        .nss_op fm2_op3_vol
+        .nss_op fm2_op4_vol
         .nss_op_unused
         .nss_op adpcm_b_vol
         .nss_op adpcm_a_vol
         .nss_op fm_pan
-        .nss_op_unused
-        .nss_op_unused
+        .nss_op fm2_op1_instr
+        .nss_op fm2_op2_instr
         ;; 0x38
-        .nss_op_unused
+        .nss_op fm2_delay
         .nss_op ssg_delay
         .nss_op fm_delay
         .nss_op adpcm_a_delay
         .nss_op adpcm_b_ctx
-        .nss_op_unused
-        .nss_op_unused
+        .nss_op fm2_op3_instr
+        .nss_op fm2_op4_instr
         .nss_op ssg_pitch
         ;; 0x40
-        .nss_op_unused
-        .nss_op_unused
-        .nss_op_unused
-        .nss_op_unused
-        .nss_op_unused
+        .nss_op fm2_op1_note_on
+        .nss_op fm2_op2_note_on
+        .nss_op fm2_op3_note_on
+        .nss_op fm2_op4_note_on
+        .nss_op set_2ch
         .nss_op fm_cut
         .nss_op ssg_cut
         .nss_op adpcm_a_cut
@@ -603,12 +603,20 @@ nss_opcodes:
         .nss_op vibrato_off
         .nss_op legato
         .nss_op legato_off
+        .nss_op fm2_vibrato
+        .nss_op fm2_vibrato_off
+        .nss_op fm2_note_portamento
+        .nss_op fm2_legato
+        .nss_op fm2_legato_off
+        .nss_op fm2_vol_slide_off
+        .nss_op fm2_vol_slide_up
+        .nss_op fm2_vol_slide_down
 
 
 
 ;;; Process a single NSS opcode
 ;;; ------
-;;; bc: address in the stream pointing to the opcode and its args
+;;; hl: address in the stream pointing to the opcode and its args
 ;;; [a, bc, iy modified - other registers saved]
 process_nss_opcode::
         ;; op

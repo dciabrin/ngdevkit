@@ -99,6 +99,16 @@
         .equ    REG_FM2_BLOCK_FNUM_2,                   0xa6
         .equ    REG_FM2_FEEDBACK_ALGORITHM,             0xb2
         .equ    REG_FM2_L_R_AMSENSE_PMSENSE,            0xb6
+;;; FM channel 2 extended operator note
+;;; These macros are meant to be used with Z80 port 4 and port 5
+        .equ    REG_FM2_OP4_FNUM_1,                     0xa2
+        .equ    REG_FM2_OP3_FNUM_1,                     0xa8
+        .equ    REG_FM2_OP1_FNUM_1,                     0xa9
+        .equ    REG_FM2_OP2_FNUM_1,                     0xaa
+        .equ    REG_FM2_OP4_BLOCK_FNUM_2,               0xa6
+        .equ    REG_FM2_OP3_BLOCK_FNUM_2,               0xac
+        .equ    REG_FM2_OP1_BLOCK_FNUM_2,               0xad
+        .equ    REG_FM2_OP2_BLOCK_FNUM_2,               0xae
 
 ;;; FM channel 3
 ;;; These macros are meant to be used with Z80 port 6 and port 7
@@ -240,6 +250,11 @@
         .equ    REG_TIMER_B_COUNTER,         0x26
         .equ    REG_TIMER_FLAGS,             0x27
 
+        ;; the timer flags register holds state for the YM2610
+        ;; 6: 2CH mode: independent notes for each OPx in FM2
+        .equ    REG_TIMER_FLAGS_2CH_BIT,     6
+        ;; 7: CSM mode: automatic key-on for OPx in FM2
+        .equ    REG_TIMER_FLAGS_CSM_BIT,     7
 
 ;;; SSG
 ;;; These macros are meant to be used with Z80 port 4 and port 5

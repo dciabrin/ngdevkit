@@ -19,14 +19,27 @@
 ;;; Constants for linking data with desired RAM alignment
 ;;;
 
-        ;; Those constants ensure that the entire state of a sound channel
-        ;; never crosses a single 256 bytes boundary, which eases additions
-        ;; and indexing.
-        ;; the .bndry statement is only local to a single file, i.e. it is
-        ;; only enforced by the assembler, not by the linker. So we have
-        ;; to tune the constants below to achieve our desired alignment.
+        ;; These macros ensure that the data between two .align_start
+        ;; and .align_end macro calls stick in a single 256 bytes
+        ;; boundary, to make 16bit arithmetic faster.
 
-        .lclequ ALIGN_OFFSET_FM,        0xbc
-        .lclequ ALIGN_OFFSET_SSG,       0x4b
-        .lclequ ALIGN_OFFSET_ADPCM_A,   0x52
-        .lclequ ALIGN_OFFSET_ADPCM_B,   0x10
+        .macro  .align_begin sym
+        _'sym'_align: .blkb _padding_'sym
+        _'sym'_begin:
+        .endm
+
+        .macro  .align_end sym
+        _'sym'_end:
+        .endm
+
+        ;; Those constants tweak the alignment of symbols in RAM to match
+        ;; our 256bytes boundaries constraints.
+
+        .lclequ _padding_state_timer,   0x0
+        .lclequ _padding_state_fm1,     0xb5
+        .lclequ _padding_state_fm2,     0xc6
+        .lclequ _padding_state_fm3,     0x26
+        .lclequ _padding_state_fm4,     0x0
+        .lclequ _padding_state_ssg,     0x8c
+        .lclequ _padding_state_adpcm,   0x48
+        .lclequ _padding_state_adpcm_b, 0xc0
