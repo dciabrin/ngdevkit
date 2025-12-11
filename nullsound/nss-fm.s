@@ -92,27 +92,32 @@ state_fm_ym2610_channel::
 
 ;;; FM1
 state_fm1:
-;;; state
+;;; { ...
 state_fm_start:
-;;; additional note and FX state tracker
-state_fm_note_fx:               .blkb   1      ; enabled note FX for this channel
-state_fm_note_cfg:              .blkb   1      ; configured note
-state_fm_note16:                .blkb   2      ; current decimal note
+        
+;;; note FX state tracker
 state_fm_fx_note_slide:         .blkb   SLIDE_SIZE
 state_fm_fx_vibrato:            .blkb   VIBRATO_SIZE
 state_fm_fx_arpeggio:           .blkb   ARPEGGIO_SIZE
 state_fm_fx_legato:             .blkb   LEGATO_SIZE
-;;; stream pipeline
-state_fm:
-state_fm_pipeline:              .blkb   1      ; actions to run at every tick (load note, vol, other regs)
-state_fm_fx:                    .blkb   1      ; enabled FX for this channel
-;;; volume state tracker
-state_fm_vol_cfg:               .blkb   1      ; configured volume
-state_fm_vol16:                 .blkb   2      ; current decimal volume
-;;; FX state trackers
+;;; note state tracker
+state_fm_note_fx:               .blkb   1      ; enabled note FX
+state_fm_note_cfg:              .blkb   1      ; configured note
+state_fm_note16:                .blkb   2      ; current decimal note
+
+;;; common FX state tracker
 state_fm_fx_vol_slide:          .blkb   SLIDE_SIZE
 state_fm_fx_trigger:            .blkb   TRIGGER_SIZE
-;;; FM-specific state
+;;; volume state tracker
+state_fm_fx:                    .blkb   1      ; enabled FX
+state_fm_vol_cfg:               .blkb   1      ; configured volume
+state_fm_vol16:                 .blkb   2      ; current decimal volume
+        
+;;; actions to run at the end of every tick
+state_fm:
+state_fm_pipeline:              .blkb   1      ; action: load note, load vol, load other regs
+
+;;; FM-specific YM2610 state tracker
 ;;; Note
 state_fm_note:
 state_fm_instrument:            .blkb    1      ; instrument
@@ -130,8 +135,10 @@ state_fm_out_op1:               .blkb    1      ; ym2610 volume for OP1 after th
 state_fm_out_op2:               .blkb    1      ; ym2610 volume for OP2 after the FX pipeline
 state_fm_out_op3:               .blkb    1      ; ym2610 volume for OP3 after the FX pipeline
 state_fm_out_op4:               .blkb    1      ; ym2610 volume for OP4 after the FX pipeline
-;;;
+
+;;; ... }
 state_fm_end:
+
 ;;; FM2
 state_fm2:
 .blkb   FM_STATE_SIZE

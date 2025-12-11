@@ -35,6 +35,8 @@
         .area  DATA
 _state_timer_start:
 
+state_timer_base_flags::        .blkb   1       ; base value of the timer flags register
+        
 ;;; ticks
 state_timer_ticks_per_row::     .blkb   1       ; total number of ticks for the current row
 state_timer_ticks_count::       .blkb   1       ; number of ticks reached for the current row
@@ -54,6 +56,7 @@ _state_timer_end:
 
 init_timer_state_tracker::
         ld      a, #0
+        ld      (state_timer_base_flags), a
         ld      (state_timer_tick_reached), a
         ld      (state_timer_ticks_count), a
         ld      (state_timer_ticks_per_row), a
@@ -89,7 +92,9 @@ update_timer_state_tracker::
         ;; YM2610 register context is only captured by regular code,
         ;; i.e. outside of the interrupt handler
         ld      b, #REG_TIMER_FLAGS
-        ld      c, #0x2a
+        ld      a, (state_timer_base_flags)
+        add     #0x2a
+        ld      c, a
         call    ym2610_write_port_a_no_ctx
 
         ;; step2: at this stage, if we interrupted a ym2610_write_port_a,
@@ -182,6 +187,16 @@ _timer_set_pos:
 ;;;
 ;;; NSS opcodes
 ;;;
+
+;;; SET_2CH
+;;; Enable independent notes for each operator in FM2
+;;; ------
+set_2ch::
+        ld      a, (state_timer_base_flags)
+        set     REG_TIMER_FLAGS_2CH_BIT, a
+        ld      (state_timer_base_flags), a
+        ret
+
 
 ;;; TIMER_TEMPO
 ;;; configure YM2610's timer B for a specific tempo and start it

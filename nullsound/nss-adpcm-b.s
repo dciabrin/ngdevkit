@@ -59,26 +59,31 @@
 _state_adpcm_b_start:
 
 ;;; ADPCM-B mirrored state
-;;; state
+;;; { ...
 state_b_start:
-;;; additional note and FX state tracker
-state_b_note_fx:                .blkb   1       ; enabled note FX for this channel
-state_b_note_cfg:               .blkb   1       ; configured note
-state_b_note16:                 .blkb   2       ; current decimal note
+
+;;; note FX state tracker
 state_b_fx_note_slide:          .blkb   SLIDE_SIZE
 state_b_fx_vibrato:             .blkb   VIBRATO_SIZE
 state_b_fx_arpeggio:            .blkb   ARPEGGIO_SIZE
 state_b_fx_legato:              .blkb   LEGATO_SIZE
-;;; stream pipeline
-state_b:
-state_b_pipeline:               .blkb   1       ; actions to run at every tick (load note, vol, other regs)
-state_b_fx:                     .blkb   1       ; enabled FX for this channel
-;;; volume state tracker
-state_b_vol_cfg:                .blkb   1       ; configured volume
-state_b_vol16:                  .blkb   2       ; current decimal volume
+;;; note state tracker
+state_b_note_fx:                .blkb   1       ; enabled note FX for this channel
+state_b_note_cfg:               .blkb   1       ; configured note
+state_b_note16:                 .blkb   2       ; current decimal note
+
 ;;; FX state trackers
 state_b_fx_vol_slide:           .blkb   SLIDE_SIZE
 state_b_trigger:                .blkb   TRIGGER_SIZE
+;;; volume state tracker
+state_b_fx:                     .blkb   1       ; enabled FX for this channel
+state_b_vol_cfg:                .blkb   1       ; configured volume
+state_b_vol16:                  .blkb   2       ; current decimal volume
+
+;;; actions to run at the end of every tick
+state_b:
+state_b_pipeline:               .blkb   1       ; action: load note, load vol, load other regs
+
 ;;; ADPCM-B-specific state
 ;;; Note
 state_b_note:
@@ -94,6 +99,8 @@ state_b_out_vol:                .blkb   1       ; ym2610 volume after the FX pip
 ;;; pan
 state_b_pan:                    .blkb   1       ; configured pan (b7: left, b6: right)
 ;;;
+
+;;; ... }
 state_b_end:
 
 
@@ -388,6 +395,7 @@ adpcm_b_instrument::
 
         ;; a: start of ADPCM-B property registers
         ld      a, #REG_ADPCM_B_ADDR_START_LSB
+        ;; TODO remove useless +0?
         add     b
 
 _adpcm_b_loop:

@@ -266,9 +266,9 @@ _post_process_nss_opcodes:
         ;; process the current stream pipeline
         ;; the next processing will take place once a new tick is reached
         call    run_fm_pipeline
-        call    run_ssg_pipeline
-        call    run_adpcm_a_pipeline
-        call    run_adpcm_b_pipeline
+        ;; call    run_ssg_pipeline
+        ;; call    run_adpcm_a_pipeline
+        ;; call    run_adpcm_b_pipeline
         ld      a, (state_timer_tick_reached)
         res     TIMER_CONSUMER_STREAM_BIT, a
         ld      (state_timer_tick_reached), a
@@ -562,11 +562,12 @@ nss_opcodes:
         .nss_op_unused
         .nss_op ssg_pitch
         ;; 0x40
+        .nss_op_unused 
+        .nss_op_unused
+        ;; .nss_op ext_note_op2
         .nss_op_unused
         .nss_op_unused
-        .nss_op_unused
-        .nss_op_unused
-        .nss_op_unused
+        .nss_op set_2ch
         .nss_op fm_cut
         .nss_op ssg_cut
         .nss_op adpcm_a_cut

@@ -56,18 +56,21 @@ _state_adpcm_start:
 
 ;;; ADPCM-A1
 state_a1:
-;;; state
+;;; { ...
 state_a_start:
-;;; stream pipeline
-state_a:
-state_a_pipeline:               .blkb   1       ; actions to run at every tick (load note, vol, other regs)
-state_a_fx:                     .blkb   1       ; enabled FX for this channel
-;;; volume state tracker
-state_a_vol_cfg:                .blkb   1       ; configured volume
-state_a_vol16:                  .blkb   2       ; current decimal volume
+        
 ;;; FX state trackers
 state_a_fx_vol_slide:           .blkb   SLIDE_SIZE
 state_a_fx_trigger:             .blkb   TRIGGER_SIZE
+;;; volume state tracker
+state_a_fx:                     .blkb   1       ; enabled FX for this channel
+state_a_vol_cfg:                .blkb   1       ; configured volume
+state_a_vol16:                  .blkb   2       ; current decimal volume
+
+;;; actions to run at the end of every tick
+state_a:
+state_a_pipeline:               .blkb   1       ; action: load note, load vol, load other regs
+
 ;;; ADPCM-A-specific state
 state_a_out_vol:                .blkb   1       ; ym2610 volume after the FX pipeline
 ;;; pan
@@ -89,6 +92,8 @@ state_a5:
 ;;; ADPCM-A6
 state_a6:
 .blkb   ADPCM_A_STATE_SIZE
+
+;;; ... }
 state_a6_end:
 
 ;;; context: current adpcm channel for opcode actions

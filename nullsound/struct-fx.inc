@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024 Damien Ciabrini
+;;; Copyright (c) 2024-2025 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -37,33 +37,58 @@
         .local  fx_trigger
 
 
-;;; The pipeline structure holds properties and state trackers common to all channels
-;;; fields before field `pipeline` are optional based on the type of channel
+;;; The channel state tracker holds properties of volume and configured FX, as
+;;; well as their current state at every moment of the playback.
+;;; 
+;;; The channel state tracker structure is split into three separate parts
+;;;   - all NSS state that are common to all type of channels (e.g. volume, trigger FX)
+;;;     some channels have a note state (FM/SSG/ADPCM-B), this comes before every other
+;;;     field in the state tracker
+;;;   - the pipeline state, i.e. what are the actions to perform at the next tick,
+;;;     e.g. load a note/volume/custom-register into the YM2610
+;;;   - every other field, usually YM2610-specific fields for a given type of
+;;;     channel (e.g. OPx for FM channels, Delta-N factor for ADPCM-B...)
+;;;
+;;; At runtime, the channel state tracker is always referenced from the pipeline field,
+;;; which means other field are accessed via either a negative of postive offset
+;;; 
 
-;;; optional note and FX state tracker
-note_fx:                .blkb 1         ; enabled note FX
+;;; 
+;;; Common layout of a channel state tracker
+;;; 
+        
+;;; note state tracker
 cfg_note:               .blkb 1         ; configured note
 note16:                 .blkb 2         ; current decimal note
+;;; optional note FX state tracker
+note_fx:                .blkb 1         ; enabled note FX
 fx_note_slide:          .blkb SLIDE_SIZE
 fx_vibrato:             .blkb VIBRATO_SIZE
 fx_arpeggio:            .blkb ARPEGGIO_SIZE
 fx_legato:              .blkb LEGATO_SIZE
-;;; strean pipeline
-pipeline:               .blkb 1         ; actions to run at every tick (load note, vol, other regs)
-fx_fx:                  .blkb 1         ; enabled FX. This must be the second field of a channel's state
+
 ;;; volume state tracker
 cfg_vol:                .blkb 1         ; configured volume
 vol16:                  .blkb 2         ; current decimal volume
-;;; misc fx state tracker
+;;; common FX state tracker
+fx_fx:                  .blkb 1         ; enabled FX
 fx_vol_slide:           .blkb SLIDE_SIZE
 fx_trigger:             .blkb TRIGGER_SIZE
 
+;;; strean pipeline
+;;; actions to run at the end of every tick
+pipeline:               .blkb 1         ; action: load note, load vol, load other regs
 
-;;; common FX for note and volume are prefix with those common fields
+
+;;; 
+;;; common FX getters for all channels 
+;;; 
+        
+;;; common state getter shared by volume and (optional) note fields
 _data_ctx:
-_data_fx:                .blkb 1         ; enabled FX for this data
 _data_cfg:               .blkb 1         ; configured data
 _data16:                 .blkb 2         ; current decimal data
+_data_fx:                .blkb 1         ; enabled FX for this data
 
 ;;; FX: slide
 _vol_slide:
@@ -73,7 +98,7 @@ _vol_slide_end:         .blkw 1         ; volume slide end
 _vol_slide_max:         .blkb 1         ; volume slide max for channel
 _vol_slide_size:
 
-;;; FX: vibrato
+;;; FX: vibrato/tremolo
 _vibrato:
 _vibrato_speed:         .blkb 1         ; vibrato_speed
 _vibrato_depth:         .blkb 1         ; vibrato_depth
@@ -108,29 +133,34 @@ _trigger_cur:           .blkb 1         ; per-action current accumulator
 _trigger_size:
 
 
-        ;; FX getter for a channel's state
-        ;; The offset assumes that that the FX structure are located
-        ;; at the same location in reference to the pipeline field,
-        ;; and they are the same for all channels
+        ;; The offset of every field is the same for all channels, and is
+        ;; based on the common layout defined above, starting from the
+        ;; pipeline field (referenced by register ix)
         .lclequ PIPELINE,       (pipeline - pipeline)
-        .lclequ FX,             (fx_fx - pipeline)
-        ;; note and volume can both have a slide a vibrato/tremolo FX, so their
-        ;; attribute share the same alignement in memory.
-        .lclequ VOL_CTX,            FX
+
+        ;; volume and note properties are sometimes processed by a common code
+        ;; so they need to share the same alignment in memory
         .lclequ VOL,                (cfg_vol - pipeline)
         .lclequ VOL16,              (vol16   - pipeline)
-        .lclequ NOTE_CTX,           NOTE_FX
-        .lclequ NOTE_FX,            (note_fx  - pipeline)
+        .lclequ FX,                 (fx_fx - pipeline)
         .lclequ NOTE,               (cfg_note - pipeline)
         .lclequ NOTE16,             (note16   - pipeline)
-        ;; getter for accessing the pipeline from the start of a FM, SSG, ADPCM-B
-        .lclequ PIPELINE_FROM_NOTE, (pipeline - note_fx)
+        .lclequ NOTE_FX,            (note_fx  - pipeline)
+        ;; when the common code needs to access the fields above, it uses
+        ;; another set of getters, whose offset is relative to a volume
+        ;; or note context (referenced by register iy)
+        .lclequ VOL_CTX,            VOL
+        .lclequ NOTE_CTX,           NOTE
+        .lclequ DATA_CFG,           (_data_cfg - _data_ctx)
+        .lclequ DATA16,             (_data16   - _data_ctx)
+        .lclequ DATA_FX,            (_data_fx  - _data_ctx)
 
         ;; FX that are common to the volume and note properties have getters
-        ;; relative to the propertie. they are accessed with register iy
-        .lclequ DATA_FX,             (_data_fx  - _data_ctx)
+        ;; whose offset is relative to the volume context or note context
+        ;; (referenced by register iy)
         .lclequ DATA_CFG,            (_data_cfg - _data_ctx)
         .lclequ DATA16,              (_data16   - _data_ctx)
+        .lclequ DATA_FX,             (_data_fx  - _data_ctx)
         ;; FX slide
         .lclequ SLIDE_CFG,  (_vol_slide_cfg    - _data_ctx)
         .lclequ SLIDE_INC16, (_vol_slide_inc16 - _data_ctx)
@@ -167,6 +197,10 @@ _trigger_size:
         .lclequ TRIGGER_CUR,    (_trigger_cur    - _trigger + fx_trigger - pipeline)
         .lclequ TRIGGER_SIZE,   (_trigger_size   - _trigger)
 
+         ;; common getter for accessing the pipeline from the start of
+        ;; the FM, SSG or ADPCM-B channel
+        .lclequ PIPELINE_FROM_NOTE, (pipeline - note_fx)
+
         ;; Enabled FX
         .lclequ BIT_FX_TRIGGER,         0
         .lclequ BIT_FX_SLIDE,           1
@@ -179,6 +213,7 @@ _trigger_size:
         .lclequ TRIGGER_LOAD_NOTE_FUNC,         0
         .lclequ TRIGGER_LOAD_VOL_FUNC,          2
         .lclequ TRIGGER_STOP_NOTE_FUNC,         4
+        
         ;; Trigger FX configuration
         .lclequ BIT_TRIGGER_ACTION_DELAY,       0
         .lclequ BIT_TRIGGER_ACTION_CUT,         1

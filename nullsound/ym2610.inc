@@ -240,6 +240,11 @@
         .equ    REG_TIMER_B_COUNTER,         0x26
         .equ    REG_TIMER_FLAGS,             0x27
 
+        ;; the timer flags register holds state for the YM2610
+        ;; 6: 2CH mode: independent notes for each OPx in FM2
+        .equ    REG_TIMER_FLAGS_2CH_BIT,     6
+        ;; 7: CSM mode: automatic key-on for OPx in FM2
+        .equ    REG_TIMER_FLAGS_CSM_BIT,     7
 
 ;;; SSG
 ;;; These macros are meant to be used with Z80 port 4 and port 5

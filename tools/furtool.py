@@ -173,8 +173,17 @@ def read_module(bs):
     nb_wavetables = bs.u2()
     nb_samples = bs.u2()
     nb_patterns = bs.u4()  # skip global pattern count
+    # this module should only be using a single chip
     chips = [x for x in bs.read(32)]
-    assert chips[:chips.index(0)] == [165]  # single ym2610 chip
+    non_empty_chips = [c for c in chips if c!=0]
+    assert len(non_empty_chips)==1, "This Furnace module uses more than one chip (detected chips: %s)"%non_empty_chips
+    # print(chips[0])
+    # only YM2610 is supported in NSS
+    # from Furnace doc:
+    #  - 0xa5: Neo Geo (YM2610) - 14 channels
+    #  - 0xa6: Neo Geo extended (YM2610) - 17 channels
+    assert chips[0] in [0xa5, 0xa6], "This Furnace module uses an invalid chip (detected: %s)"%chips[0]
+    mod.ext_fm = chips[0] == 0xa6
     bs.read(32) # skip chips vol
     bs.read(32) # skip chips pan
     chip_flags = unpack("32I", bs.read(128))
@@ -185,24 +194,31 @@ def read_module(bs):
     else:
         HALF_SSG_VOL = True
     mod.name = bs.ustr()
+    # print(mod.name)
     mod.author = bs.ustr()
+    # print(mod.author)
     mod.pattern_len = pattern_len
+    # print(mod.pattern_len)
     bs.uf4()  # skip tuning
     bs.read(20)  # skip furnace configs
     mod.instruments = [bs.u4() for i in range(nb_instruments)]
+    # print(mod.instruments)
     _ = [bs.u4() for i in range(nb_wavetables)]
     mod.samples = [bs.u4() for i in range(nb_samples)]
+    # print(mod.samples)
     mod.patterns = [bs.u4() for i in range(nb_patterns)]
+    # print(mod.patterns)
     # 14 tracks in ym2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
-    mod.orders = [[-1 for x in range(14)] for y in range(nb_orders)]
-    for i in range(14):
+    tracks = {0xa5: 14, 0xa6: 17}[chips[0]]
+    mod.orders = [[-1 for x in range(tracks)] for y in range(nb_orders)]
+    for i in range(tracks):
         for o in range(nb_orders):
             mod.orders[o][i] = bs.u1()
-    mod.fxcolumns = [bs.u1() for x in range(14)]
-    bs.read(14) # skip channel hide status (UI)
-    bs.read(14) # skip channel collapse status (UI)
-    for i in range(14): bs.ustr() # skip channel names
-    for i in range(14): bs.ustr() # skip channel short names
+    mod.fxcolumns = [bs.u1() for x in range(tracks)]
+    bs.read(tracks) # skip channel hide status (UI)
+    bs.read(tracks) # skip channel collapse status (UI)
+    for i in range(tracks): bs.ustr() # skip channel names
+    for i in range(tracks): bs.ustr() # skip channel short names
     mod.comment = bs.ustr()
     bs.uf4() # skip master volume
     bs.read(28) # skip extended compatibity flags
@@ -210,8 +226,11 @@ def read_module(bs):
     bs.u2() # skip virtual tempo denominator
     # right now, subsongs are not supported
     subsong_name = bs.ustr()
+    # print(subsong_name)
     subsong_comment = bs.ustr()
+    # print(subsong_comment)
     subsongs = bs.u1()
+    # print(subsongs)
     assert subsongs == 0, "subsongs in a single Furnace file is unsupported"
     bs.read(3) # skip reserved
     # song's additional metadata
@@ -327,18 +346,30 @@ class ssg_macro:
 
 @dataclass
 class adpcm_a_instrument:
+    load: object = field(repr=False)
     name: str = ""
-    sample: adpcm_a_sample = None
+    _sample: adpcm_a_sample = field(default=None, repr=False)
+    @property
+    def sample(self):
+        if not self._sample:
+            self._sample = self.load()
+        return self._sample
 
 
 @dataclass
 class adpcm_b_instrument:
+    load: object = field(repr=False)
     name: str = ""
-    sample: adpcm_b_sample = None
     base_octave: int = 4
     base_delta_ns: list[int] = field(default_factory=list)
     tuned: int = 0
     loop: bool = False
+    _sample: adpcm_b_sample = field(default=None, repr=False)
+    @property
+    def sample(self):
+        if not self._sample:
+            self._sample = self.load()
+        return self._sample
 
 
 
@@ -581,16 +612,16 @@ def get_sample_format(smp, sample, itype):
     return smp[sample]
 
 
-def make_adpcm_a_instrument(smp, sample):
-    ins = adpcm_a_instrument()
-    ins.sample = get_sample_format(smp, sample, 37)
+def make_adpcm_a_instrument(smp, sample_id):
+    deferred_load = lambda : get_sample_format(smp, sample_id, 37)
+    ins = adpcm_a_instrument(deferred_load)
     return ins
 
 
-def make_adpcm_b_instrument(smp, sample):
-    ins = adpcm_b_instrument()
+def make_adpcm_b_instrument(smp, sample_id):
+    deferred_load = lambda : get_sample_format(smp, sample_id, 38)
+    ins = adpcm_b_instrument(deferred_load)
     ins.loop = smp[sample].loop
-    ins.sample = get_sample_format(smp, sample, 38)
     ins.base_delta_ns, ins.base_octave = b_delta_ns(ins)
     return ins
 

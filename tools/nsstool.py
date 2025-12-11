@@ -70,7 +70,7 @@ def is_empty(r):
 
 
 def to_nss_note(furnace_note):
-    # we count octave from C-0 (furnace starts from C--5)
+    # NSS format counts octave from C-0 (Furnace starts from C--5)
     nss_note = furnace_note - 5*12
     return nss_note
 
@@ -79,6 +79,7 @@ def to_nss_note(furnace_note):
 # Furnace error reporting functions
 #
 
+ext_fm2 = False
 location_order = 0
 location_channel = 0
 location_row = 0
@@ -120,8 +121,11 @@ def set_location_context(m, p, order, channel, row):
 
 
 def fmt_location_context():
-    ch_str = ['F1','F2','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
-    loc = "order %02X, row %3d (%s)"%(location_order, location_row,ch_str[location_channel])
+    if location_ext_ch:
+        ch_names = ['F1','O1','O2','O3','O4','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
+    else:
+        ch_names = ['F1','F2','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
+    loc = "order %02X, row %3d (%s)"%(location_order, location_row, ch_names[location_channel])
     ansi_start = "\033[31;1;4m"
     ansi_stop = "\033[0m"
     fmt_row = row_str(location_data, location_fxs)
@@ -276,7 +280,7 @@ def register_nss_ops():
         ("s_vol"   , ["volume"]),
         ("fm_vol"  , ["volume"]),
         ("s_env"   , ["fine", "coarse"]),
-        None,
+        ("fm_stop_ops", ["ops"]),
         None,
         None,
         # 0x30
@@ -298,11 +302,11 @@ def register_nss_ops():
         None,
         ("s_pitch" , ["pitch"]),
         # 0x40
-        None,
-        None,
-        None,
-        None,
-        None,
+        ("ext_note_op1", ["note"]), 
+        ("ext_note_op2", ["note"]),
+        ("ext_note_op3", ["note"]),
+        ("ext_note_op4", ["note"]),
+        ("set_2ch", ),
         ("fm_cut",   ["delay"]),
         ("s_cut",    ["delay"]),
         ("a_cut",    ["delay"]),
@@ -375,28 +379,15 @@ class pat_offset:
 
 
 #
-# Furnace module conversion class functions
+# Furnace module conversion classes and functions
 #
-
-@dataclass
-class row_actions:
-    """NSS opcodes and branching from a single Furnace row"""
-    location: object = None
-    jmp_to_order: int = -1
-    flow_fx: list = field(default_factory=list)
-    ctx: object = None
-    pre_fx: list = field(default_factory=list)
-    ins: object = None
-    vol: object = None
-    fx: list = field(default_factory=list)
-    note: object = None
-    post_fx: list = field(default_factory=list)
 
 
 class channel_nss_factory:
     """factory for channel-specific NSS opcodes"""
-    def __init__(self, ctx_op, instr_op, vol_op, max_vol, pan_op, pitch_op,
+    def __init__(self, name, ctx_op, instr_op, vol_op, max_vol, pan_op, pitch_op,
                  note_on_op, note_off_op, retrigger_op, cut_op, delay_op):
+        self.name = name
         self.ctx_op = ctx_op
         self.instr_op = instr_op
         self.vol_op = vol_op
@@ -423,13 +414,28 @@ class channel_nss_factory:
 
     def fm_factory(channel):
         ctx_t = {0: fm_ctx_1, 1: fm_ctx_2, 2: fm_ctx_3, 3: fm_ctx_4}
-        return channel_nss_factory(ctx_t[channel], fm_instr, fm_vol, 0x7f,
+        return channel_nss_factory("F%d"%channel,
+                                   ctx_t[channel], fm_instr, fm_vol, 0x7f,
                                    fm_pan, fm_pitch, fm_note, fm_stop,
+                                   channel_nss_factory.mk_no_impl("retrigger"), fm_cut, fm_delay)
+
+    def ext_fm_factory(channel): 
+        ext_note = {0: ext_note_op1, 1: ext_note_op2, 2: ext_note_op3, 3: ext_note_op4}
+        ext_vol = {0: op1_lvl, 1: op2_lvl, 2: op3_lvl, 3: op4_lvl}
+        def stop_op_lambda():
+            # bitmask 7..4: op4|op3|op2|op1
+            bitmask = 1 << (channel+4)
+            return fm_stop_ops(bitmask)
+        
+        return channel_nss_factory("O%d"%channel,
+                                   fm_ctx_2, fm_instr, ext_vol[channel], 0x7f,
+                                   fm_pan, fm_pitch, ext_note[channel], stop_op_lambda,
                                    channel_nss_factory.mk_no_impl("retrigger"), fm_cut, fm_delay)
 
     def ssg_factory(channel):
         ctx_t = {4: s_ctx_1, 5: s_ctx_2, 6: s_ctx_3}
-        return channel_nss_factory(ctx_t[channel], s_macro, s_vol, 0xf,
+        return channel_nss_factory("S%d"%channel,
+                                   ctx_t[channel], s_macro, s_vol, 0xf,
                                    channel_nss_factory.mk_na("panning"), s_pitch, s_note, s_stop,
                                    channel_nss_factory.mk_no_impl("retrigger"), s_cut, s_delay)
 
@@ -437,15 +443,20 @@ class channel_nss_factory:
         def a_note_on(x):
             return a_start()
         ctx_t = {7: a_ctx_1, 8: a_ctx_2, 9: a_ctx_3, 10: a_ctx_4, 11: a_ctx_5, 12: a_ctx_6}
-        return channel_nss_factory(ctx_t[channel], a_instr, a_vol, 0x1f,
+        return channel_nss_factory("A%d"%channel,
+                                   ctx_t[channel], a_instr, a_vol, 0x1f,
                                    a_pan, channel_nss_factory.mk_na("pitch"), a_note_on, a_stop,
                                    a_retrigger, a_cut, a_delay)
 
     def b_factory(channel):
-        return channel_nss_factory(b_ctx, b_instr, b_vol, 0xff,
+        return channel_nss_factory("B",
+                                   b_ctx, b_instr, b_vol, 0xff,
                                    b_pan, channel_nss_factory.mk_no_impl("pitch"), b_note, b_stop,
                                    channel_nss_factory.mk_no_impl("retrigger"), b_cut, b_delay)
 
+    def __repr__(self):
+        return "nss_factory_"+self.name
+    
     def ctx(self):
         return self.ctx_op()
 
@@ -482,35 +493,87 @@ class channel_nss_factory:
 
 factories=[]
 
-def register_nss_factories():
+def register_nss_factories(m):
     f=channel_nss_factory
-    factories.extend([
-        f.fm_factory(0), f.fm_factory(1), f.fm_factory(2), f.fm_factory(3),
-        f.ssg_factory(4), f.ssg_factory(5), f.ssg_factory(6),
-        f.a_factory(7), f.a_factory(8), f.a_factory(9), f.a_factory(10), f.a_factory(11), f.a_factory(12),
-        f.b_factory(13)
-    ])
+    if m.ext_fm:
+        factories.extend([
+            f.fm_factory(0),
+            f.ext_fm_factory(0), f.ext_fm_factory(1), f.ext_fm_factory(2), f.ext_fm_factory(3),
+            f.fm_factory(2), f.fm_factory(3),
+            f.ssg_factory(4), f.ssg_factory(5), f.ssg_factory(6),
+            f.a_factory(7), f.a_factory(8), f.a_factory(9), f.a_factory(10), f.a_factory(11), f.a_factory(12),
+            f.b_factory(13)
+        ])
+    else:
+        factories.extend([
+            f.fm_factory(0), f.fm_factory(1), f.fm_factory(2), f.fm_factory(3),
+            f.ssg_factory(4), f.ssg_factory(5), f.ssg_factory(6),
+            f.a_factory(7), f.a_factory(8), f.a_factory(9), f.a_factory(10), f.a_factory(11), f.a_factory(12),
+            f.b_factory(13)
+        ])
 
 
-def convert_row(row, channel):
-    global location_pos
 
-    factory = factories[channel]
+def channel_name(channel):
+    ch_str = ['f1','f2','f3','f4','s1','s2','s3','a1','a2','a3','a4','a5','a6','b','f2o2','f2o3','f2o4']
+    name = ch_str[channel]
+    return name
+
+
+@dataclass
+class row_actions:
+    """NSS opcodes and branching from a single Furnace row"""
+    location: object = None
+    jmp_to_order: int = -1
+    flow_fx: list = field(default_factory=list)
+    ctx: object = None
+    pre_fx: list = field(default_factory=list)
+    ins: object = None
+    vol: object = None
+    fx: list = field(default_factory=list)
+    note: list = field(default_factory=list) #object = None
+    post_fx: list = field(default_factory=list)
+
+    def to_nss_list(self):
+        all_ops = [o if isinstance(o, list) else [o] if o else [] for o in
+                   (self.location, self.flow_fx, self.ctx, self.pre_fx,
+                    self.ins, self.vol, self.fx, self.note, self.post_fx)]
+        flattened_ops = sum(all_ops, [])
+        return flattened_ops
+
+
+cached_nss = {}
+
+def furnace_row_to_nss_actions(fur_pattern, pos):
+    global location_channel, location_fxs, location_data, location_pos
+
+    # if this row has already been parsed, return it
+    idx=(fur_pattern.channel, fur_pattern.index, pos)
+    if idx in cached_nss:
+        return cached_nss[idx]
+    
     out = row_actions()
+    cached_nss[idx] = out
 
+    row = fur_pattern.rows[pos]
     if is_empty(row):
         return out
 
+    location_channel = fur_pattern.channel
+    location_fxs = fur_pattern.fxcols
+    location_data = row
     out.location = nss_loc(location_order, location_channel, location_row)
+
+    factory = factories[fur_pattern.channel]
     out.ctx = factory.ctx()
 
     # note
     location_pos = (0,3)
     if row.note != -1:
         if row.note == 180:
-            out.note = factory.note_off()
+            out.note.append(factory.note_off())
         else:
-            out.note = factory.note_on(to_nss_note(row.note))
+            out.note.append(factory.note_on(to_nss_note(row.note)))
 
     # instrument
     location_pos = (4,2)
@@ -672,46 +735,24 @@ def convert_row(row, channel):
     return out
 
 
+@dataclass
+class nss_order:
+    """TODO"""
+    patterns: list = field(default_factory=list)
+    #  -1: no jump required after row processed
+    #   n: jump to order n for the next row to play
+    # 256: jump to the next order for the next row to play
+    # 257: jump outside the stream (i.e. stop)
+    next_order: int = -1
 
-cached_nss = {}
-def raw_nss(m, p, bs, channels, compact, capture):
+
+def build_nss_patterns(m, p, channels):
     global location_order, location_row
-
-    # a cache of already parsed rows data
-    def row_to_nss(func, pat, pos):
-        global cached_nss, location_channel, location_fxs, location_data
-        idx=(pat.channel, pat.index, pos)
-        if idx not in cached_nss:
-            location_channel = pat.channel
-            location_fxs = pat.fxcols
-            location_data = pat.rows[pos]
-            cached_nss[idx] = func(location_data, pat.channel)
-        return cached_nss[idx]
-
-    def row_actions_to_nss(a):
-        all_ops = [o if isinstance(o, list) else [o] if o else [] for o in
-                   (a.location, a.flow_fx, a.ctx, a.pre_fx, a.ins, a.vol, a.fx, a.note, a.post_fx)]
-        flattened_ops = sum(all_ops, [])
-        return flattened_ops
-
-    # unoptimized nss opcodes generated from the Furnace song
-    nss = []
-
-    f_channels = list(range(0,3+1))
-    s_channels = list(range(4,6+1))
-    a_channels = list(range(7,12+1))
-    b_channel = list([13])
-    selected_f = [x for x in f_channels if x in channels]
-    selected_s = [x for x in s_channels if x in channels]
-    selected_a = [x for x in a_channels if x in channels]
-    selected_b = [x for x in b_channel if x in channels]
-
-    # initialize stream speed from module
-    tick = m.speeds[0]
 
     # -- structures
     # a song is composed of a sequence of orders
     # an order is just a group of 14 patterns (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    # or 17 if extended FM2 used (1 FM, 4 OP-independ FM, 2 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
 
     # -- playback
     # playing a song consists in playing every order one after the other
@@ -726,113 +767,256 @@ def raw_nss(m, p, bs, channels, compact, capture):
     # remaining rows of an order. any jump to a previously played order
     # is essentially equivalent to looping the song playback.
 
-    seen_orders=[]
-    seen_patterns=[]
+    # unoptimized nss opcodes generated from the Furnace song
+    nss_orders={}
+    nss_patterns={}
+
+    # either 14 or 17 if extended FM2 is used
+    total_channels = len(m.orders[0])
+
     order=0
-
-    blocks = []
-
-    while order < len(m.orders) and order not in seen_orders:
-        # recall we've processed this order and set its location in the stream
-        seen_orders.append(order)
-
-        #  -1: no jump required after row processed
-        #   n: jump to order n for the next row to play
-        # 256: jump to the next order for the next row to play
-        # 257: jump outside the stream (i.e. stop)
-        jmp_to_order = -1
-
-        # get pattern indices for current order
+    while order < len(m.orders) and order not in nss_orders:
+        # get Furnace patterns for current order
         pattern_indices = m.orders[order]
-        order_patterns = [p[(m.orders[order][f],f)] for f in range(14)]
+        patterns = [p[(pidx, i)] for i, pidx in enumerate(pattern_indices)]
+        # if extended FM2 is used, move OP2, OP3 and OP4 channels at the end
+        # to ease filtering and processing later on
+        if len(patterns) == 17:
+            pattern_indices = pattern_indices[0:2]+pattern_indices[5:]+pattern_indices[2:5]
+            patterns = patterns[0:2]+patterns[5:]+patterns[2:5]
 
-        # reference start of order
-        jmp_label = nss_label("jmp_%x"%order)
-        nss.append(jmp_label)
-
-        # all channels should have the same number of rows
-        pattern_length = len(order_patterns[0].rows)
-        assert len(set([len(p.rows) for p in order_patterns])) == 1
+        # patterns should all have the same number of rows
+        pattern_length = len(patterns[0].rows)
+        assert len(set([len(p.rows) for p in patterns])) == 1
         assert pattern_length == m.pattern_len
 
-        pattern_opcodes = []
-        for index in range(pattern_length):
+        jmp_to_order = -1
+
+        channel_actions = [list() for x in range(len(patterns))]
+        for pidx in range(pattern_length):
             # nss opcodes to add at the end of each processed Furnace row
             opcodes = []
-            location_order, location_row = order, index
+            location_order, location_row = order, pidx
 
             # Get all the NSS opcodes produced by all the tracks for the current row
-            all_actions = [row_to_nss(convert_row, order_patterns[c], index) for c in range(14)]
-
+            row_actions = [furnace_row_to_nss_actions(patterns[channel], pidx) for channel in range(total_channels)]
+            
             # If needed, capture missing flow_fx from filtered channels and
             # make sure those fx are not lost by reinjecting them into
             # a channel that is part of the NSS output
-            if capture:
-                flows = [a.flow_fx for i, a in enumerate(all_actions) if a.flow_fx and i not in channels]
-                all_actions[channels[0]].flow_fx.extend(sum(flows,[]))
+            all_flows = [a.jmp_to_order for a in row_actions]
+            flows_opcodes = [a.flow_fx for i, a in enumerate(row_actions) if a.flow_fx and i not in channels]
+            # if len(sum(flows_opcodes,[])) > 0:
+            #     print("DBG",flows_opcodes)
+            row_actions[0].flow_fx.extend(sum(flows_opcodes,[]))
 
-            # all channels are processed for this pos.
-            # add all generated opcodes for all channels in a flat,
-            # plus a time sync to denote the end of row
-            # pattern_opcodes.extend(opcodes + [wait_n(1)])
-            channels_opcodes = [row_actions_to_nss(a) for i, a in enumerate(all_actions) if i in channels]
-            pattern_opcodes.extend(sum(channels_opcodes, []) + [wait_n(1)])
-
-            # stop processing further rows if a JMP fx was used
-            jmp_to_order = next((a.jmp_to_order for a in all_actions if a.jmp_to_order != -1), -1)
+            for ch in channels:
+                actions=row_actions[ch]
+                channel_actions[ch].append(actions)
+                
+            # stop processing further rows if a jmp action is used in this row
+            jmp_to_order = next((r.jmp_to_order for r in row_actions if r.jmp_to_order != -1), -1)
             if jmp_to_order != -1:
                 break
 
-        if 0 <= jmp_to_order and jmp_to_order != 256:
-            order = jmp_to_order
-        else:
-            order += 1
-
-        if compact:
-            # if this pattern was already processed, do not remember it twice
+        # print(pattern_indices, channels)
+        # identify all patterns processed for this order
+        nss_pattern_ids = [""] * len(patterns)
+        for ch in channels:
+            pattern_actions = channel_actions[ch]
             # NOTE: sometimes a patterns appears in a order where full playback
             # is squeezed by a jump action from another pattern. In that case
             # we have to consider that as a new pattern.
             # To account for that, a pattern is identified by its index _and_
             # its length.
-            pattern_index = pattern_indices[channels[0]]
-            pattern_waits = [x for x in pattern_opcodes if isinstance(x, wait_n)]
-            pattern_length = sum([x.rows for x in pattern_waits])
-            channel = channels[0]
-            pattern_id = "%s_%02x_%02x"%(channel_name(channel),pattern_index,pattern_length)
-            if not pattern_id in seen_patterns:
-                # compact representation: labeled pattern that can be jump to
-                pattern_label = nss_label(pattern_id)
-                basic_block = [pattern_label] + pattern_opcodes + [nss_ret()]
-                blocks.extend(basic_block)
-                seen_patterns.append(pattern_id)
-            call_op = call(-1, -1)
-            call_op.pat = pattern_id
-            nss.append(call_op)
-        else:
-            nss.extend(pattern_opcodes)
+            pattern_id = "%s_%02x_%02x"%(channel_name(ch), pattern_indices[ch], len(pattern_actions))
+            if pattern_id not in nss_patterns:
+                nss_patterns[pattern_id] = pattern_actions
+            nss_pattern_ids[ch] = pattern_id
 
-    if order in seen_orders:
+        # determine the next order to process based on parsed actions
+        if jmp_to_order in [-1, 256]:
+            jmp_to_order = order + 1
+
+        # recall we've processed this order and set its location in the stream
+        nso = nss_order(nss_pattern_ids, jmp_to_order)
+        nss_orders[order] = nso
+
+        order = jmp_to_order
+
+    return nss_orders, nss_patterns
+
+
+def merge_extended_f2_patterns(nss_orders, nss_patterns):
+    def row_fm2_from_op1234(o1, o2, o3, o4):
+        fm2 = row_actions()
+        # use the first location, all locations should be the same
+        fm2.location = o1.location
+        # use the first non empty jmp_to_order
+        fm2.jmp_to_order=next((o.jmp_to_order for o in (o1, o2, o3, o4) if o.jmp_to_order >= 0), -1)
+        # merge all flow fx
+        fm2.flow_fx = o1.flow_fx + o2.flow_fx + o3.flow_fx + o4.flow_fx
+        # first non-nil ctx
+        fm2.ctx=next((o.ctx for o in (o1, o2, o3, o4) if o.ctx != None), None)
+        # merge all pre fx
+        fm2.pre_fx = o1.pre_fx + o2.pre_fx + o3.pre_fx + o4.pre_fx
+        # first non-nil instrument (CHECK should we use last?)
+        fm2.ins=next((o.ins for o in (o1, o2, o3, o4) if o.ins != None), None)
+        # merge all post fx
+        fm2.fx = o1.fx + o2.fx + o3.fx + o4.fx
+        # add FM OP-specific volumes to the FX field
+        # TODO this works because vol isn't a list
+        fm2.fx.extend([o.vol for o in (o1, o2, o3, o4) if o.vol != None])
+        # convert note opcode to FM OP-specific note opcode
+        notes =  o1.note + o2.note + o3.note + o4.note
+        stopped_ops=sum([o.ops for o in notes if isinstance(o, fm_stop_ops)])
+        if stopped_ops == 240:
+            fm2.note.append(fm_stop())
+        elif stopped_ops != 0:
+            fm2.note.append(fm_stop_ops(stopped_ops))
+        # merged_stopped_ops
+        played_notes=[o for o in notes if o != [] and not isinstance(o, fm_stop_ops)]
+        fm2.note.extend(played_notes)
+        # merge all post fx
+        fm2.post_fx = o1.post_fx + o2.post_fx + o3.post_fx + o4.post_fx
+
+        return fm2
+
+    def create_fm2_pattern_from_op1234(p1, p2, p3, p4):
+        pattern = []
+        for row_op1, row_op2, row_op3, row_op4 in zip(p1, p2, p3, p4):
+            pattern.append(row_fm2_from_op1234(row_op1, row_op2, row_op3, row_op4))
+        return pattern
+    
+    for o in nss_orders.values():
+        order_len = len(nss_patterns[next(x for x in o.patterns if x)])
+        empty_pattern = [row_actions()]*order_len
+        op_indices = [o.patterns[ch] for ch in (1,14,15,16)]
+        op_patterns = [nss_patterns.get(i,empty_pattern) for i in op_indices]
+
+        # create new pattern and replace existing OP pattern in the order
+        new_fm2 = create_fm2_pattern_from_op1234(*op_patterns)
+        new_fm2_idx = "f2_%s_%02x"%("".join([x.split("_")[1] for x in op_indices if x]), len(new_fm2))
+        nss_patterns[new_fm2_idx] = new_fm2
+        o.patterns = o.patterns[0:1]+[new_fm2_idx]+o.patterns[2:14]
+
+
+def raw_nss_stream(nss_orders, nss_patterns, channel):
+    # resulting NSS stream for the channel
+    stream = []
+    # basic NSS blocks for patterns already seen
+    seen_patterns = {}
+    blocks = []
+
+    # items are iterated in insertion order, i.e. the music order
+    for oidx, order in nss_orders.items():
+        # print(oidx, order)
+        pattern_id = order.patterns[channel]
+        # process this pattern if it hasn't been yet
+        if pattern_id not in seen_patterns:
+            pattern = nss_patterns[pattern_id]
+            pattern_opcodes = []
+            for pidx in range(len(pattern)):            
+                # all opcodes for this row plus a time sync opcode
+                # to denote the end of row
+                opcodes = pattern[pidx].to_nss_list() + [wait_n(1)]
+                pattern_opcodes.extend(opcodes)
+            pattern_label = nss_label(pattern_id)
+            basic_block = [pattern_label] + pattern_opcodes + [nss_ret()]
+            blocks.extend(basic_block)
+            seen_patterns[pattern_id] = True
+        # output: call this pattern
+        # call_label = nss_label("call_%s"%pattern_id)
+        call_label = nss_label("order_%02x"%oidx)
+        call_op = call(-1, -1)
+        call_op.pat = pattern_id
+        stream.extend([call_label, call_op])
+
+    # output: action after last order
+    last_order = list(nss_orders.values())[-1]
+    if last_order.next_order < len(nss_orders):
         # the last order was already processed, the stream will loop
         nloop = jmp(-1, -1)
-        nloop.pat="jmp_%x"%order
-        nss.append(nloop)
+        # nloop.pat="call_%s"%nss_orders[last_order.next_order].patterns[channel]
+        nloop.pat="order_%02x"%last_order.next_order
+        nloop.desc="back to %s"%nloop.pat
+        stream.append(nloop)
     else:
         # orders were processed in sequence, the stream will end
-        nss.append(nss_end())
+        stream.append(nss_end())
+
     # add the pattern blocks that get called at the end of the stream,
     # past the end opcode.
-    nss.extend(blocks)
-    return nss
-
+    stream.extend(blocks)
+    return stream
 
 
 
 #
-# NSS compilation passes
+# NSS stream checks
 #
 
-def check_instruments_before_first_note(m, p, nss):
+def sanity_check_nss_stream(nss, m, p, ins, channel):
+    dbg("Check passes for channel %s:"%channel_name(channel).upper())
+
+    for fun in (check_instruments_valid_for_channel,
+                check_instruments_before_first_note):
+        dbg(" - %s"%fun.__doc__)
+        if not fun(nss, m, p, ins):
+            return False
+
+    return True
+
+
+def check_instruments_valid_for_channel(nss, module, fur_pattern, ins):
+    """Check that `instrument` opcodes are valid for channel"""
+    def mk_chk(type_to_check):
+        def predicate(ins_op):
+            if ins_op.inst>=len(ins):
+                row_error("instrument does not exist")
+                return False
+            fur_ins = ins[ins_op.inst]
+            check = type(fur_ins) == type_to_check
+            if not check:
+                row_error("instrument type is invalid for this channel")
+            return check
+        return predicate
+
+    fm_predicate = mk_chk(fm_instrument)
+    s_predicate = mk_chk(ssg_macro)
+    a_predicate = mk_chk(adpcm_a_instrument)
+    b_predicate = mk_chk(adpcm_b_instrument)
+
+    fm_ok = True
+    s_ok = True
+    a_ok = True
+    b_ok = True
+
+    def check_instrument_valid_for_channel_pass(op, out):
+        global location_pos
+        nonlocal fm_ok
+        nonlocal s_ok
+        nonlocal a_ok
+        nonlocal b_ok
+        if type(op) == nss_loc:
+            set_location_context(module, fur_pattern, op.order, op.channel, op.row)
+            location_pos = (4,2)
+        elif type(op) == fm_instr and fm_ok:
+            fm_ok = fm_predicate(op)
+        elif type(op) == s_macro and s_ok:
+            s_ok = s_predicate(op)
+        elif type(op) == a_instr and a_ok:
+            a_ok = a_predicate(op)
+        elif type(op) == b_instr and b_ok:
+            b_ok = b_predicate(op)
+        out.append(op)
+
+    out = run_control_flow_pass(check_instrument_valid_for_channel_pass, nss)
+    return fm_ok and s_ok and a_ok and b_ok
+
+
+def check_instruments_before_first_note(nss, module, fur_pattern, ins):
+    """Check that the initial note has an instrument set"""
     fm_ctx_map = {fm_ctx_1: 0, fm_ctx_2: 1, fm_ctx_3: 2, fm_ctx_4: 3}
     fm_ctx = 0
     s_ctx_map = {s_ctx_1: 0, s_ctx_2: 1, s_ctx_3: 2}
@@ -869,7 +1053,7 @@ def check_instruments_before_first_note(m, p, nss):
         nonlocal a_ok
         nonlocal b_ok
         if type(op) == nss_loc:
-            set_location_context(m, p, op.order, op.channel, op.row)
+            set_location_context(module, fur_pattern, op.order, op.channel, op.row)
         elif type(op) in fm_ctx_map.keys():
             fm_ctx = fm_ctx_map[type(op)]
         elif type(op) == fm_instr:
@@ -910,53 +1094,123 @@ def check_instruments_before_first_note(m, p, nss):
     return fm_ok and s_ok and a_ok and b_ok
 
 
-def check_instruments_valid_for_channel(m, p, ins, nss):
-    def mk_chk(type_to_check):
-        def predicate(ins_op):
-            if ins_op.inst>=len(ins):
-                row_error("instrument does not exist")
-                return False
-            fur_ins = ins[ins_op.inst]
-            check = type(fur_ins) == type_to_check
-            if not check:
-                row_error("instrument type is invalid for this channel")
-            return check
-        return predicate
 
-    fm_predicate = mk_chk(fm_instrument)
-    s_predicate = mk_chk(ssg_macro)
-    a_predicate = mk_chk(adpcm_a_instrument)
-    b_predicate = mk_chk(adpcm_b_instrument)
-
-    fm_ok = True
-    s_ok = True
-    a_ok = True
-    b_ok = True
-
-    def check_instrument_valid_for_channel_pass(op, out):
-        global location_pos
-        nonlocal fm_ok
-        nonlocal s_ok
-        nonlocal a_ok
-        nonlocal b_ok
-        if type(op) == nss_loc:
-            set_location_context(m, p, op.order, op.channel, op.row)
-            location_pos = (4,2)
-        elif type(op) == fm_instr and fm_ok:
-            fm_ok = fm_predicate(op)
-        elif type(op) == s_macro and s_ok:
-            s_ok = s_predicate(op)
-        elif type(op) == a_instr and a_ok:
-            a_ok = a_predicate(op)
-        elif type(op) == b_instr and b_ok:
-            b_ok = b_predicate(op)
-        out.append(op)
-
-    out = run_control_flow_pass(check_instrument_valid_for_channel_pass, nss)
-    return fm_ok and s_ok and a_ok and b_ok
+#
+# NSS stream transformer passes
+#
 
 
-def merge_adjacent_waits(nss):
+def stream_from_label(stream, label):
+    label = next((i for i, v in enumerate(stream) if isinstance(v,nss_label) and v.pat==label))
+    ret = next((i for i, v in enumerate(stream[label:]) if isinstance(v,nss_ret)))
+    return stream[label:label+ret+1]
+
+
+def run_control_flow_pass(pass_function, nss):
+    # a stream is composed of the main sequence of opcodes and
+    # optionally a series of blocks at the end, that are called by the
+    # main sequence.
+    out_main = []
+    out_blocks = []
+    # make sure we dump the block only once in the output
+    seen_blocks = {}
+    # current stream to push output opcodes to
+    out = out_main
+    # a stream can use call/ret opcodes, with a stack that is one call deep.
+    prev_stream = []
+    stream = list(nss)
+
+    while stream:
+        op = stream.pop(0)
+        if type(op) in [call, call_entry]:
+            out.append(op)
+            if op.pat not in seen_blocks:
+                seen_blocks[op.pat] = True
+                out = out_blocks
+            else:
+                # evaluate this block to keep context up to date
+                # but do not keep the generated opcodes
+                out = []
+            prev_stream = stream
+            stream = stream_from_label(stream, op.pat)
+        elif type(op) == nss_ret:
+            out.append(op)
+            out = out_main
+            stream = prev_stream
+        elif type(op) in [jmp, nss_end]:
+            out.append(op)
+            break
+        else:
+            pass_function(op, out)
+
+    return out_main + out_blocks
+
+
+tempo_injected=False
+ext_fm2_injected=False
+def compact_nss_stream(nss, m, ins, channel):
+    
+    # insert a tempo opcode on the first track that is used in the Furnace module
+    global tempo_injected
+    if not tempo_injected and stream_size_in_effective_opcodes(nss)>0:
+        tb = round(256 - (4000000 / (1152 * m.frequency)))
+        nss.insert(0, tempo(tb))
+        tempo_injected = True
+
+    global ext_fm2_injected
+    if ext_fm2 and not ext_fm2_injected and stream_size_in_effective_opcodes(nss)>0:
+        nss.insert(0, set_2ch())
+        ext_fm2_injected = True
+
+    nss.insert(0, nss_label("_start"))
+
+    dbg("Transformation passes for channel %s:"%channel_name(channel).upper())
+
+    for fun in (remove_locations,
+                remove_unreferenced_labels,
+                merge_adjacent_waits,
+                compact_instr,
+                insert_missing_vol,
+                compact_wait_n_last,
+                fuse_note_wait_last,
+                compact_calls,
+                tune_adpcm_b_notes,
+                remove_ctx,
+                resolve_jmp_and_call_opcodes):
+        dbg(" - %s"%fun.__doc__)
+        nss = fun(nss, ins=ins)
+    # for n in nss:
+    #     print(n)
+    # sys.exit(0)
+
+    return nss
+
+
+def remove_locations(nss, **kwargs):
+    """Remove `location` opcodes from the stream"""
+    return [op for op in nss if not isinstance(op, nss_loc)]
+
+
+def remove_unreferenced_labels(nss, **kwargs):
+    """Remove `label` opcodes which are not referenced in the stream"""
+    labels = [x for x in nss if isinstance(x, nss_label)]
+    callers = [x for x in nss if type(x) in [jmp, call]]
+    refs = set([x.pat for x in callers])
+
+    out = []
+    for op in nss:
+        if isinstance(op, nss_label) and op.pat == '_start':
+            # special case for start of stream
+            out.append(op)
+        elif isinstance(op, nss_label) and op.pat not in refs:
+            continue
+        else:
+            out.append(op)
+    return out
+
+
+def merge_adjacent_waits(nss, **kwargs):
+    """Merge adjacent `wait` opcodes and update the remaining wait count"""
     compact = []
     cur_wait = 0
     for op in nss:
@@ -976,69 +1230,8 @@ def merge_adjacent_waits(nss):
     return compact
 
 
-def compact_wait_n_last(nss):
-    last_rows = -1
-
-    def compact_wait_n_last_pass(op, out):
-        nonlocal last_rows
-        if type(op) == nss_label:
-            last_rows = -1
-            out.append(op)
-        elif type(op) == wait_n:
-            if op.rows == last_rows:
-                out.append(wait_last())
-            else:
-                last_rows = op.rows
-                out.append(op)
-        else:
-            out.append(op)
-
-    out = run_control_flow_pass(compact_wait_n_last_pass, nss)
-    return out
-
-
-def fuse_note_wait_last(nss):
-    fuse_map = {fm_note: fm_note_w,
-                s_note: s_note_w,
-                a_start: a_start_w,
-                fm_stop: fm_stop_w}
-    note_op = False
-    start_stop_op = False
-
-    def fuse_note_wait_last_pass(op, out):
-        nonlocal note_op
-        nonlocal start_stop_op
-        if type(op) == wait_last:
-            if note_op:
-                fused_op = fuse_map[type(note_op)](note_op.note)
-                out.append(fused_op)
-                note_op = False
-            elif start_stop_op:
-                fused_op = fuse_map[type(start_stop_op)]()
-                out.append(fused_op)
-                start_stop_op = False
-            else:
-                out.append(op)
-        elif type(op) in [fm_note, s_note]:
-            assert start_stop_op == False
-            note_op = op
-        elif type(op) in [a_start]:
-            assert note_op == False
-            start_stop_op = op
-        else:
-            if note_op:
-                out.append(note_op)
-                note_op = False
-            if start_stop_op:
-                out.append(start_stop_op)
-                start_stop_op = False
-            out.append(op)
-
-    out = run_control_flow_pass(fuse_note_wait_last_pass, nss)
-    return out
-
-
-def compact_instr(nss):
+def compact_instr(nss, **kwargs):
+    """Remove `instrument` opcode if it does not change the current intrument"""
     fm_ctx_map = {fm_ctx_1: 0, fm_ctx_2: 1, fm_ctx_3: 2, fm_ctx_4: 3}
     fm_ctx = 0
     s_ctx_map = {s_ctx_1: 0, s_ctx_2: 1, s_ctx_3: 2}
@@ -1098,7 +1291,8 @@ def compact_instr(nss):
     return out
 
 
-def insert_missing_vol(nss):
+def insert_missing_vol(nss, **kwargs):
+    """insert a `volume` opcode before the first note in the stream if it is missing"""
     fm_ctx_map = {fm_ctx_1: 0, fm_ctx_2: 1, fm_ctx_3: 2, fm_ctx_4: 3}
     fm_ctx = 0
     a_ctx_map = {a_ctx_1: 0, a_ctx_2: 1, a_ctx_3: 2, a_ctx_4: 3, a_ctx_5: 4, a_ctx_6: 5}
@@ -1167,7 +1361,72 @@ def insert_missing_vol(nss):
     return out
 
 
-def compact_calls(nss):
+def compact_wait_n_last(nss, **kwargs):
+    """Replace `wait_n` opcode by shorter `wait_last` if possible"""
+    last_rows = -1
+
+    def compact_wait_n_last_pass(op, out):
+        nonlocal last_rows
+        if type(op) == nss_label:
+            last_rows = -1
+            out.append(op)
+        elif type(op) == wait_n:
+            if op.rows == last_rows:
+                out.append(wait_last())
+            else:
+                last_rows = op.rows
+                out.append(op)
+        else:
+            out.append(op)
+
+    out = run_control_flow_pass(compact_wait_n_last_pass, nss)
+    return out
+
+
+def fuse_note_wait_last(nss, **kwargs):
+    """replace `note` + `wait` sequence with `note_and_wait_last` if possible"""
+    fuse_map = {fm_note: fm_note_w,
+                s_note: s_note_w,
+                a_start: a_start_w,
+                fm_stop: fm_stop_w}
+    note_op = False
+    start_stop_op = False
+
+    def fuse_note_wait_last_pass(op, out):
+        nonlocal note_op
+        nonlocal start_stop_op
+        if type(op) == wait_last:
+            if note_op:
+                fused_op = fuse_map[type(note_op)](note_op.note)
+                out.append(fused_op)
+                note_op = False
+            elif start_stop_op:
+                fused_op = fuse_map[type(start_stop_op)]()
+                out.append(fused_op)
+                start_stop_op = False
+            else:
+                out.append(op)
+        elif type(op) in [fm_note, s_note]:
+            assert start_stop_op == False
+            note_op = op
+        elif type(op) in [a_start]:
+            assert note_op == False
+            start_stop_op = op
+        else:
+            if note_op:
+                out.append(note_op)
+                note_op = False
+            if start_stop_op:
+                out.append(start_stop_op)
+                start_stop_op = False
+            out.append(op)
+
+    out = run_control_flow_pass(fuse_note_wait_last_pass, nss)
+    return out
+
+
+def compact_calls(nss, **kwargs):
+    """Replace sequence of `call` opcodes by `call_table` to gain space"""
     compact = []
 
     offset = {}
@@ -1207,8 +1466,9 @@ def compact_calls(nss):
     return compact
 
 
-
-def tune_adpcm_b_notes(nss, ins):
+def tune_adpcm_b_notes(nss, **kwargs):
+    """Tune ADPCM-B notes based on instrument's sample speed"""
+    ins = kwargs["ins"]
     # current instrument for ADPCM-B
     current_inst = -1
     # temporary workaround to support arpeggio tweak from macro
@@ -1235,7 +1495,8 @@ def tune_adpcm_b_notes(nss, ins):
     return out
 
 
-def remove_ctx(nss):
+def remove_ctx(nss, **kwargs):
+    """remove `context` opcodes from compact stream"""
     ctxs = [fm_ctx_1, fm_ctx_2, fm_ctx_3, fm_ctx_4,
             s_ctx_1, s_ctx_2, s_ctx_3,
             a_ctx_1, a_ctx_2, a_ctx_3, a_ctx_4, a_ctx_5, a_ctx_6]
@@ -1283,134 +1544,8 @@ def compact_ctx(nss):
     return out
 
 
-def stream_from_label(stream, label):
-    label = next((i for i, v in enumerate(stream) if isinstance(v,nss_label) and v.pat==label))
-    ret = next((i for i, v in enumerate(stream[label:]) if isinstance(v,nss_ret)))
-    return stream[label:label+ret+1]
-
-
-def run_control_flow_pass(pass_function, nss):
-    # a stream is composed of the main sequence of opcodes and
-    # optionally a series of blocks at the end, that are called by the
-    # main sequence.
-    out_main = []
-    out_blocks = []
-    # make sure we dump the block only once in the output
-    seen_blocks = {}
-    # current stream to push output opcodes to
-    out = out_main
-    # a stream can use call/ret opcodes, with a stack that is one call deep.
-    prev_stream = []
-    stream = list(nss)
-
-    while stream:
-        op = stream.pop(0)
-        if type(op) in [call, call_entry]:
-            out.append(op)
-            if op.pat not in seen_blocks:
-                seen_blocks[op.pat] = True
-                out = out_blocks
-            else:
-                # evaluate this block to keep context up to date
-                # but do not keep the generated opcodes
-                out = []
-            prev_stream = stream
-            stream = stream_from_label(stream, op.pat)
-        elif type(op) == nss_ret:
-            out.append(op)
-            out = out_main
-            stream = prev_stream
-        elif type(op) in [jmp, nss_end]:
-            out.append(op)
-            break
-        else:
-            pass_function(op, out)
-
-    return out_main + out_blocks
-
-
-def simulate_ssg_autoenv(nss, ins):
-    semitones = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ]
-    freqs = [
-        [  32.7 ,    34.65,    36.71,    38.89,   41.2 ,   43.65,   46.25,   49.0 ,   51.91,   55.0 ,   58.27,   61.74],
-        [  65.41,    69.3 ,    73.42,    77.78,   82.41,   87.31,   92.5 ,   98.0 ,  103.8 ,  110.0 ,  116.5 ,  123.5 ],
-        [ 130.8 ,   138.6 ,   146.8 ,   155.6 ,  164.8 ,  174.6 ,  185.0 ,  196.0 ,  207.7 ,  220.0 ,  233.1 ,  246.9 ],
-        [ 261.6 ,   277.2 ,   293.7 ,   311.1 ,  329.6 ,  349.2 ,  370.0 ,  392.0 ,  415.3 ,  440.0 ,  466.2 ,  493.9 ],
-        [ 523.3 ,   554.4 ,   587.3 ,   622.3 ,  659.3 ,  698.5 ,  740.0 ,  784.0 ,  830.6 ,  880.0 ,  932.3 ,  987.8 ],
-        [1047.0 ,  1109.0 ,  1175.0 ,  1245.0 , 1319.0 , 1397.0 , 1480.0 , 1568.0 , 1661.0 , 1760.0 , 1865.0 , 1976.0 ],
-        [2093.0 ,  2217.0 ,  2349.0 ,  2489.0 , 2637.0 , 2794.0 , 2960.0 , 3136.0 , 3322.0 , 3520.0 , 3729.0 , 3951.0 ],
-        [4186.0 ,  4435.0 ,  4699.0 ,  4978.0 , 5274.0 , 5588.0 , 5920.0 , 6272.0 , 6645.0 , 7040.0 , 7459.0 , 7902.0 ]
-    ]
-    s_ctx_map = {s_ctx_1: 0, s_ctx_2: 1, s_ctx_3: 2}
-    s_ctx = 0
-    s_is = [-1, -1, -1]
-    s_autoenv = [False, False, False]
-    s_period = [-1, -1, -1]
-
-    def autoenv_pass(op, out):
-        nonlocal s_ctx
-        if type(op) in [wait_n, wait_last]:
-            s_ctx=0
-            out.append(op)
-        elif type(op) == s_macro:
-            # print(op, hex(op.inst))
-            if s_is[s_ctx] != op.inst:
-                s_is[s_ctx] = op.inst
-                # False if autoenv isn't defined
-                s_autoenv[s_ctx]=ins[op.inst].autoenv
-                s_period[s_ctx]=-1
-                out.append(op)
-        elif type(op) in s_ctx_map.keys():
-            s_ctx = s_ctx_map[type(op)]
-            out.append(op)
-        elif type(op) == s_note:
-            autoenv=s_autoenv[s_ctx]
-            if autoenv:
-                o = (op.note // 12) + 1
-                n = op.note % 12
-                notefreq = int(freqs[o-1][n])
-                num, den = autoenv
-                period = ((125000//notefreq)*den//num)//16
-                # only generate a s_env opcode if the last
-                # note played on this channel differred
-                if s_period[s_ctx] != period:
-                    s_period[s_ctx] = period
-                    fine, coarse = period&0xff, (period>>8)&0xff
-                    out.append(s_env(fine, coarse))
-            s_ctx+=1
-            out.append(op)
-        elif type(op) == s_stop:
-            s_ctx+=1
-            out.append(op)
-        else:
-            out.append(op)
-
-    out = run_control_flow_pass(autoenv_pass, nss)
-    return out
-
-
-def remove_locations(nss):
-    return [op for op in nss if not isinstance(op, nss_loc)]
-
-
-def remove_unreferenced_labels(nss):
-    labels = [x for x in nss if isinstance(x, nss_label)]
-    callers = [x for x in nss if type(x) in [jmp, call]]
-    refs = set([x.pat for x in callers])
-
-    out = []
-    for op in nss:
-        if isinstance(op, nss_label) and op.pat == '_start':
-            # special case for start of stream
-            out.append(op)
-        elif isinstance(op, nss_label) and op.pat not in refs:
-            continue
-        else:
-            out.append(op)
-    return out
-
-
-def resolve_jmp_and_call_opcodes(nss):
+def resolve_jmp_and_call_opcodes(nss, **kwargs):
+    """Compute final offset in bytes for `jmp` and `call` opcodes"""
     labels = {}
     # pass: position of each label in the stream (offset in bytes from start)
     pos = 0
@@ -1439,10 +1574,11 @@ def resolve_jmp_and_call_opcodes(nss):
     return nss
 
 
-def stream_size_in_effective_opcodes(stream):
-    def control_flow(op):
-        return type(op) in [nss_loc, jmp, call, pat_offset, call_tbl, call_entry, nss_ret, nss_label, nss_end, wait_n, wait_last]
-    return len([op for op in stream if not control_flow(op)])
+
+
+#
+# Output helper functions
+#
 
 
 def stream_size_in_bytes(stream):
@@ -1476,12 +1612,6 @@ def asm_header(nss, m, name, bank, size, fd):
     else:
         print("        .area   CODE", file=fd)
     print("", file=fd)
-
-
-def channel_name(channel):
-    stream_type = ["f1", "f2", "f3", "f4", "s1", "s2", "s3",
-                   "a1", "a2", "a3", "a4", "a5", "a6", "b"]
-    return stream_type[channel]
 
 
 def stream_name(prefix, channel):
@@ -1522,6 +1652,8 @@ def nss_to_asm(nss, m, name, fd):
             if isinstance(op, nss_label):
                 if op.pat == "_start":
                     print("        ;; start of NSS stream", file=fd)
+                elif "call_" in op.pat:
+                    pass
                 elif "jmp" not in op.pat:
                     print("        ;; pattern %s"%(op.pat,), file=fd)
                 continue
@@ -1549,80 +1681,16 @@ def nss_to_asm(nss, m, name, fd):
     asm_slice(stream_ops)
 
 
-def remove_empty_streams(channels, streams):
+def stream_size_in_effective_opcodes(stream):
+    def control_flow(op):
+        return type(op) in [nss_loc, jmp, call, pat_offset, call_tbl, call_entry, nss_ret, nss_label, nss_end, wait_n, wait_last]
+    return len([op for op in stream if not control_flow(op)])
+
+
+def non_empty_nss_streams(channels, streams):
     streams_size = [(c, s, stream_size_in_effective_opcodes(s)) for c, s in zip(channels, streams)]
     non_empty = [(c, s) for c, s, l in streams_size if l > 0]
     return [c for c, s in non_empty], [s for c, s in non_empty]
-
-
-tempo_injected=False
-def generate_nss_stream(m, p, bs, ins, channels, stream_idx):
-    compact = stream_idx >= 0
-    capture_flow_fx = stream_idx == 0
-
-    dbg("Convert Furnace patterns to unoptimized NSS opcodes")
-    nss = raw_nss(m, p, bs, channels, compact, capture_flow_fx)
-
-    # insert a tempo opcode on the first track that is used in the Furnace module
-    global tempo_injected
-    if not tempo_injected and stream_size_in_effective_opcodes(nss)>0:
-        tb = round(256 - (4000000 / (1152 * m.frequency)))
-        nss.insert(0, tempo(tb))
-        tempo_injected = True
-
-    nss.insert(0, nss_label("_start"))
-
-    dbg("Check passes:")
-    dbg(" - check that instruments are valid for channel")
-    if not check_instruments_valid_for_channel(m, p, ins, nss):
-        return False, []
-
-    dbg(" - check that initial notes have an instrument set")
-    if not check_instruments_before_first_note(m, p, nss):
-        return False, []
-
-    dbg("Transformation passes:")
-    dbg(" - remove location opcodes after checks have passed")
-    nss = remove_locations(nss)
-
-    dbg(" - remove unreference NSS labels")
-    nss = remove_unreferenced_labels(nss)
-
-    dbg(" - merge adjacent WAIT opcodes")
-    nss = merge_adjacent_waits(nss)
-
-    dbg(" - remove successive INSTR opcodes if they keep intrument unchanged")
-    nss = compact_instr(nss)
-
-    dbg(" - insert VOL opcode if it is missing before the initial note")
-    nss = insert_missing_vol(nss)
-
-    dbg(" - compact WAIT_N -> WAIT_LAST opcodes")
-    nss = compact_wait_n_last(nss)
-
-    dbg(" - fuse sequences of NOTE / WAIT_LAST opcodes")
-    nss = fuse_note_wait_last(nss)
-
-    dbg(" - compact CALL opcodes into CALL_TABLE opcodes")
-    nss = compact_calls(nss)
-
-    dbg(" - tune ADPCM-B notes based on instrument's sample speed")
-    nss = tune_adpcm_b_notes(nss, ins)
-
-    if compact:
-        dbg(" - remove CTX opcodes for compact stream")
-        nss = remove_ctx(nss)
-    else:
-        dbg(" - remove CTX opcodes if they keep the current context unchanged")
-        nss = compact_ctx(nss)
-
-    dbg(" - look for SSG autoenv macros and insert opcodes to simulate them")
-    nss = simulate_ssg_autoenv(nss, ins)
-
-    dbg(" - resolve jmp and call opcodes")
-    nss = resolve_jmp_and_call_opcodes(nss)
-
-    return True, nss
 
 
 def channels_bitfield(channels):
@@ -1639,8 +1707,11 @@ def channels_bitfield(channels):
     return bitword, comment
 
 
+
+
 def main():
-    global VERBOSE
+    global VERBOSE, ext_fm2
+    
     parser = argparse.ArgumentParser(
         description="Convert Furnace module patterns to NSS stream")
 
@@ -1653,7 +1724,8 @@ def main():
     parser.add_argument("-n", "--name",
                         help="Name of the ASM label for the NSS data. Empty name skips label.")
 
-    parser.add_argument("-c", "--channels", help="Process specific channels. One hex digit per channel", default='0123456789abcd')
+    parser.add_argument("-c", "--channels", help="Process specific channels. One hex digit per channel",
+                        default='0123456789abcd')
     parser.add_argument("-z", "--compact", help="Generate compact NSS stream", action="store_true")
 
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
@@ -1669,12 +1741,8 @@ def main():
 
     bank = arguments.bank
 
-    # validate channel filtering option
-    if not all(['0' <= c <= 'd' for c in arguments.channels.lower()]):
-        error("invalid channel filter")
-
-    register_nss_ops()
-    register_nss_factories()
+    # FIXME: only compact representation works right now
+    arguments.compact = True
 
     dbg("Loading Furnace module %s"%arguments.FILE)
     bs = load_module(arguments.FILE)
@@ -1682,29 +1750,73 @@ def main():
     smp = read_samples(module_id_from_path(arguments.FILE), m.samples, bs)
     ins = read_instruments(m.instruments, smp, bs)
     p = read_all_patterns(m, bs)
-    channels = [int(c, 16) for c in sorted(list(arguments.channels.lower()))]
 
+    # configure the furnace parser based on the loaded module
+    register_nss_ops()
+    register_nss_factories(m)
+
+    # validate channel filtering option
+    channels = arguments.channels.lower()
+    ext_fm2 = len(m.orders[0]) == 17
+    allowed_channels = '0123456789abcdwxyz' if ext_fm2 else '0123456789abcd'
+    print(arguments.channels.lower())
+    if not all([c in allowed_channels for c in arguments.channels.lower()]):
+        error("invalid channel filter")
+    # convert channels to direct offsets for use during parsing below
+    channels = channels.translate(str.maketrans('wxyz','1efg'))
+    channels = sorted(set(int(c, 17) for c in channels))
+
+    dbg("Build NSS patterns out of all Furnace patterns in selected channels")
+    nss_orders, nss_patterns = build_nss_patterns(m, p, channels)
+
+    # when extended FM2 is in use, NSS order encodes OP1 channel as FM2
+    # if OP2,3,4 channels are used, merge them into a single FM2 channel
+    op234_in_use = len([c for c in channels if c >= 14]) > 0
+    if ext_fm2 and op234_in_use:
+        dbg("Merge extended OPx patterns into regular FM2 NSS patterns")
+        merge_extended_f2_patterns(nss_orders, nss_patterns)
+
+    # if extended FM2 and OP channel are enabled, make
+    # sure that the FM2 channel is also part of the output
+    if ext_fm2 and next((True for c in channels if c>=14), False):
+        channels = sorted(channels+[1])
+    # past that point, we no longer have independent channels for OPs
+    # so remove them in the list of channels to be considered
+    channels = [c for c in channels if c<14]
+
+    dbg("Build unoptimized NSS streams out of all NSS patterns")
+    raw_streams = [raw_nss_stream(nss_orders, nss_patterns, ch) for ch in channels]
+
+    # ensure that the streams follows NSS semantics
+    # (e.g. correct instrument type for track, no default instrument...)
+    checks = [sanity_check_nss_stream(nss, m, p, ins, ch) for ch, nss in zip(channels, raw_streams)]
+    if len([c for c in checks if c == False]):
+        sys.exit(1)
+
+    # generate the output
     if arguments.compact:
-        res = [generate_nss_stream(m, p, bs, ins, [c], i) for i, c in enumerate(channels)]
-        checkok = [c for c, s in res]
-        if not all(checkok):
-            sys.exit(1)
+        nss_streams = [compact_nss_stream(nss, m, ins, ch) for ch, nss in zip(channels, raw_streams)]
+        # for op in nss_streams[0]:
+        #     print(op)
+        # sys.exit(0)
+    
+        channels, nss_streams = non_empty_nss_streams(channels, nss_streams)
+
         if arguments.output:
             outfd = open(arguments.output, "w")
         else:
             outfd = sys.__stdout__
-        streams = [s for c, s in res]
-        channels, streams = remove_empty_streams(channels, streams)
+
         # NSS compact header (number of streams, channels bitfield, stream pointers)
         size = (1 +                  # number of streams
                 2 +                  # channels bitfield
                 1 + len(m.speeds) +  # speeds
-                (2 * len(streams)))  # stream pointers
+                (2 * len(nss_streams)))  # stream pointers
         # all streams sizes
-        size += sum([stream_size_in_bytes(s) for s in streams])
-        asm_header(streams, m, name, bank, size, outfd)
-        nss_compact_header(m, channels, streams, name, outfd)
-        for i, ch, stream in zip(range(len(channels)), channels, streams):
+        size += sum([stream_size_in_bytes(s) for s in nss_streams])
+        asm_header(nss_streams, m, name, bank, size, outfd)
+        nss_compact_header(m, channels, nss_streams, name, outfd)
+        for i, ch, stream in zip(range(len(channels)), channels, nss_streams):
             nss_to_asm(stream, m, stream_name(name, ch), outfd)
     else:
         checkok, stream = generate_nss_stream(m, p, bs, ins, channels, -1)

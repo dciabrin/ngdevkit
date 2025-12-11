@@ -75,26 +75,32 @@ state_mirrored_enabled:
 
 ;;; SSG A
 state_mirrored_ssg_a:
+;;; { ...
 ;;; state
+
+;;; note FX state tracker
 state_mirrored_ssg_start:
-;;; additional note and FX state tracker
-state_ssg_note_fx:              .blkb   1       ; enabled note FX for this channel
-state_ssg_note_cfg:             .blkb   1       ; configured note
-state_ssg_note16:               .blkb   2       ; current decimal note
 state_ssg_fx_note_slide:        .blkb   SLIDE_SIZE
 state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
 state_ssg_fx_arpeggio:          .blkb   ARPEGGIO_SIZE
 state_ssg_fx_legato:            .blkb   LEGATO_SIZE
-;;; stream pipeline
-state_mirrored_ssg:
-state_ssg_pipeline:             .blkb   1       ; actions to run at every tick (eval macro, load note, vol, other regs)
-state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
-;;; volume state tracker
-state_ssg_vol_cfg:              .blkb   1       ; configured volume
-state_ssg_vol16:                .blkb   2       ; current decimal volume
-;;; FX state trackers
+;;; note state tracker
+state_ssg_note_fx:              .blkb   1       ; enabled note FX for this channel
+state_ssg_note_cfg:             .blkb   1       ; configured note
+state_ssg_note16:               .blkb   2       ; current decimal note
+
+;;; common FX state tracker
 state_ssg_fx_vol_slide:         .blkb   SLIDE_SIZE
 state_ssg_trigger:              .blkb   TRIGGER_SIZE
+;;; volume state tracker
+state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
+state_ssg_vol_cfg:              .blkb   1       ; configured volume
+state_ssg_vol16:                .blkb   2       ; current decimal volume
+
+;;; actions to run at the end of every tick
+state_mirrored_ssg:
+state_ssg_pipeline:             .blkb   1       ; actions: eval macro, load note, load vol, load other regs
+
 ;;; SSG-specific state
 ;;; Note
 state_ssg_note_pos16:           .blkb   2       ; fixed-point note after the FX pipeline
@@ -111,10 +117,14 @@ state_ssg_macro_data:           .blkb   2       ; address of the start of the ma
 state_ssg_macro_pos:            .blkb   2       ; address of the current position in the macro program
 state_ssg_macro_load:           .blkb   2       ; function to load the SSG registers modified by the macro program
 state_ssg_out_vol:              .blkb   1       ; ym2610 volume for SSG channel after the FX pipeline
+
+;;; ... }
 state_mirrored_ssg_end:
+
 ;;; SSG B
 state_mirrored_ssg_b:
         .blkb   SSG_STATE_SIZE
+
 ;;; SSG C
 state_mirrored_ssg_c:
         .blkb   SSG_STATE_SIZE
