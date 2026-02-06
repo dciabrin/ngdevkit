@@ -88,7 +88,7 @@ jobs:
 
       - name: Install dependencies for ngdevkit-examples
         run: |
-          brew install ngdevkit-gngeo imagemagick sox glew
+          brew install ngdevkit-gngeo imagemagick sox glew gmake
           $(brew --prefix python)/libexec/bin/pip install pyyaml --break-system-packages
 
       - name: Test by compiling ngdevkit-examples
