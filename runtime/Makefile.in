@@ -40,6 +40,7 @@ NGDEVKIT_OBJS=\
   soft-dip-eu \
   bios-ram \
   bios-backup-ram \
+  bios-calls \
   ng_text_tall_args \
   ng_text_args \
   ng_center_text_tall_args \
