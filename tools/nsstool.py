@@ -1680,7 +1680,7 @@ def main():
     bs = load_module(arguments.FILE)
     m = read_module(bs)
     smp = read_samples(module_id_from_path(arguments.FILE), m.samples, bs)
-    ins = read_instruments(m.instruments, smp, bs)
+    ins = read_instruments(m, m.instruments, smp, bs)
     p = read_all_patterns(m, bs)
     channels = [int(c, 16) for c in sorted(list(arguments.channels.lower()))]
 

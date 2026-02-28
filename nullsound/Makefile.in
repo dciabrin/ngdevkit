@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Damien Ciabrini
+# Copyright (c) 2018-2026 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -14,36 +14,71 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-all: nullsound.lib linkcheck.map
+all: nullsound.lib nullsound-aes.lib linkcheck.map
 
 -include ../Makefile.config
 
 INCLUDE_FILES=helpers ports ym2610
-OBJS=entrypoint memory bios-commands adpcm ym2610 stream timer utils nss-fm nss-ssg nss-adpcm-a nss-adpcm-b fx-vibrato fx-slide fx-trigger fx-arpeggio fx-legato volume
-LIB=nullsound.lib
+OBJS=\
+  memory \
+  bios-commands \
+  adpcm \
+  ym2610 \
+  stream \
+  timer \
+  utils \
+  nss-fm \
+  nss-ssg \
+  nss-adpcm-a \
+  nss-adpcm-b \
+  fx-vibrato \
+  fx-slide \
+  fx-trigger \
+  fx-arpeggio \
+  fx-legato \
+  volume
+OBJS_MVS=entrypoint-mvs $(OBJS)
+OBJS_AES=entrypoint-aes $(OBJS)
+LIB_MVS=nullsound.lib
+LIB_AES=nullsound-aes.lib
 
 VERSION=@version@
 
 # nullsound assumes that various data blocks are linked in RAM
 # within a 16bits address range that has constant MSB, to speed up
 # 8-bit pointer addition. This target ensure bounds are valid
-linkcheck.map: $(LIB)
-	$(NGSDLD) -n -b DATA=0xf800 $@ $(LIB) -g cmd_jmptable=0 -i -w -m && \
+linkcheck.map: $(LIB_MVS)
+	$(NGSDLD) -n -b DATA=0xf800 $@ $(LIB_MVS) -g cmd_jmptable=0 -i -w -m && \
 	$(PYTHON) check-bounds.py $@
 
 # NOTE: it's unclear whether a real ar lib can be passed as a .rel
 # argument to the linker, at least it sometimes fail to parse on MSYS2
 # make a bare concatenation of all .rel instead, as it does not contain
 # binary characters and can be reliably parsed by ASLink/sdld
-$(LIB): $(OBJS:%=%.rel)
+$(LIB_MVS): $(OBJS_MVS:%=%.rel)
 	cat $^ > $@
+
+$(LIB_AES): $(OBJS_AES:%=%.rel)
+	cat $^ > $@
+
+# The driver has specific sound tables for MVS and AES to generate
+# the right playback frequency depending on the hardware's audio clock.
+# In practice, this makes little difference, so by default, the MVS
+# clock is considered is used in nullsound.lib
+# But if you want exact playback frequency for Furnace modules that have
+# been authored for AES, you can link against nullsound-aes.lib
+entrypoint-mvs.rel: entrypoint.s
+	$(NGSDAS) -a -g -l -p -s -u -Imvs -o $@ $<
+
+entrypoint-aes.rel: entrypoint.s
+	$(NGSDAS) -a -g -l -p -s -u -Iaes -o $@ $<
 
 %.rel: %.s
 	$(NGSDAS) -a -g -l -p -s -u -o $@ $<
 
 install: install-nullsound install-include
 
-install-nullsound: $(LIB)
+install-nullsound: $(LIB_MVS) $(LIB_AES)
 	$(INSTALL) -d $(DESTDIR)$(prefix)/z80-neogeo-ihx/lib && \
 	$(INSTALL) $^ $(DESTDIR)$(prefix)/z80-neogeo-ihx/lib
 
