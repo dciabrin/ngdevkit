@@ -33,8 +33,6 @@ from operator import ior
 
 VERBOSE = False
 
-# The 8Mhz tick from the AES master clock
-_8M = 8055943
 
 def error(s):
     sys.exit("error: " + s)
@@ -216,6 +214,13 @@ def read_module(bs):
     bs.read(3) # skip reserved
     # song's additional metadata
     system_name = bs.ustr()
+    if 'MVS' in system_name:
+        mod.clock = 24000000 / 3
+    elif 'AES' in system_name:
+        mod.clock = 24167829 / 3
+    else:
+        warning("Unknown system %s, defaulting to MVS clock"%system_name)
+        mod.clock = 24000000 / 3
     game_name = bs.ustr()
     song_name_jp = bs.ustr()
     song_author_jp = bs.ustr()
@@ -581,21 +586,21 @@ def get_sample_format(smp, sample, itype):
     return smp[sample]
 
 
-def make_adpcm_a_instrument(smp, sample):
+def make_adpcm_a_instrument(m, smp, sample):
     ins = adpcm_a_instrument()
     ins.sample = get_sample_format(smp, sample, 37)
     return ins
 
 
-def make_adpcm_b_instrument(smp, sample):
+def make_adpcm_b_instrument(m, smp, sample):
     ins = adpcm_b_instrument()
     ins.loop = smp[sample].loop
     ins.sample = get_sample_format(smp, sample, 38)
-    ins.base_delta_ns, ins.base_octave = b_delta_ns(ins)
+    ins.base_delta_ns, ins.base_octave = b_delta_ns(ins, m.clock)
     return ins
 
 
-def read_instrument(nth, bs, smp):
+def read_instrument(m, nth, bs, smp):
     def asm_ident(x):
         return re.sub(r"\W|^(?=\d)", "_", x).lower()
 
@@ -640,7 +645,7 @@ def read_instrument(nth, bs, smp):
     # for ADPCM sample, populate sample data
     if itype in [37, 38]:
         ins = {37: make_adpcm_a_instrument,
-               38: make_adpcm_b_instrument}[itype](smp, sample)
+               38: make_adpcm_b_instrument}[itype](m, smp, sample)
     # generate a ASM name for the instrument or macro
     if itype == 6:
         mac.name = asm_ident("macro_%02x_%s"%(nth, name))
@@ -654,12 +659,12 @@ def read_instrument(nth, bs, smp):
         return ins
 
 
-def read_instruments(ptrs, smp, bs):
+def read_instruments(m, ptrs, smp, bs):
     ins = []
     n = 0
     for p in ptrs:
         bs.seek(p)
-        ins.append(read_instrument(n, bs, smp))
+        ins.append(read_instrument(m, n, bs, smp))
         # print(ins[-1].name)
         n += 1
     return ins
@@ -873,9 +878,9 @@ def asm_adpcm_a_instrument(ins, fd):
     print("", file=fd)
 
 
-def b_delta_ns(ins):
+def b_delta_ns(ins, clock):
     def delta_n_i24(f):
-        delta_n = (65536/(_8M/144)) * f
+        delta_n = (65536/(clock/144)) * f
         return int((delta_n+0.5)*256)
 
     # C-4 maps to the instrument's sample frequency
@@ -965,7 +970,7 @@ def samples_from_module(modname):
     bs = load_module(modname)
     m = read_module(bs)
     smp = read_samples(module_id_from_path(modname), m.samples, bs)
-    ins = read_instruments(m.instruments, smp, bs)
+    ins = read_instruments(m, m.instruments, smp, bs)
     check_for_unused_samples(smp, bs)
     return smp
 
@@ -1006,7 +1011,7 @@ def main():
     bs = load_module(arguments.FILE)
     m = read_module(bs)
     smp = read_samples(module_id_from_path(arguments.FILE), m.samples, bs)
-    ins = read_instruments(m.instruments, smp, bs)
+    ins = read_instruments(m, m.instruments, smp, bs)
     check_for_unused_samples(smp, bs)
 
     if arguments.output:
