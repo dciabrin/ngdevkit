@@ -16,11 +16,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Set up Launchpad PPA
+        id: launchpad_ppa
         run: |
           sudo add-apt-repository -y ppa:dciabrin/ngdevkit
           sudo apt-get update -y
-          sudo apt-get install -y ngdevkit-toolchain python3 zip  pkg-config
+          toolchain_version=$(sudo apt-cache policy ngdevkit-toolchain | awk '/Candidate:/ {print $2}')
+          arch=$(dpkg --print-architecture)
+          echo "toolchain_deb=ngdevkit-toolchain_${toolchain_version}_${arch}.deb" >> "$GITHUB_OUTPUT"
+
+      - name: Cache ngdevkit-toolchain package
+        uses: actions/cache@v5
+        with:
+          path: /tmp/${{ steps.launchpad_ppa.outputs.toolchain_deb }}
+          key: ${{ steps.launchpad_ppa.outputs.toolchain_deb }}
+
+      - name: Prepare cached dependency
+        run: |
+          if [ ! -f /tmp/${{ steps.launchpad_ppa.outputs.toolchain_deb }} ]; then
+              cd /tmp && sudo apt-get download ngdevkit-toolchain
+          fi
+          sudo cp /tmp/${{ steps.launchpad_ppa.outputs.toolchain_deb }} /var/cache/apt/archives
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y ngdevkit-toolchain python3 zip pkg-config
 
       - name: Build ngdevkit
         run: ./.github/scripts/build.sh
