@@ -47,7 +47,7 @@ jobs:
 
       - name: Install dependencies for ngdevkit-examples
         run: >
-          sudo apt-get install -y python3-yaml ngdevkit-gngeo python3-pygame imagemagick
+          sudo apt-get install -y python3-yaml ngdevkit-gngeo python3-pil imagemagick
           sox libsox-fmt-mp3 libglew-dev libsdl2-dev
 
       - name: Test by compiling ngdevkit-examples
@@ -86,6 +86,16 @@ jobs:
       - name: Build
         run: ./.github/scripts/build-msys2.sh
 
+      - name: Install dependencies for ngdevkit-examples
+        run: |
+          pacman -S --noconfirm pactoys rsync
+          pacboy -S --noconfirm python:u python-pillow:u toolchain:u zlib:u sox:u imagemagick:u
+          pip install python-yaml
+
+      - name: Test by compiling ngdevkit-examples
+        run: ./.github/scripts/test.sh
+
+
   macos:
     name: "macOS build"
     runs-on: macos-15
@@ -100,8 +110,8 @@ jobs:
         run: |
           brew tap dciabrin/ngdevkit
           brew install python3 --overwrite
+          brew install pillow
           brew install automake ngdevkit-toolchain zip pkg-config sdl2 sdl2_image
-          $(brew --prefix python)/libexec/bin/pip install pygame --break-system-packages
 
       - name: Build
         run: ./.github/scripts/build.sh

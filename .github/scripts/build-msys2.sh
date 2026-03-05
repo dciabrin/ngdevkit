@@ -11,7 +11,6 @@ autoreconf -iv
     --target=${MSYSTEM_CHOST} \
     --enable-external-toolchain \
     --enable-external-emudbg \
-    --enable-external-gngeo \
-    --enable-examples=no
+    --enable-external-gngeo
 make
 make install

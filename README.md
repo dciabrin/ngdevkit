@@ -56,7 +56,7 @@ of dependencies for the examples ROMs:
     add-apt-repository -y ppa:dciabrin/ngdevkit
     apt update
     apt install ngdevkit ngdevkit-gngeo
-    # the remaining packages are only requred for the examples
+    # the remaining packages are only required for the examples
     apt install pkg-config autoconf zip imagemagick sox libsox-fmt-mp3
 
 If you are running a Fedora distribution, pre-built packages are
@@ -79,9 +79,6 @@ packages, available in the ngdevkit tap:
     # install ngdevkit
     brew tap dciabrin/ngdevkit
     brew install ngdevkit ngdevkit-gngeo
-    # make sure you use brew's python3 in your shell
-    export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
-    pip3 install pygame pyyaml --break-system-packages
     # the remaining packages are only required for the examples
     brew install pkg-config autoconf automake zip imagemagick sox
 
@@ -99,7 +96,6 @@ configure the pacman repository as follows:
 
     MSYSTEM=UCRT64 /usr/bin/bash -l
     echo -e "\n[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
-    
     # install pacboy with `pacman -S pactoys` if necessary
     pacboy -Sy
     pacboy -S ngdevkit:u ngdevkit-gngeo:u

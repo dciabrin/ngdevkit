@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2018-2019 Damien Ciabrini
+# Copyright (c) 2018-2026 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -20,18 +20,10 @@
 Extract palette from a 2D image and convert it to C or ASM data.
 """
 
-from __future__ import print_function
-import struct
-import os
-import sys
 import argparse
-from random import randint
 
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-os.environ['SDL_VIDEODRIVER'] = 'dummy'
-os.environ['SDL_AUDIODRIVER'] = 'dummy'
-import pygame
-
+from PIL import Image
+from itertools import batched
 
 def rgb24_to_packed15(col):
     r, g, b = [c >> 2 for c in col]
@@ -62,15 +54,18 @@ def main():
 
     arguments = parser.parse_args()
 
-    img = pygame.image.load(arguments.FILE)
+    img = Image.open(arguments.FILE)
 
-    # only keep the first 16 colors, even if palette has other
-    # colors initialized but unused.
-    pal = img.get_palette()[:16]
+    # extract the palette as a 24bits RGB
+    pal_ints = img.getpalette()
+    pal_rgb = list(batched(pal_ints, 3))
+    # make sure the palette has 16colors
+    if len(pal_rgb) > 16:
+        pal_rgb = pal_rgb[:16]
+    elif len(pal_rgb) < 16:
+        pal_rgb.extend([(0, 0, 0)] * (16 - len(pal_rgb)))
 
-    # for the time being, do not the 16th bit available in
-    # the Neo Geo hardware
-    ngpal = [rgb24_to_packed15(c) for c in pal]
+    ngpal = [rgb24_to_packed15(c) for c in pal_rgb]
 
     out = open(arguments.output, "w")
     output_c_anonymous_palette(ngpal, out)

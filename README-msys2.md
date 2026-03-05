@@ -63,20 +63,23 @@ ngdevkit dependencies:
     pacboy -S autoconf autoconf-archive automake pkgconf make tar zip unzip
     pacboy -S git flex bison expat gettext ncurses-devel zlib-devel
     pacboy -S gmp-devel isl-devel mpc-devel mpfr-devel texinfo
-    pacboy -S python:u python-pygame:u toolchain:u zlib:u SDL2:u glew:u boost:u
+    pacboy -S python:u python-yaml python-pillow:u toolchain:u zlib:u
     # dependencies for the example ROMs
-    pacboy -S rsync sox:u imagemagick:u
+    pacboy -S rsync sox:u imagemagick:u SDL2:u glew:u boost:u
+
+Note that older version of the devkit and its example ROMs depended
+on PyGame, which has now been replaced by pillow. So please make
+sure to use the latest version of ngdevkit-examples for building ROMs.
 
 You can now compile the entire devkit. The latest ngdevkit's autoconf
 script should detect the location of all dependencies (python,
-pygame...) automatically, as long as you're running it in a UCRT64
+pillow, ...) automatically, as long as you're running it in a UCRT64
 environment as required.
 
     autoreconf -iv
     ./configure --prefix=$PWD/local
     make
     make install
-
 
 The most tedious part is over! You can now configure your environment
 to add the built binaries to your `PATH` and start experimenting
@@ -95,5 +98,4 @@ how to run the examples and the debugger.
 [msys2]: https://www.msys2.org
 [examples]: https://github.com/dciabrin/ngdevkit-examples
 [pywin]: https://www.python.org/downloads/windows
-[pygame]: https://www.pygame.org
 [subsys]: https://www.msys2.org/docs/environments
