@@ -17,7 +17,7 @@ later in this documentation.
 The devkit uses Python 3, which is installed globally in macOS but
 also in brew. To make sure you are installing python dependencies
 in the right python distribution, you need to have brew's python
-first in your PATH, as explained later in the document.
+first in your PATH.
 
 
 ## Pre-requisite
@@ -25,8 +25,8 @@ first in your PATH, as explained later in the document.
 In order to build the devkit you need autoconf, autoconf-archive and
 GNU Make 4.x, and various additional dependencies to build the
 toolchain modules such as GCC and SDCC. The devkit tools uses Python 3
-and PyGame 2. The emulator requires SDL 2 and optionally OpenGL
-libraries.
+and various dependencies (such as pillow and PyYAML). The emulator
+requires SDL 2 and optionally OpenGL libraries.
 
 The examples require ImageMagick for all the graphics
 trickery and sox for audio conversion purpose.
@@ -34,7 +34,7 @@ trickery and sox for audio conversion purpose.
 Make sure that `brew` is in your PATH and its environment variables are
 set up properly. By default, brew is installed in `/usr/local/bin/brew`
 on Intel macs, and in `/opt/homebrew/bin/brew` on ARM macs. If `brew`
-is not found in your PATH, you must initialize your it with:
+is not found in your PATH, you must initialize it with:
 
     eval $(/opt/homebrew/bin/brew shellenv)
     # Intel macs would use /usr/local/bin/brew shellenv
@@ -43,18 +43,17 @@ Then, ngdevkit's dependencies are installed as follows:
 
     brew update
     brew install gmake
-    brew install autoconf-archive
-    brew install glew sdl2 sdl2_image
-    brew install python3
-    # make sure you use brew's python3 to install pygame
-    # if not, update your path like e.g.
-    # export PATH=$HOMEBREW_PREFIX/opt/python3/bin:$PATH
-    pip3 install pygame --break-system-packages
+    brew install python3 pillow
     brew deps gcc | xargs brew install
     brew deps sdcc | xargs brew install
     # dependencies for the example ROMs
+    brew install autoconf-archive
+    brew install glew sdl2 sdl2_image
     brew install zip imagemagick sox
 
+Note that older version of the devkit and its example ROMs depended
+on PyGame, which has now been replaced by pillow. So please make
+sure to use the latest version of ngdevkit-examples for building ROMs.
 
 ## Building the toolchain
 
@@ -62,6 +61,7 @@ In order to build ngdevkit, the installed brew dependencies must
 be available to the compiler, so you must add brew's PATH into
 your build flags manually:
 
+    HOMEBREW_PREFIX=$(brew --prefix)
     export CFLAGS="-I${HOMEBREW_PREFIX}/include${CFLAGS+ ${CFLAGS}}"
     export CXXFLAGS="-I${HOMEBREW_PREFIX}/include${CXXFLAGS+ ${CXXFLAGS}}"
     export CPPFLAGS="-I${HOMEBREW_PREFIX}/include${CPPFLAGS+ ${CPPFLAGS}}"
