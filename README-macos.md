@@ -25,7 +25,7 @@ first in your PATH.
 In order to build the devkit you need autoconf, autoconf-archive and
 GNU Make 4.x, and various additional dependencies to build the
 toolchain modules such as GCC and SDCC. The devkit tools uses Python 3
-and various dependencies (such as pillow and PyYAML). The emulator
+and various dependencies (such as pillow and yaml). The emulator
 requires SDL 2 and optionally OpenGL libraries.
 
 The examples require ImageMagick for all the graphics
@@ -44,6 +44,8 @@ Then, ngdevkit's dependencies are installed as follows:
     brew update
     brew install gmake
     brew install python3 pillow
+    # you need a package from pip, either in a virtual env or system-wide, e.g.:
+    # $(brew --prefix python)/libexec/bin/pip install ruamel.yaml --break-system-packages
     brew deps gcc | xargs brew install
     brew deps sdcc | xargs brew install
     # dependencies for the example ROMs

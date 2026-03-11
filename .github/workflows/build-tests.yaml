@@ -40,14 +40,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get install -y ngdevkit-toolchain python3 zip pkg-config
+          sudo apt-get install -y ngdevkit-toolchain python3 python3-pil python3-ruamel.yaml zip pkg-config
 
       - name: Build ngdevkit
         run: ./.github/scripts/build.sh
 
       - name: Install dependencies for ngdevkit-examples
         run: >
-          sudo apt-get install -y python3-yaml ngdevkit-gngeo python3-pil imagemagick
+          sudo apt-get install -y ngdevkit-gngeo imagemagick
           sox libsox-fmt-mp3 libglew-dev libsdl2-dev
 
       - name: Test by compiling ngdevkit-examples
@@ -73,24 +73,23 @@ jobs:
           msystem: UCRT64
           update: true
           install:
-            git autoconf automake make zip
-            mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-python
-            mingw-w64-ucrt-x86_64-python-pygame
+            git autoconf automake make zip rsync pactoys
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-pillow
+            mingw-w64-ucrt-x86_64-python-ruamel-yaml
 
       - name: Install ngdevkit dependencies
         run: |
           echo -e "[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
           pacman -Sy
           pacman -S --disable-download-timeout --noconfirm mingw-w64-ucrt-x86_64-ngdevkit-toolchain
-
       - name: Build
         run: ./.github/scripts/build-msys2.sh
 
       - name: Install dependencies for ngdevkit-examples
         run: |
-          pacman -S --noconfirm pactoys rsync
-          pacboy -S --noconfirm python:u python-pillow:u toolchain:u zlib:u sox:u imagemagick:u
-          pip install python-yaml
+          pacboy -S --noconfirm ngdevkit-gngeo:u toolchain:u zlib:u sox:u imagemagick:u
 
       - name: Test by compiling ngdevkit-examples
         run: ./.github/scripts/test.sh
@@ -112,6 +111,7 @@ jobs:
           brew install python3 --overwrite
           brew install pillow
           brew install automake ngdevkit-toolchain zip pkg-config sdl2 sdl2_image
+          $(brew --prefix python)/libexec/bin/pip install ruamel.yaml --break-system-packages
 
       - name: Build
         run: ./.github/scripts/build.sh
@@ -119,7 +119,6 @@ jobs:
       - name: Install dependencies for ngdevkit-examples
         run: |
           brew install ngdevkit-gngeo imagemagick sox glew make
-          $(brew --prefix python)/libexec/bin/pip install pyyaml --break-system-packages
 
       - name: Test by compiling ngdevkit-examples
         run: ./.github/scripts/test.sh

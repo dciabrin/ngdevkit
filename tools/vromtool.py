@@ -27,7 +27,22 @@ from struct import pack, unpack, unpack_from
 import wave
 from adpcmtool import ym2610_adpcma, ym2610_adpcmb
 
-import yaml
+# Special handling for YAML: try to import ruamel.yaml first,
+# because it's better at keeping comments in YAML files, and
+# default to yaml if not found, as they are API-compatible.
+try:
+    import ruamel.yaml
+    _yaml = "ruamel"
+except ImportError:
+    import yaml
+    _yaml = "PyYAML"
+
+def yaml_load_all(f):
+    if _yaml == "ruamel":
+        return ruamel.yaml.YAML().load_all(f)
+    else:
+        return yaml.safe_load_all(f)
+
 
 VERBOSE = False
 
@@ -162,7 +177,7 @@ def load_sample_map_file(filenames):
     for filename in filenames:
         ysamples = []
         with open(filename, "rb") as f:
-            yamlblocks = list(yaml.load_all(f, yaml.Loader))
+            yamlblocks = list(yaml_load_all(f))
         for b in yamlblocks:
             ysamples.extend(b)
         all_ysamples.extend([filename, y] for y in ysamples)
