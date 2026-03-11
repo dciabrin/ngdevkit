@@ -20,10 +20,38 @@
 import argparse
 import re
 import sys
-import yaml
 import glob
 import os
 import wave
+
+# Special handling for YAML: try to import ruamel.yaml first,
+# because it's better at keeping comments in YAML files, and
+# default to yaml if not found, as they are API-compatible.
+try:
+    import ruamel.yaml
+    _yaml = "ruamel"
+except ImportError:
+    import yaml
+    _yaml = "PyYAML"
+
+def yaml_load_all(f):
+    if _yaml == "ruamel":
+        return ruamel.yaml.YAML().load_all(f)
+    else:
+        return yaml.safe_load_all(f)
+
+def yaml_load(f):
+    if _yaml == "ruamel":
+        return ruamel.yaml.YAML().load(f)
+    else:
+        return yaml.safe_load(f)
+
+def yaml_dump(data, end, f):
+    if _yaml == "ruamel":
+        return ruamel.yaml.YAML().dump(data, stream=f)
+    else:
+        return yaml.dump(data, end=end, stream=f)
+
 
 VERBOSE = False
 
@@ -44,7 +72,7 @@ def load_sound_desc(descfile):
     descdata = open(descfile,'r').read()
     comments = [l for l in descdata.split('\n') if re.search(r'^#', l)]
     header = "\n".join(comments)
-    yamldata = sum(list(yaml.safe_load_all(descdata)), [])
+    yamldata = sum(list(yaml_load_all(descdata)), [])
     return header+"\n", yamldata
 
 
@@ -117,7 +145,7 @@ def generate_sound_desc(entries, header, desc, output):
 
     # save sound map description
     print(header, end='', file=output)
-    print(yaml.dump(result_data), end='', file=output)
+    print(yaml_dump(result_data), end='', file=output)
 
 
 
@@ -405,7 +433,7 @@ def main():
     # Otherwise load a sound map from the input yaml file
     for smap in arguments.soundmap:
         with open(smap, 'r') as f:
-            desc.extend(yaml.safe_load(f.read()))
+            desc.extend(yaml_load(f.read()))
 
     # generate z80 macros
     if arguments.action == 'z80':

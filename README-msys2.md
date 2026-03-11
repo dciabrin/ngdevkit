@@ -63,7 +63,7 @@ ngdevkit dependencies:
     pacboy -S autoconf autoconf-archive automake pkgconf make tar zip unzip
     pacboy -S git flex bison expat gettext ncurses-devel zlib-devel
     pacboy -S gmp-devel isl-devel mpc-devel mpfr-devel texinfo
-    pacboy -S python:u python-yaml python-pillow:u toolchain:u zlib:u
+    pacboy -S python:u python-ruamel-yaml:u python-pillow:u toolchain:u zlib:u
     # dependencies for the example ROMs
     pacboy -S rsync sox:u imagemagick:u SDL2:u glew:u boost:u
 

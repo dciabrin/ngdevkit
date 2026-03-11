@@ -55,17 +55,17 @@ of dependencies for the examples ROMs:
 
     add-apt-repository -y ppa:dciabrin/ngdevkit
     apt update
-    apt install ngdevkit ngdevkit-gngeo
+    apt install ngdevkit
     # the remaining packages are only required for the examples
-    apt install pkg-config autoconf zip imagemagick sox libsox-fmt-mp3
+    apt install pkg-config autoconf zip imagemagick sox libsox-fmt-mp3 ngdevkit-gngeo
 
 If you are running a Fedora distribution, pre-built packages are
 available in COPR, and can be installed with the following commands:
 
     dnf copr enable dciabrin/ngdevkit
-    dnf install ngdevkit ngdevkit-gngeo
+    dnf install ngdevkit
     # the remaining packages are only requred for the examples
-    dnf install install pkg-config autoconf zip ImageMagick sox
+    dnf install install pkg-config autoconf zip ImageMagick sox ngdevkit-gngeo
 
 #### macOS
 
@@ -78,9 +78,9 @@ packages, available in the ngdevkit tap:
     eval $(/opt/homebrew/bin/brew shellenv)
     # install ngdevkit
     brew tap dciabrin/ngdevkit
-    brew install ngdevkit ngdevkit-gngeo
+    brew install ngdevkit
     # the remaining packages are only required for the examples
-    brew install pkg-config autoconf automake zip imagemagick sox
+    brew install pkg-config autoconf automake zip imagemagick sox ngdevkit-gngeo
 
 Brew bottles are available for the last two versions of macOS for ARM.
 Intel brew bottles are no longer prebuilt. Older versions of macOS are
@@ -98,9 +98,9 @@ configure the pacman repository as follows:
     echo -e "\n[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
     # install pacboy with `pacman -S pactoys` if necessary
     pacboy -Sy
-    pacboy -S ngdevkit:u ngdevkit-gngeo:u
+    pacboy -S ngdevkit:u
     # the remaining packages are only required for the examples
-    pacboy -S autoconf automake make zip imagemagick:u sox:u
+    pacboy -S autoconf automake make zip imagemagick:u sox:u ngdevkit-gngeo:u
 
 An old version of ngdevkit supported Windows 10 via [WSL][wsl], but it
 is now deprecated in favour of the native MSYS2 environment. Likewise,
