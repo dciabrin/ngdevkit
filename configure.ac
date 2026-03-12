@@ -128,21 +128,23 @@ EXTRA_BUILD_CMD=true
 if test x"$ENABLE_MSYS2" = x"yes"; then
   AC_PATH_PROG([msys2gcc], [$MSYSTEM_CHOST-gcc], [no])
   AS_IF([test x"msys2gcc" = x"no"], [AC_MSG_ERROR([$MSYSTEM_CHOST-gcc not found in path.])])
-  PKG_CHECK_MODULES([zlib],[zlib])
-  ZLIB1_DLL=$MSYSTEM_PREFIX/bin/zlib1.dll
-  PKG_CHECK_MODULES([SDL2],[SDL2])
-  SDL2_DLL=$MSYSTEM_PREFIX/bin/SDL2.dll
-
-  AC_MSG_CHECKING([for GLEW])
-  if test -f "$MSYSTEM_PREFIX/bin/glew32.dll"; then
-    GLEW_FLAGS=--with-glew
-    GLEW_DLL=$MSYSTEM_PREFIX/bin/glew32.dll
-    AC_MSG_RESULT([yes])
-  else
-    AC_MSG_RESULT([no])
-  fi
 
   if test x"$EXTERNAL_GNGEO" != x"yes"; then
+    dnl if we buil gngeo, make sure we have the right deps
+    PKG_CHECK_MODULES([zlib],[zlib])
+    ZLIB1_DLL=$MSYSTEM_PREFIX/bin/zlib1.dll
+    PKG_CHECK_MODULES([SDL2],[SDL2])
+    SDL2_DLL=$MSYSTEM_PREFIX/bin/SDL2.dll
+
+    AC_MSG_CHECKING([for GLEW])
+    if test -f "$MSYSTEM_PREFIX/bin/glew32.dll"; then
+      GLEW_FLAGS=--with-glew
+      GLEW_DLL=$MSYSTEM_PREFIX/bin/glew32.dll
+      AC_MSG_RESULT([yes])
+    else
+      AC_MSG_RESULT([no])
+    fi
+
     AC_MSG_CHECKING([for GnGeo installation directory])
     if test -z "$GNGEO_INSTALL_PATH"; then
       GNGEO_INSTALL_PATH="$prefix"
