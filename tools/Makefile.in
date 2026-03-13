@@ -21,8 +21,8 @@ all:
 TOOLS=paltool.py tiletool.py adpcmtool.py vromtool.py furtool.py nsstool.py soundtool.py
 
 install: $(TOOLS)
-	$(INSTALL) -d $(DESTDIR)$(prefix)/bin && \
-	$(INSTALL) $^ $(DESTDIR)$(prefix)/bin
+	$(INSTALL) -d $(DESTDIR)$(exec_prefix)/bin && \
+	$(INSTALL) $^ $(DESTDIR)$(exec_prefix)/bin
 
 clean:
 	rm -f *~
