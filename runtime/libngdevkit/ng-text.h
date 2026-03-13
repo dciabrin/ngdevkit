@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2026 Damien Ciabrini
+ * Copyright (c) 2026 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -16,14 +16,9 @@
  * along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <ngdevkit/neogeo.h>
-#include <ngdevkit/ng-fix.h>
-#include <string.h>
-#include "ng-text.h"
+#ifndef __NG_TEXT_H__
+#define __NG_TEXT_H__
 
+#define FIXED_LAYOUT_WIDTH 40
 
-/// Handy function to display a centered string on the fix map
-void ng_center_text_args(u8 y, u8 palette, u16 start_tile, const char *text) {
-    u8 len = strlen(text);
-    ng_text_args((FIXED_LAYOUT_WIDTH - len)>>1, y, palette, start_tile, text);
-}
+#endif /* __NG_TEXT_H__ */

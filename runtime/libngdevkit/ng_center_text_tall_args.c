@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Damien Ciabrini
+ * Copyright (c) 2020-2026 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -19,11 +19,12 @@
 #include <ngdevkit/neogeo.h>
 #include <ngdevkit/ng-fix.h>
 #include <string.h>
+#include "ng-text.h"
 
 
 /// Handy function to display a tall string on the fix map
 void ng_center_text_tall_args(u8 y, u8 palette, u16 start_tile, const char *text) {
     u8 len = strlen(text);
-    ng_text_args((42 - len)>>1, y, palette, start_tile, text);
-    ng_text_args((42 - len)>>1, y+1, palette, start_tile+256, text);
+    ng_text_args((FIXED_LAYOUT_WIDTH - len)>>1, y, palette, start_tile, text);
+    ng_text_args((FIXED_LAYOUT_WIDTH - len)>>1, y+1, palette, start_tile+256, text);
 }
