@@ -109,7 +109,7 @@ ssg_dists_lsb::
 
         .bndry 256
 ssg_tunes_msb::
-        .ssg_dists_msb_data
+        .ssg_tunes_msb_data
 
         .bndry 128
 ssg_tunes_lsb::
