@@ -196,6 +196,11 @@ _release_ops:
         ld      c, #YM2610_FM4
         call    ym2610_write_port_a
 
+        ;; clear FM LFO setting
+        ld      b, #REG_FM_LFO_CONTROL
+        ld      c, #0
+        call    ym2610_write_port_a
+
         ;; stop SSG output
         ld      b, #REG_SSG_A_VOLUME
         ld      c, #0
