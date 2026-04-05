@@ -1,6 +1,6 @@
 /*
  * BIOS system calls
- * Copyright (c) 2020-2025 Damien Ciabrini
+ * Copyright (c) 2020-2026 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -19,6 +19,7 @@
 
 #ifndef __NGDEVKIT_BIOS_CALLS_H__
 #define __NGDEVKIT_BIOS_CALLS_H__
+
 
 /* These are low-level bios call, not meant to be called directly */
 void bios_system_int1(void);
@@ -55,9 +56,11 @@ void bios_lsp_1st(void);
 
 void bios_mess_out(void);
 
-void bios_card(void);
-
-void bios_card_error(void);
+/* Memory-card related BIOS functions:
+ *   - void bios_card(void);
+ *   - void bios_card_error(void);
+ */
+#include <ngdevkit/memory-card.h>
 
 void bios_how_to_play(void);
 
@@ -70,6 +73,8 @@ void bios_cd_data_ready(void);
 void bios_cd_data_transfer(void);
 
 
+/* Addresses of BIOS functions, suitable for C and ASM */
 #include <ngdevkit/asm/bios-calls.h>
+
 
 #endif /* __NGDEVKIT_BIOS_CALLS_H__ */
