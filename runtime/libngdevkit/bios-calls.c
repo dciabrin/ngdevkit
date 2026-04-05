@@ -1,6 +1,6 @@
 /*
  * BIOS function stubs for linker allocation
- * Copyright (c) 2025 Damien Ciabrini
+ * Copyright (c) 2025-2026 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -26,14 +26,13 @@ __asm__ (".section .text.bios\n"         \
          ".type " #name ", @function\n"  \
          #name": .skip 6")
 
-#define API_FUNC_ALIAS(name,alias)       \
-__asm__ (".section .text.bios\n"         \
-         ".global " #name "\n"           \
-         ".type " #name ", @function\n"  \
-         ".global " #alias "\n"          \
-         ".type " #alias ", @function\n" \
-         #alias":\n"                     \
-         #name": .skip 6")
+#define API_FUNC_ALIAS(api_name, bios_alias) \
+__asm__ (".section .text.bios\n"             \
+         ".global " #api_name "\n"           \
+         ".type " #api_name ", @function\n"  \
+         #api_name":\n"                      \
+         #bios_alias":\n"                    \
+         " .skip 6")
 
 API_FUNC(BIOS_INIT_HARDWARE);
 
