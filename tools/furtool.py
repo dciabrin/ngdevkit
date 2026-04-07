@@ -149,14 +149,8 @@ HALF_SSG_VOL = False
 SSG_USED = False
 
 
-def read_module(bs):
+def read_module_pre240(bs, mod):
     global HALF_SSG_VOL
-    mod = fur_module()
-    assert bs.read(16) == b"-Furnace module-"  # magic
-    bs.u2()  # version
-    bs.u2()
-    infodesc = bs.u4()
-    bs.seek(infodesc)
     assert bs.read(4) == b"INFO"
     bs.read(4) # skip size
     bs.u1() # skip timebase
@@ -236,7 +230,143 @@ def read_module(bs):
     speed_length = bs.u1()
     assert 1 <= speed_length <= 16
     mod.speeds = [bs.u1() for i in range(speed_length)]
-    # TODO: grove patterns
+    # TODO: groove patterns
+    return mod
+
+
+def read_element_sng2(mod, bs):
+    assert bs.read(4) == b"SNG2"
+    element_size = bs.u4()
+    element_init_pos = bs.pos
+    mod.frequency = bs.uf4()
+    # assert mod.frequency in [50.0, 60.0]
+    mod.arpeggio = bs.u1()
+    bs.u1() # skip effect speed divider
+    mod.pattern_len = bs.u2()
+    nb_orders = bs.u2()
+    bs.read(2)  # skip highlights
+    bs.u2() # skip virtual tempo numerator
+    bs.u2() # skip virtual tempo denominator
+    # speed pattern data
+    speed_length = bs.u1()
+    assert 1 <= speed_length <= 16
+    mod.speeds = [bs.u2() for i in range(16)][:speed_length]
+    subsong_name = bs.ustr()
+    mod.comment = bs.ustr()
+    mod.fxcolumns = [bs.u1() for x in range(14)]
+    # 14 tracks in ym2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    mod.orders = [[-1 for x in range(14)] for y in range(nb_orders)]
+    for i in range(14):
+        for o in range(nb_orders):
+            mod.orders[o][i] = bs.u1()
+    bs.read(14) # skip channel hide status (UI)
+    bs.read(14) # skip channel collapse status (UI)
+    for i in range(14): bs.ustr() # skip channel names
+    for i in range(14): bs.ustr() # skip channel short names
+    for i in range(14): bs.read(4) # skip channel colors
+    element_end_pos = bs.pos
+    assert (element_end_pos - element_init_pos) == element_size
+
+
+def read_module(bs):
+    global HALF_SSG_VOL
+    mod = fur_module()
+    assert bs.read(16) == b"-Furnace module-"  # magic
+    version = bs.u2()
+    bs.u2() # reserved
+    infodesc = bs.u4()
+    bs.seek(infodesc)
+
+    # with version > 240, parsing differs significantly
+    if version <= 240:
+        return read_module_pre240(bs, mod)
+
+    assert bs.read(4) == b"INF2"
+    block_size = bs.read(4) # TODO assert correct size below
+
+    # song information
+    song_name = bs.ustr()
+    song_author = bs.ustr()
+    system_name = bs.ustr()
+    prod_name = bs.ustr()
+    song_name_jp = bs.ustr()
+    song_author_jp = bs.ustr()
+    system_name_jp = bs.ustr()
+    prod_name_jp = bs.ustr()
+    tuning = bs.uf4()
+    assert tuning == 440, "Furnace module must use a 440 Hz base tuning"
+    bs.u1() # skip "automatic system name"
+
+    if 'MVS' in system_name:
+        mod.clock = 24000000 / 3
+    elif 'AES' in system_name:
+        mod.clock = 24167829 / 3
+    else:
+        warning("Unknown system %s, defaulting to MVS clock"%system_name)
+        mod.clock = 24000000 / 3
+
+    # system definition
+    master_vol = bs.uf4() # TODO warn if not 1.0
+    channels = bs.u2() # 14 channels for default Neo Geo
+    chips = bs.u2()
+    assert chips == 1, "NSS only support one chip (YM2610), not multiple"
+    # assert chips definition
+    for i in range(chips):
+        chip_id = bs.u2()
+        chip_channels = bs.u2()
+        chip_vol = bs.uf4()
+        bs.uf4() # skip chip panning
+        bs.uf4() # skip front/rear balance
+        assert chip_id in [165] # YM2610
+        assert chip_channels == 14 # YM2610
+
+    # skip patchbay
+    bs.read(4*bs.u4()) # skip patchbay connections
+    bs.u1() # skip automatic patchbay
+
+    # parse all available elements
+    elements = {}
+    el_type = bs.u1()
+    while el_type != 0:
+        nb_elements = bs.u4()
+        elements_pos = [bs.u4() for i in range(nb_elements)]
+        elements[el_type] = elements_pos
+        el_type = bs.u1()
+
+    # FLAG element: check whether the master SSG and ADPCM/FM volumes match
+    # otherwise consider the module relies on Furnace defaults (currently half volume)
+    if 0x02 in elements:
+        el_flag_pos = elements[0x02][0]
+        check_chip_flags(el_flag_pos, bs)
+    else:
+        HALF_SSG_VOL = True
+
+    # ADIR elements: we don't seem to care?
+
+    # SNG2 element: song data (orders + pattern indices)
+    assert len(elements[0x01]) == 1, "subsongs in a single Furnace file is unsupported"
+    saved_pos = bs.pos
+    bs.seek(elements[0x01][0])
+    read_element_sng2(mod, bs)
+    bs.seek(saved_pos)
+
+    # INS2 elements: pointers to instruments get parsed later
+    mod.instruments = elements[0x04]
+
+    # WAVE element: skip, we don't use it
+
+    # SMP2 elements: pointers to samples get parsed later
+    mod.samples = elements[0x06]
+
+    # PATN elements: pointers to patterns get parsed later
+    mod.patterns = elements[0x07]
+
+    # CFLAG element: TODO, right now we do not parse compatibility flags
+
+    # CMNT element: TODO, right now we do not parse comments
+
+    # GROV element: TODO, right now we do not parse groove patterns
+
     return mod
 
 
@@ -961,8 +1091,11 @@ def generate_sample_map(mod, smp, fd):
 
 def load_module(modname):
     with open(modname, "rb") as f:
-        furzbin = f.read()
-        furbin = zlib.decompress(furzbin)
+        furbin = f.read()
+        try:
+            furbin = zlib.decompress(furbin)
+        except:
+            pass
         return binstream(furbin)
 
 
