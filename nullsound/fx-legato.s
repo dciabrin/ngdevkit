@@ -132,6 +132,7 @@ quick_legato_down::
 ;;; hl modified
 legato::
         set     BIT_FX_LEGATO, NOTE_FX(ix)
+        ld      a, #1
         ret
 
 
@@ -142,4 +143,5 @@ legato::
 ;;; hl modified
 legato_off::
         res     BIT_FX_LEGATO, NOTE_FX(ix)
+        ld      a, #1
         ret

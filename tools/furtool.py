@@ -165,8 +165,16 @@ def read_module_pre240(bs, mod):
     nb_wavetables = bs.u2()
     nb_samples = bs.u2()
     nb_patterns = bs.u4()  # skip global pattern count
+    # this module should only be using a single chip
     chips = [x for x in bs.read(32)]
-    assert chips[:chips.index(0)] == [165]  # single ym2610 chip
+    non_empty_chips = [c for c in chips if c!=0]
+    assert len(non_empty_chips)==1, "This Furnace module uses more than one chip (detected chips: %s)"%non_empty_chips
+    # only YM2610 is supported in NSS
+    # from Furnace doc:
+    #  - 0xa5: Neo Geo (YM2610) - 14 channels
+    #  - 0xa6: Neo Geo extended (YM2610) - 17 channels
+    assert chips[0] in [0xa5, 0xa6], "This Furnace module uses an invalid chip (detected: %X)"%chips[0]
+    mod.ext_fm = chips[0] == 0xa6
     bs.read(32) # skip chips vol
     bs.read(32) # skip chips pan
     chip_flags = unpack("32I", bs.read(128))
@@ -185,16 +193,18 @@ def read_module_pre240(bs, mod):
     _ = [bs.u4() for i in range(nb_wavetables)]
     mod.samples = [bs.u4() for i in range(nb_samples)]
     mod.patterns = [bs.u4() for i in range(nb_patterns)]
-    # 14 tracks in ym2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
-    mod.orders = [[-1 for x in range(14)] for y in range(nb_orders)]
-    for i in range(14):
+    # 14 tracks in YM2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    # 17 tracks in extended YM2610 (3 FM, 4 extended FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    tracks = {0xa5: 14, 0xa6: 17}[chips[0]]
+    mod.orders = [[-1 for x in range(tracks)] for y in range(nb_orders)]
+    for i in range(tracks):
         for o in range(nb_orders):
             mod.orders[o][i] = bs.u1()
-    mod.fxcolumns = [bs.u1() for x in range(14)]
-    bs.read(14) # skip channel hide status (UI)
-    bs.read(14) # skip channel collapse status (UI)
-    for i in range(14): bs.ustr() # skip channel names
-    for i in range(14): bs.ustr() # skip channel short names
+    mod.fxcolumns = [bs.u1() for x in range(tracks)]
+    bs.read(tracks) # skip channel hide status (UI)
+    bs.read(tracks) # skip channel collapse status (UI)
+    for i in range(tracks): bs.ustr() # skip channel names
+    for i in range(tracks): bs.ustr() # skip channel short names
     mod.comment = bs.ustr()
     bs.uf4() # skip master volume
     bs.read(28) # skip extended compatibity flags
@@ -254,16 +264,18 @@ def read_element_sng2(mod, bs):
     subsong_name = bs.ustr()
     mod.comment = bs.ustr()
     mod.fxcolumns = [bs.u1() for x in range(14)]
-    # 14 tracks in ym2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
-    mod.orders = [[-1 for x in range(14)] for y in range(nb_orders)]
-    for i in range(14):
+    # 14 tracks in YM2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    # 17 tracks in extended YM2610 (3 FM, 4 extended FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    tracks = 17 if mod.ext_fm else 14
+    mod.orders = [[-1 for x in range(tracks)] for y in range(nb_orders)]
+    for i in range(tracks):
         for o in range(nb_orders):
             mod.orders[o][i] = bs.u1()
-    bs.read(14) # skip channel hide status (UI)
-    bs.read(14) # skip channel collapse status (UI)
-    for i in range(14): bs.ustr() # skip channel names
-    for i in range(14): bs.ustr() # skip channel short names
-    for i in range(14): bs.read(4) # skip channel colors
+    bs.read(tracks) # skip channel hide status (UI)
+    bs.read(tracks) # skip channel collapse status (UI)
+    for i in range(tracks): bs.ustr() # skip channel names
+    for i in range(tracks): bs.ustr() # skip channel short names
+    for i in range(tracks): bs.read(4) # skip channel colors
     element_end_pos = bs.pos
     assert (element_end_pos - element_init_pos) == element_size
 
@@ -307,18 +319,25 @@ def read_module(bs):
 
     # system definition
     master_vol = bs.uf4() # TODO warn if not 1.0
-    channels = bs.u2() # 14 channels for default Neo Geo
+    channels = bs.u2() # 14 channels by default, 17 with extended FM2
     chips = bs.u2()
+    # assert chip validity
+    # only YM2610 is supported in NSS
     assert chips == 1, "NSS only support one chip (YM2610), not multiple"
-    # assert chips definition
-    for i in range(chips):
-        chip_id = bs.u2()
-        chip_channels = bs.u2()
-        chip_vol = bs.uf4()
-        bs.uf4() # skip chip panning
-        bs.uf4() # skip front/rear balance
-        assert chip_id in [165] # YM2610
-        assert chip_channels == 14 # YM2610
+    chip_id = bs.u2()
+    # from Furnace doc:
+    #  - 0xa5: Neo Geo (YM2610) - 14 channels
+    #  - 0xa6: Neo Geo extended (YM2610) - 17 channels
+    assert chip_id in [0xa5, 0xa6], "This Furnace module uses an invalid chip (detected: %X)"%chip_id
+    chip_channels = bs.u2()
+    # 14 tracks in YM2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    # 17 tracks in extended YM2610 (3 FM, 4 extended FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
+    assert chip_channels == {0xa5: 14, 0xa6: 17}[chip_id]
+    chip_vol = bs.uf4()
+    bs.uf4() # skip chip panning
+    bs.uf4() # skip front/rear balance
+
+    mod.ext_fm = chip_id == 0xa6
 
     # skip patchbay
     bs.read(4*bs.u4()) # skip patchbay connections
@@ -462,18 +481,31 @@ class ssg_macro:
 
 @dataclass
 class adpcm_a_instrument:
+    load: object = field(repr=False)
     name: str = ""
-    sample: adpcm_a_sample = None
+    volume: int = 0x1f
+    _sample: adpcm_a_sample = field(default=None, repr=False)
+    @property
+    def sample(self):
+        if not self._sample:
+            self._sample = self.load()
+        return self._sample
 
 
 @dataclass
 class adpcm_b_instrument:
+    load: object = field(repr=False)
     name: str = ""
-    sample: adpcm_b_sample = None
     base_octave: int = 4
     base_delta_ns: list[int] = field(default_factory=list)
     tuned: int = 0
     loop: bool = False
+    _sample: adpcm_b_sample = field(default=None, repr=False)
+    @property
+    def sample(self):
+        if not self._sample:
+            self._sample = self.load()
+        return self._sample
 
 
 
@@ -514,7 +546,7 @@ def read_macro_data(length, bs):
     header_len = bs.u2()
     # TODO: we only support a single loop per macro as all the data are inlined
     # into a single sequence. This way, we simplify memory management at the expense
-    # of a incomplete macro implementation.
+    # of an incomplete macro implementation.
     macro_loop = 255
     while bs.pos < max_pos:
         header_start = bs.pos
@@ -547,6 +579,14 @@ def read_macro_data(length, bs):
         macros[code]=data
     assert bs.pos == max_pos
     return macros, macro_loop
+
+
+def configure_a_macros(ins, macros):
+    # temporary workaround for instrument manually tuned with volume macro
+    if 0 in macros and len(macros[0])==1:
+        ins.volume = macros[0][0]
+    else:
+        error("unsupported use of macros in ADPCM-A instrument %s"%ins.name)
 
 
 def configure_b_macros(ins, macros):
@@ -716,16 +756,16 @@ def get_sample_format(smp, sample, itype):
     return smp[sample]
 
 
-def make_adpcm_a_instrument(m, smp, sample):
-    ins = adpcm_a_instrument()
-    ins.sample = get_sample_format(smp, sample, 37)
+def make_adpcm_a_instrument(m, smp, sample_id):
+    deferred_load = lambda : get_sample_format(smp, sample_id, 37)
+    ins = adpcm_a_instrument(deferred_load)
     return ins
 
 
-def make_adpcm_b_instrument(m, smp, sample):
-    ins = adpcm_b_instrument()
-    ins.loop = smp[sample].loop
-    ins.sample = get_sample_format(smp, sample, 38)
+def make_adpcm_b_instrument(m, smp, sample_id):
+    deferred_load = lambda : get_sample_format(smp, sample_id, 38)
+    ins = adpcm_b_instrument(deferred_load)
+    ins.loop = smp[sample_id].loop
     ins.base_delta_ns, ins.base_octave = b_delta_ns(ins, m.clock)
     return ins
 
@@ -761,8 +801,10 @@ def read_instrument(m, nth, bs, smp):
         elif feat == b"MA" and itype == 6:
             # SSG macro is essentially the full SSG instrument
             mac = read_ssg_macro(length, bs)
-        elif feat == b"MA" and itype == 38:
-            # other macro types are currently not supported
+        elif feat == b"MA" and itype in [37, 38]:
+            # we do not support macros for ADPCM channel yet, but we
+            # convert special-case 1-step macros to set a default
+            # volume or default tune.
             mac, _ = read_macro_data(length, bs)
         elif feat == b"NE":
             # NES DPCM tag is present when the instrument
@@ -786,6 +828,8 @@ def read_instrument(m, nth, bs, smp):
         ins.name = asm_ident("instr_%02x_%s"%(nth, name))
         if itype == 38 and mac:
             configure_b_macros(ins, mac)
+        elif itype == 37 and mac:
+            configure_a_macros(ins, mac)
         return ins
 
 
@@ -891,7 +935,7 @@ def asm_fm_instrument(ins, fd):
     print("%s:" % ins.name, file=fd)
     print("        ;;       OP1 - OP3 - OP2 - OP4", file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; DT | MUL" % dtmul, file=fd)
-    print("        .db     0xff, 0xff, 0xff, 0xff   ; empty", file=fd)
+    print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; TL" % tl, file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; KS | AR" % ksar, file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; AM | DR" % amdr, file=fd)
     print("        .db     0x%02x, 0x%02x, 0x%02x, 0x%02x   ; SR" % sr, file=fd)
@@ -1005,6 +1049,7 @@ def asm_adpcm_sample_desc(ins_name, macro_name, fd):
 
 def asm_adpcm_a_instrument(ins, fd):
     asm_adpcm_sample_desc(ins.name, ins.sample.name.upper(), fd)
+    print("        .db     0x%02x                     ; volume" % (ins.volume), file=fd)
     print("", file=fd)
 
 

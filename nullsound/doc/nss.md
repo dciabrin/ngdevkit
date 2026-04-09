@@ -9,11 +9,11 @@ This document details the current level of support for Furnace features in NSS. 
 
 ## Currently supported Furnace features
 
-* The supported Furnace module format is "Neo Geo MVS" (single chip, YM2610). Currently, "Neo Geo MVS (extended channel 2)" is not yet supported.
+* The supported Furnace module format is "Neo Geo MVS" (single chip, YM2610), as well as "Neo Geo MVS (extended channel 2)".
 
 * When ADPCM-A or ADPCM-B instruments use samples encoded in `.wav` format, they are automatically converted to ADPCM by ngdevkit. Some details worth noting:
 
-  - Right now, `nsstool` only supports `.wav` samples whose format is 16-bit PCM, mono channel. Additionally, samples used for ADPCM-A instruments are expected to be 18.5KHz. Automatic conversion of 8-bit PCM is not yet supported.
+  - Right now, `nsstool` supports `.wav` samples whose format is either 16-bit PCM or 8-bit PCM, mono channel. Additionally, samples used for ADPCM-A instruments are expected to be 18.5KHz.
 
   - If an ADPCM-B sample is used for looping, make sure that the sample's length is a multiple of 512 sample units, otherwise you will hear popping artifacts. This is because on the YM2610, a single ADPCM-B sample unit is encoded as 4-bits, and sample playback can only start and end on 256 bytes boundaries.
 
