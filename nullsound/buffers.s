@@ -117,7 +117,7 @@ ssg_tunes_lsb::
 
         .bndry 128
 ssg_dists_msb::
-        .ssg_dists_lsb_data
+        .ssg_dists_msb_data
 
 
 ;;; F-num frequency table
