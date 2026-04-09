@@ -24,6 +24,7 @@
         .include "ym2610.inc"
         .include "ports.inc"
         .include "timer.inc"
+        .include "align.inc"
 
 
 ;;;
@@ -33,7 +34,11 @@
 ;;;  the stream player as a reliable time source for synchronization.
 ;;;
         .area  DATA
-_state_timer_start:
+
+.align_begin state_timer
+;;; { ...
+
+state_timer_base_flags::        .blkb   1       ; base value of the timer flags register
 
 ;;; ticks
 state_timer_ticks_per_row::     .blkb   1       ; total number of ticks for the current row
@@ -47,13 +52,15 @@ state_timer_tick_pos::          .blkb   1       ; position in groove pattern
 state_timer_nb_ticks::          .blkb   1       ; length of the the groove pattern
 state_timer_ticks::             .blkb   16      ; current groove pattern
 
-_state_timer_end:
+;;; ... }
+.align_end state_timer
 
 
         .area  CODE
 
 init_timer_state_tracker::
         ld      a, #0
+        ld      (state_timer_base_flags), a
         ld      (state_timer_tick_reached), a
         ld      (state_timer_ticks_count), a
         ld      (state_timer_ticks_per_row), a
@@ -89,7 +96,9 @@ update_timer_state_tracker::
         ;; YM2610 register context is only captured by regular code,
         ;; i.e. outside of the interrupt handler
         ld      b, #REG_TIMER_FLAGS
-        ld      c, #0x2a
+        ld      a, (state_timer_base_flags)
+        add     #0x2a
+        ld      c, a
         call    ym2610_write_port_a_no_ctx
 
         ;; step2: at this stage, if we interrupted a ym2610_write_port_a,
@@ -183,6 +192,16 @@ _timer_set_pos:
 ;;; NSS opcodes
 ;;;
 
+;;; SET_2CH
+;;; Enable independent notes for each operator in FM2
+;;; ------
+set_2ch::
+        ld      a, (state_timer_base_flags)
+        set     REG_TIMER_FLAGS_2CH_BIT, a
+        ld      (state_timer_base_flags), a
+        ret
+
+
 ;;; TIMER_TEMPO
 ;;; configure YM2610's timer B for a specific tempo and start it
 ;;; ------
@@ -190,7 +209,9 @@ _timer_set_pos:
 timer_tempo::
         ;; reset all timers
         ld      b, #REG_TIMER_FLAGS
-        ld      c, #0x30
+        ld      a, (state_timer_base_flags)
+        or      #0x30
+        ld      c, a
         call    ym2610_write_port_a
         ;; configure timer B
         ld      b, #REG_TIMER_B_COUNTER
@@ -208,7 +229,9 @@ timer_tempo::
         ld      a, #0
         ld      (state_timer_ticks_count), a
         ld      b, #REG_TIMER_FLAGS
-        ld      c, #0x3A
+        ld      a, (state_timer_base_flags)
+        or      #0x3A
+        ld      c, a
         call    ym2610_write_port_a
         ei
         ld      a, #1

@@ -245,23 +245,23 @@ volume_update_stream_state:
         ;; Notify the FM pipeline
         bit     0, d
         jr      z, _vol_upd_post_fm1
-        ld      iy, #state_fm1
-        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
+        ld      iy, #state_fm1_pipeline
+        set     BIT_LOAD_VOL, PIPELINE(iy)
 _vol_upd_post_fm1:
         bit     1, d
         jr      z, _vol_upd_post_fm2
-        ld      iy, #state_fm2
-        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
+        ld      iy, #state_fm2_pipeline
+        set     BIT_LOAD_VOL, PIPELINE(iy)
 _vol_upd_post_fm2:
         bit     2, d
         jr      z, _vol_upd_post_fm3
-        ld      iy, #state_fm3
-        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
+        ld      iy, #state_fm3_pipeline
+        set     BIT_LOAD_VOL, PIPELINE(iy)
 _vol_upd_post_fm3:
         bit     3, d
         jr      z, _vol_upd_post_fm4
-        ld      iy, #state_fm4
-        set     BIT_LOAD_VOL, PIPELINE_FROM_NOTE(iy)
+        ld      iy, #state_fm4_pipeline
+        set     BIT_LOAD_VOL, PIPELINE(iy)
 _vol_upd_post_fm4:
 
         ;; Notify the SSG pipeline
