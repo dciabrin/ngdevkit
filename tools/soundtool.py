@@ -171,6 +171,8 @@ def group_assets(desc):
 
 
 def dump_m68k_commands(desc, f):
+    grouped_musics, grouped_sfxs = group_assets(desc)
+
     print('#ifndef _SND_COMMANDS_', file=f)
     print('#define _SND_COMMANDS_ 1', file=f)
     print('', file=f)
@@ -189,14 +191,23 @@ def dump_m68k_commands(desc, f):
     print('#define SND_NB_FX (%d)'%nb_fx, file=f)
     print('#define SND_LAST (_SND_CMD_BASE_GENERATED + %d - 1)'%len(desc), file=f)
     print('', file=f)
-    for n, i in enumerate(desc):
-        stype, data = parse_cmd(i)
-        if stype == 'furnace':
-            stype = 'music'
-        else:
-            stype = 'sfx'
-        name='SND_%s_%s'%(stype.upper(),data['name'].upper())
-        print('#define %s (_SND_CMD_BASE_GENERATED + %d)'%(name,n), file=f)
+
+    cmd_offset = 0
+    grouped_musics, grouped_sfxs = group_assets(desc)
+
+    for group in sorted(iter(grouped_musics)):
+        for data in grouped_musics[group]:
+            name='SND_MUSIC_%s'%data['furnace']['name'].upper()
+            print('#define %s (_SND_CMD_BASE_GENERATED + %d)'%(name, cmd_offset), file=f)
+            cmd_offset += 1
+
+    for group in sorted(iter(grouped_sfxs)):
+        for data in grouped_sfxs[group]:
+            sfx_type = next(x for x in data)
+            name='SND_SFX_%s'%data[sfx_type]['name'].upper()
+            print('#define %s (_SND_CMD_BASE_GENERATED + %d)'%(name, cmd_offset), file=f)
+            cmd_offset += 1
+
     print('', file=f)
     print('#endif /* _SND_COMMANDS_ */', file=f)
 
