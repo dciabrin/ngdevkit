@@ -145,7 +145,7 @@ def generate_sound_desc(entries, header, desc, output):
 
     # save sound map description
     print(header, end='', file=output)
-    print(yaml_dump(result_data), end='', file=output)
+    print(yaml_dump(result_data, end='', f=output))
 
 
 
