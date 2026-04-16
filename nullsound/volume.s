@@ -289,9 +289,9 @@ _vol_upd_post_ssg_c:
         ;; Loop over all the ADPCM-A channels that need to be updated
         ;; e: total number of ADPCM-A channels
         ld      e, #6
-        ld      iy, #state_a1
-        ld      a, #<state_a2
-        sub     a, #<state_a1
+        ld      iy, #state_a_pipeline
+        ld      a, #<state_a_end
+        sub     a, #<state_a_start
         ld      b, #0
         ld      c, a
 _vol_adpcm_a_loop:
@@ -351,14 +351,22 @@ update_volume_state_tracker::
         call    volume_level_from_ramp
         ld      (state_ssg_volume_attenuation), a
 
-        ;; NOTE: do not update individual ADPCM-A channel for the time
-        ;; being. Rely on the global master ADPCM-A
-        ;; ld      hl, #state_volume_adpcm_a_ramp
-        ;; call    volume_level_from_ramp
-        ;; ld      (state_adpcm_a_volume_attenuation), a
+        ;; NOTE: do not update individual ADPCM-A channel if we're doing
+        ;; a fade out, as it seems that zero volume is rendered oddly
+        ;; on emulators (to be checked on real hardware).
+        ;; Instead, rely on the global master ADPCM-A.
+        ld      a, (state_volume_fade_out)
+        bit     0, a
+        jp      nz, _u_vol_a_master
+        ld      hl, #state_volume_adpcm_a_ramp
+        call    volume_level_from_ramp
+        ld      (state_adpcm_a_volume_attenuation), a
+        jr      _u_vol_post_a
+_u_vol_a_master:
         ld      hl, #state_volume_adpcm_a_master_ramp
         call    volume_level_from_ramp
         ld      (state_volume_adpcm_a_master), a
+_u_vol_post_a:
 
         ld      hl, #state_volume_adpcm_b_ramp
         call    volume_level_from_ramp
@@ -378,6 +386,16 @@ fade::
         ld      (state_volume_fade_out), a
 next_fade::
         ld      (state_volume_fade_progress), a
+        cp      #0
+        jr      nz, _fade_end
+        ;; if the fade reached zero volume, stop music playback
+        ;; and reset the fade effect (ADPCM-A master volume is also reset)
+        call    snd_stream_stop
+        ld      (state_volume_fade_out), a
+        ld      b, #REG_ADPCM_A_MASTER_VOLUME
+        ld      c, #0x3f
+        call    ym2610_write_port_b
+_fade_end:
 
         pop     de
         pop     bc
