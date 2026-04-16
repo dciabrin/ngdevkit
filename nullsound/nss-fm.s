@@ -35,6 +35,8 @@
         .lclequ NSS_OP_INSTRUMENT_PROPS,        7
         .lclequ NSS_OP_NEXT_REGISTER,           16
         .lclequ NSS_FM_INSTRUMENT_PROPS,        28
+        .lclequ NSS_FM_OPS_PROPS,               4
+        .lclequ NSS_FM_KS_AR_TO_SSG_PROPS,      20
         .lclequ NSS_FM_NEXT_REGISTER,           4
         .lclequ NSS_FM_NEXT_REGISTER_GAP,       16
         .lclequ NSS_FM_END_OF_REGISTERS,        0xb3
@@ -1106,9 +1108,6 @@ fm_instrument::
         pop     hl
         push    hl              ; +instrument address
 
-        ;; d: all FM properties
-        ld      d, #NSS_FM_INSTRUMENT_PROPS
-
         ;; b: fm channel
         ld      a, (state_fm_channel)
         ld      b, a
@@ -1117,24 +1116,22 @@ fm_instrument::
         ld      a, #REG_FM1_OP1_DETUNE_MULTIPLY
         res     1, b
         add     b
-_fm_port_loop:
-        ld      b, a
-        ld      c, (hl)
-        call    ym2610_write_func
-        add     a, #NSS_FM_NEXT_REGISTER
-        inc     hl
-        dec     d
-        jp      nz, _fm_port_loop
-        ;;
-        ld      d, #NSS_FM_END_OF_REGISTERS
-        cp      d
-        jp      nc, _fm_end
-        ;; two additional properties a couples of regs away
-        add     a, #NSS_FM_NEXT_REGISTER_GAP
-        ld      d, #1
-        jp      _fm_port_loop
 
-_fm_end:
+        ;; d: first props: DT | MUL
+        ld      d, #NSS_FM_OPS_PROPS
+        call    _fm_port_loop
+        ;; skip TL props, they will be set up later
+        add     a, #NSS_FM_NEXT_REGISTER_GAP
+        ld      bc, #4          ; TODO remove that from instrument data
+        add     hl, bc
+        ;; set up the contiguous props
+        ld      d, #NSS_FM_KS_AR_TO_SSG_PROPS
+        call    _fm_port_loop
+        ;; adjust for the last two props in the YM2610
+        add     a, #NSS_FM_NEXT_REGISTER_GAP
+        ld      d, #2
+        call    _fm_port_loop
+
         ;; set the pan, AMS and PMS settings for this instrument
         call    fm_set_pan_ams_pms
         ;; set the state's output OPs from this instrument
@@ -1153,6 +1150,22 @@ _fm_instr_end:
         pop     hl
         pop     bc
         ld      a, #1
+        ret
+
+;;; Load data into consecutive YM2610 registers
+;;; ------
+;;;    a  : start FM register
+;;;    d  : number of FM registers to load data into
+;;; [ hl ]: YM2610 register data
+;;; modified: bc, d, hl
+_fm_port_loop:
+        ld      b, a
+        ld      c, (hl)
+        call    ym2610_write_func
+        add     a, #NSS_FM_NEXT_REGISTER
+        inc     hl
+        dec     d
+        jp      nz, _fm_port_loop
         ret
 
 
