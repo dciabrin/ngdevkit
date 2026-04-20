@@ -23,6 +23,7 @@ import sys
 import glob
 import os
 import wave
+from operator import itemgetter
 
 # Special handling for YAML: try to import ruamel.yaml first,
 # because it's better at keeping comments in YAML files, and
@@ -131,8 +132,11 @@ def generate_sound_desc(entries, header, desc, output):
                 name=mkid(os.path.splitext(os.path.basename(f))[0])
                 sfx = {'name': name, 'uri': uri}
                 sfxdir=os.path.basename(os.path.dirname(f))
-                if re.match(r'^[1-6]$',sfxdir):
-                    sfx['channel']=int(sfxdir)
+                m = re.match(r'^([1-6])(_x)?$',sfxdir)
+                if m:
+                    sfx['channel']=int(m[1])
+                    if m[2]:
+                        sfx['exclusive']=True
                 read_data.append([name, {sfxtype: sfx}])
 
     result_data = []
@@ -143,9 +147,15 @@ def generate_sound_desc(entries, header, desc, output):
         else:
             result_data.append(data)
 
+    # sort result_data to get a consistent output on update
+    result_keys = [next(iter(x.keys())) for x in result_data]
+    decorated_data = [((type, data[type]['channel'], data[type]['name']), data) for type, data in zip(result_keys, result_data)]
+    decorated_data.sort(key=itemgetter(0))
+    sorted_data = [data for key, data in decorated_data]
+
     # save sound map description
     print(header, end='', file=output)
-    print(yaml_dump(result_data, end='', f=output))
+    yaml_dump(sorted_data, end='', f=output)
 
 
 
@@ -234,10 +244,14 @@ def dump_z80_commands(desc, f):
     def print_sfx_cmd(stype, data, bank):
         name=data['name']
         channel=data.get('channel', 6)-1
+        snd_func_name='snd_%s_play'%stype
+        exclusive=data.get('exclusive', False)
+        if exclusive:
+            snd_func_name+='_exclusive'
         ucname=name.upper()
         print('sfx_%s::'%name, file=f)
         print('        ld      ix, #sfx_%s_data'%name, file=f)
-        print('        call    snd_%s_play'%stype, file=f)
+        print('        call    %s'%snd_func_name, file=f)
         print('        ret', file=f)
         print('sfx_%s_data:'%name, file=f)
         print('        .db     %s_START_LSB, %s_START_MSB ; start>>8 in VROM'%(ucname,ucname), file=f)

@@ -37,12 +37,18 @@
 state_adpcm_busy:
         .blkb   1
 
+;;; ADPCM channels currently held by an exclusive play action
+;;; | B  | __ | A6 | A5 | A4 | A3 | A2 | A1 |
+state_adpcm_exclusive:
+        .blkb   1
+
 
         .area  CODE
 
 init_adpcm_state_tracker::
         ld      a, #0
         ld      (state_adpcm_busy), a
+        ld      (state_adpcm_exclusive), a
         ret
 
 update_adpcm_state_tracker::
@@ -58,12 +64,15 @@ update_adpcm_state_tracker::
         ld      b, #REG_ADPCM_PLAYBACK_MASK
         ld      c, #0x00
         call    ym2610_write_port_a
-        ;; a <- busy state clear mask
+        ;; a <-  busy/exclusive states clear mask
         cpl
         ld      b, a
         ld      a, (state_adpcm_busy)
         and     b
         ld      (state_adpcm_busy), a
+        ld      a, (state_adpcm_exclusive)
+        and     b
+        ld      (state_adpcm_exclusive), a
 _adpcm_no_state_update:
         ret
 
@@ -97,7 +106,7 @@ _adpcm_no_state_update:
 ;;; ------
 ;;; ix: sample play config
 ;;; [a modified - other registers saved]
-snd_adpcm_a_play::
+snd_adpcm_a_play_common::
         push    bc
         ;; stop playback
         ld      b, #REG_ADPCM_A_START_STOP
@@ -152,19 +161,40 @@ _snd_adpcm_a_end:
         ret
 
 
-;;; Play a ROM sample on a ADPCM-A channel only if it's not in use
+;;; Play a ROM sample on a ADPCM-A channel
+;;; If the channel is currently locked by an ongoing play,
+;;; no action is taken and the ongoing play continues.
+;;; ------
+;;; ix: sample play config
+;;; [a modified - other registers saved]
+snd_adpcm_a_play::
+        push    bc
+        ld      a, (state_adpcm_exclusive)
+        ld      b, A_CHANNEL_BIT(ix)
+        and     b
+        jp      nz, _snd_adpcm_a_busy
+        ;; play sample (will mark the channel as busy)
+        call    snd_adpcm_a_play_common
+_snd_adpcm_a_busy:
+        pop     bc
+        ret
+
+
+;;; Play a ROM sample on a ADPCM-A channel
+;;; If the channel is currently locked by an ongoing play,
+;;; replace it and play the new sample while keeping this channel locked.
 ;;; ------
 ;;; ix: sample play config
 ;;; [a modified - other registers saved]
 snd_adpcm_a_play_exclusive::
         push    bc
-        ld      a, (state_adpcm_busy)
+        ;; lock the channel
+        ld      a, (state_adpcm_exclusive)
         ld      b, A_CHANNEL_BIT(ix)
-        and     b
-        jp      nz, _snd_adpcm_a_busy
+        or      b
+        ld      (state_adpcm_exclusive), a
         ;; play sample (will mark the channel as busy)
-        call    snd_adpcm_a_play
-_snd_adpcm_a_busy:
+        call    snd_adpcm_a_play_common
         pop     bc
         ret
 
@@ -216,78 +246,99 @@ snd_adpcm_b_play_common::
         ld      b, #REG_ADPCM_B_VOLUME
         ld      c, B_VOLUME(ix)
         call    ym2610_write_port_a
+        ;; mark the channel as busy
+        ;; playback will be started by the caller
+        ld      a, (state_adpcm_busy)
+        ld      c, #0x80
+        or      c
+        ld      (state_adpcm_busy), a
         ret
 
 
 ;;; Play a ROM sample on the ADPCM-B channel
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
-snd_adpcm_b_play::
-        push    bc
-        call    snd_adpcm_b_play_common
-        ;; play channel
-        ld      b, #REG_ADPCM_B_START_STOP
-        ld      c, #0x80
-        call    ym2610_write_port_a
-        ;; mark the channel as busy
-        ld      a, (state_adpcm_busy)
-        ld      c, #0x80
-        or      c
-        ld      (state_adpcm_busy), a
-        pop     bc
-        ret
-
-
-;;; Play and loop a ROM sample on the ADPCM-B channel
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
-snd_adpcm_b_play_loop::
-        push    bc
-        call    snd_adpcm_b_play_common
-        ;; play channel
-        ld      b, #REG_ADPCM_B_START_STOP
-        ld      c, #0x90
-        call    ym2610_write_port_a
-        ;; mark the channel as busy
-        ld      a, (state_adpcm_busy)
-        ld      c, #0x80
-        or      c
-        ld      (state_adpcm_busy), a
-        pop     bc
-        ret
-
-
-;;; Play a ROM sample on the ADPCM-B channel only if it's not in use
+;;; If the channel is currently locked by an ongoing play,
+;;; replace it and play the new sample while keeping this channel locked.
 ;;; ------
 ;;; ix: sample play config
 ;;; [a modified - other registers saved]
 snd_adpcm_b_play_exclusive::
         push    bc
-        ld      a, (state_adpcm_busy)
+        ;; lock the channel
+        ld      a, (state_adpcm_exclusive)
+        ld      b, #0x80
+        or      b
+        ld      (state_adpcm_exclusive), a
+        ;; play channel
+        call    snd_adpcm_b_play_common
+        ld      b, #REG_ADPCM_B_START_STOP
+        ld      c, #0x80
+        call    ym2610_write_port_a
+        pop     bc
+        ret
+
+
+;;; Play and loop a ROM sample on the ADPCM-B channel
+;;; If the channel is currently locked by an ongoing play,
+;;; replace it and play the new sample while keeping this channel locked.
+;; ------
+;;; ix: sample play config
+;;; [a modified - other registers saved]
+snd_adpcm_b_play_loop_exclusive::
+        push    bc
+        ;; lock the channel
+        ld      a, (state_adpcm_exclusive)
+        ld      b, #0x80
+        or      b
+        ld      (state_adpcm_exclusive), a
+        ;; play channel
+        call    snd_adpcm_b_play_common
+        ld      b, #REG_ADPCM_B_START_STOP
+        ld      c, #0x90
+        call    ym2610_write_port_a
+        pop     bc
+        ret
+
+
+;;; Play a ROM sample on the ADPCM-B channel
+;;; If the channel is currently locked by an ongoing play,
+;;; no action is taken and the ongoing play continues.
+;;; ------
+;;; ix: sample play config
+;;; [a modified - other registers saved]
+snd_adpcm_b_play::
+        push    bc
+        ld      a, (state_adpcm_exclusive)
         ld      b, #0x80
         and     b
         jp      nz, _snd_adpcm_b_busy
         ;; play sample (will mark the channel as busy)
-        call    snd_adpcm_b_play
+        call    snd_adpcm_b_play_common
+        ld      b, #REG_ADPCM_B_START_STOP
+        ld      c, #0x80
+        call    ym2610_write_port_a
 _snd_adpcm_b_busy:
         pop     bc
         ret
 
 
-;;; Play and loop a ROM sample on the ADPCM-B channel only if it's not in use
+;;; Play and loop a ROM sample on the ADPCM-B channel
+;;; If the channel is currently locked by an ongoing play,
+;;; no action is taken and the ongoing play continues.
 ;;; ------
 ;;; ix: sample play config
 ;;; [a modified - other registers saved]
-snd_adpcm_b_play_loop_exclusive::
+snd_adpcm_b_play_loop::
         push    bc
-        ld      a, (state_adpcm_busy)
+        ld      a, (state_adpcm_exclusive)
         ld      b, #0x80
         and     b
         jp      nz, _snd_adpcm_b_loop_busy
         ;; play sample (will mark the channel as busy)
-        call    snd_adpcm_b_play_loop
+        call    snd_adpcm_b_play_common
+        call    snd_adpcm_b_play_common
+        ld      b, #REG_ADPCM_B_START_STOP
+        ld      c, #0x90
+        call    ym2610_write_port_a
 _snd_adpcm_b_loop_busy:
         pop     bc
         ret
