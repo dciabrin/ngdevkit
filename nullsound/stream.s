@@ -476,6 +476,8 @@ stream_stop::
         ld      (state_stream_in_use), a
         ld      (state_timer_ticks_count), a
         ld      (state_timer_ticks_per_row), a
+        ;; temporary reset of SFX playback, until we get a cleaner API
+        call    init_adpcm_state_tracker
         ret
 
 
