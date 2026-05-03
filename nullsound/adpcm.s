@@ -335,7 +335,6 @@ snd_adpcm_b_play_loop::
         jp      nz, _snd_adpcm_b_loop_busy
         ;; play sample (will mark the channel as busy)
         call    snd_adpcm_b_play_common
-        call    snd_adpcm_b_play_common
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #0x90
         call    ym2610_write_port_a
