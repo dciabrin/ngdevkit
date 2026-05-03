@@ -341,3 +341,28 @@ snd_adpcm_b_play_loop::
 _snd_adpcm_b_loop_busy:
         pop     bc
         ret
+
+
+;;; Stop playback on the ADPCM-B channel
+;;; If the channel is currently locked by an ongoing play, reset the lock.
+;;; ------
+;;; [a modified - other registers saved]
+snd_adpcm_b_stop::
+        push    bc
+        ;; reset playback busy state
+        ld      a, (state_adpcm_busy)
+        res     7, a
+        ld      (state_adpcm_busy), a
+
+        ;; reset exclusive state
+        ld      a, (state_adpcm_exclusive)
+        res     7, a
+        ld      (state_adpcm_exclusive), a
+
+        ;; stop playback
+        ld      b, #REG_ADPCM_B_START_STOP
+        ld      c, #0x01
+        call    ym2610_write_port_a
+
+        pop     bc
+        ret
