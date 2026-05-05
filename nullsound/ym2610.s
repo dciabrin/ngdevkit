@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2020-2023 Damien Ciabrini
+;;; Copyright (c) 2020-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -22,16 +22,28 @@
         .include "ym2610.inc"
 
 
-        .lclequ  CTX_NO_REGISTER, 0xff
+        .lclequ  CTX_NO_WRITE,       0
+        .lclequ  CTX_WRITE_PORT_A,   1
+        .lclequ  CTX_WRITE_PORT_B,   2
 
 
         .area DATA
 
 
-;;; current YM2610 context when a write to port A is ongoing, 0xff otherwise
-;;; (the interrupt handler currently writes to the YM2610 on port A,
-;;; so ym2610_write_port_a must be reentrant, hence this context)
-state_ym2610_context_port_a::
+;;; The interrupt handler currently writes to the YM2610 to reset and
+;;; rearm interrupts, so ongoing port writes from user space must
+;;; be reentrant. Possible values:
+;;;   - 0: no write in progress
+;;;   - 1: write to port A in progress
+;;;   - 2: write to port B in progress
+;;; Address context must be preserved for both ports A and B, because
+;;; a write to data port X is only effective if the port previously
+;;; written to was the same port X (see ngdevkit#123).
+state_ym2610_context_write::
+        .blkb   1
+
+;;; target address when a write to port A or port B was initiated
+state_ym2610_context_address::
         .blkb   1
 
 
@@ -48,7 +60,9 @@ ym2610_write_port_a::
         push    af
         ;; reentrant: save register context
         ld      a, b
-        ld      (state_ym2610_context_port_a), a
+        ld      (state_ym2610_context_address), a
+        ld      a, #CTX_WRITE_PORT_A
+        ld      (state_ym2610_context_write), a
         ;; select register address
         ld      a, b
         out     (PORT_YM2610_A_ADDR), a
@@ -58,8 +72,8 @@ ym2610_write_port_a::
         out     (PORT_YM2610_A_VALUE), a
         call    _ym2610_wait_data_write
         ;; reentrant: clear register context
-        ld      a, #CTX_NO_REGISTER
-        ld      (state_ym2610_context_port_a), a
+        xor     a
+        ld      (state_ym2610_context_write), a
         pop     af
         ret
 
@@ -90,6 +104,11 @@ ym2610_write_port_a_no_ctx::
 ;;; (all registers are preserved)
 ym2610_write_port_b::
         push    af
+        ;; reentrant: save register context
+        ld      a, b
+        ld      (state_ym2610_context_address), a
+        ld      a, #CTX_WRITE_PORT_B
+        ld      (state_ym2610_context_write), a
         ;; select register address
         ld      a, b
         out     (PORT_YM2610_B_ADDR), a
@@ -98,6 +117,9 @@ ym2610_write_port_b::
         ld      a, c
         out     (PORT_YM2610_B_VALUE), a
         call    _ym2610_wait_data_write
+        ;; reentrant: clear register context
+        xor     a
+        ld      (state_ym2610_context_write), a
         pop     af
         ret
 
@@ -135,17 +157,24 @@ ym2610_wait_available::
         ret
 
 
-;;; ym2610_restore_context_port_a
-;;; -----------------------------
+;;; ym2610_restore_port_context
+;;; ---------------------------
 ;;; If an interrupt was triggered while the YM2610 was being
 ;;; written to by the sound driver, restore the register context
 ;;; before exiting from the interrupt handler.
-;;; (all registers are preserved)
-ym2610_restore_context_port_a::
-        ld      a, (state_ym2610_context_port_a)
-        cp      #CTX_NO_REGISTER
+;;; (registers preserved, except a)
+ym2610_restore_port_context::
+        ld      a, (state_ym2610_context_write)
+        cp      #CTX_NO_WRITE
         jr      z, _end_restore_context
+        cp      #CTX_WRITE_PORT_A
+        ld      a, (state_ym2610_context_address)
+        jr      z, _restore_context_port_a
+        out     (PORT_YM2610_B_ADDR), a
+        jr      _restore_wait_write
+_restore_context_port_a:
         out     (PORT_YM2610_A_ADDR), a
+_restore_wait_write:
         call    _ym2610_wait_address_write
 _end_restore_context:
         ret

@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2023-2024 Damien Ciabrini
+;;; Copyright (c) 2023-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -87,8 +87,8 @@ update_timer_state_tracker::
         ;; ym2610 register context from a ongoing ym2610_write_port_a.
         ;; so we have to update the YM2610 with care
 
-        ;; step1: wait before reading/writing anything, so that
-        ;; if we interrupted a ym2610_write_port_a, it gets a chance to
+        ;; step 1: wait before reading/writing anything, so that if we
+        ;; interrupted a write to a YM2610 register, it gets a chance to
         ;; update the YM2610 properly
         call    ym2610_wait_available
 
@@ -101,10 +101,10 @@ update_timer_state_tracker::
         ld      c, a
         call    ym2610_write_port_a_no_ctx
 
-        ;; step2: at this stage, if we interrupted a ym2610_write_port_a,
-        ;; restore the YM2610 register context before returning from the
-        ;; interrupt handler
-        call    ym2610_restore_context_port_a
+        ;; step 2: at this stage, if we interrupted a ym2610_write_port_a
+        ;; or ym2610_write_port_b, restore the YM2610 register context
+        ;; before returning from the interrupt handler
+        call    ym2610_restore_port_context
 
         pop     bc
         pop     af
