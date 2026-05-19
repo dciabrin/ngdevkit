@@ -24,6 +24,8 @@
         .include "ports.inc"
         .include "ym2610.inc"
 
+        .lclequ JMPTABLE_ENTRY_SIZE, 3
+
         .area   CODE
 
 ;;; Reserved commands as defined in the BIOS
@@ -59,10 +61,14 @@ snd_command_01_prepare_for_rom_switch::
         ;; return from NMI in top of RAM and loop there
         retn
 
-;;; There is no default command 02, the game ROM should provide it
-;; snd_command_02_eye_catcher_music
+;;; Reset the sound driver and play the eye catcher music
+;;; NOTE: the eye catcher music is not part of nullsound,
+;;; it must be provided by the game ROM
+snd_command_02_eye_catcher_music::
+        ld      bc, #cmd_jmptable + (2 * JMPTABLE_ENTRY_SIZE)
+        jp      snd_init_driver_from_nmi
 
-;;; Reset sound driver
+;;; Reset the sound driver
 ;;; reset stack and start the sound driver
 snd_command_03_reset_driver::
         ld      bc, #0

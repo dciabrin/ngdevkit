@@ -71,6 +71,8 @@
         in      a, (PORT_FROM_68K)
         cp      #1
         jp      z, snd_command_01_prepare_for_rom_switch
+        cp      #2
+        jp      z, snd_command_02_eye_catcher_music
         cp      #3
         jp      z, snd_command_03_reset_driver
         ;; else register the commands for later processing
