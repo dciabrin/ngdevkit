@@ -16,12 +16,14 @@
 
 MROM=rom/sm1.sm1
 SROM=rom/sfix.sfix
-PROMS=rom/sp-s2.sp1 rom/aes-bios.bin
+PROMS=rom/sp-s2.sp1 rom/aes-bios.bin rom/neo-epo.bin rom/neo-po.bin
+AES_PROMS=rom/aes-bios.bin rom/neo-epo.bin rom/neo-po.bin
 ZROM=rom/000-lo.lo
 
-BIOS=rom/neogeo.zip
+AES_BIOS=rom/aes.zip
+MVS_BIOS=rom/neogeo.zip
 
-all: $(BIOS)
+all: $(AES_BIOS) $(MVS_BIOS)
 
 -include ../Makefile.config
 
@@ -38,11 +40,17 @@ BIOSOPTS=-O2
 BIOSLDFLAGS=-nostartfiles -T bios.ld -L../runtime
 
 
-$(BIOS): $(PROMS) $(ZROM) $(SROM) $(MROM)
-	cd rom && /bin/echo -e "\
-nullbios $(VERSION), an open source BIOS for Neo Geo\n\
+$(AES_BIOS): $(AES_PROMS) $(ZROM) $(SROM) $(MROM)
+	cd rom && /bin/echo -e "===\n\
+nullbios AES $(VERSION), an open source replacement BIOS for the Neo Geo\n\
 https://github.com/dciabrin/ngdevkit\n\
-." | /usr/bin/zip -qz neogeo.zip *.lo *.s* *.bin
+===" | /usr/bin/zip -qz $(@:rom/%=%) $(^:rom/%=%)
+
+$(MVS_BIOS): $(PROMS) $(ZROM) $(SROM) $(MROM)
+	cd rom && /bin/echo -e "===\n\
+nullbios $(VERSION), an open source replacement BIOS for the Neo Geo\n\
+https://github.com/dciabrin/ngdevkit\n\
+===" | /usr/bin/zip -qz $(@:rom/%=%) $(^:rom/%=%)
 
 $(MROM): $(Z80_HEX) | rom
 	$(NGSDOBJCOPY) -I ihex -O binary $< $@ --pad-to 131072
@@ -58,6 +66,9 @@ rom/sp-s2.sp1: sp-s2.elf | rom
 
 rom/aes-bios.bin: aes-bios.elf | rom
 	$(NGOBJCOPY) -O binary -S -R .comment --reverse-bytes=2 $< $@
+
+rom/neo-po.bin rom/neo-epo.bin: rom/aes-bios.bin
+	cp $< $@
 
 $(ZROM): | rom
 	$(PYTHON) zoom-rom.py -o $@
@@ -87,7 +98,7 @@ $(Z80_HEX): $(Z80_OBJS:%=%.rel)
 	$(MAKE) -C $(NULLSOUNDSRCDIR)
 	$(NGSDLD) -b DATA=0xf800 -i $@ $(NULLSOUND) $^
 
-install: $(BIOS) $(Z80_HEX)
+install: $(AES_BIOS) $(MVS_BIOS) $(Z80_HEX)
 	$(INSTALL) -d $(DESTDIR)$(prefix)/share/ngdevkit && \
 	$(INSTALL) $^ $(DESTDIR)$(prefix)/share/ngdevkit
 
