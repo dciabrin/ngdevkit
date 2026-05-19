@@ -1,4 +1,4 @@
-AC_INIT([ngdevkit], [0.4])
+AC_INIT([ngdevkit], [0.5])
 PKG_INSTALLDIR
 
 AC_ARG_WITH([python],
