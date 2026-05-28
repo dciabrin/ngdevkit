@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.11
 # Copyright (c) 2024 Damien Ciabrini
 # This file is part of ngdevkit
 #
