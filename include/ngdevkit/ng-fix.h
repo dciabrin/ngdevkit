@@ -19,6 +19,8 @@
 #ifndef __NGDEVKIT_NG_FIX_H__
 #define __NGDEVKIT_NG_FIX_H__
 
+#include <ngdevkit/types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
