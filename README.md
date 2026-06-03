@@ -2,8 +2,8 @@
 
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey)
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-green.svg)](https://www.gnu.org/licenses/lgpl-3.0)
-[![Fedora](https://img.shields.io/badge/Fedora-42%20|%2043%20|%20Rawhide-informational?logo=Fedora&logoColor=white)](https://copr.fedorainfracloud.org/coprs/dciabrin/ngdevkit/monitor)
-[![Ubuntu](https://img.shields.io/badge/Ubuntu-Jammy%20|%20Noble-informational?logo=Ubuntu&logoColor=white)](https://code.launchpad.net/~dciabrin/ngdevkit/+git/ngdevkit)
+[![Fedora](https://img.shields.io/badge/Fedora-42%20|%2043%20|%2044%20|%20Rawhide-informational?logo=Fedora&logoColor=white)](https://copr.fedorainfracloud.org/coprs/dciabrin/ngdevkit/monitor)
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-Noble%20|%20Resolute-informational?logo=Ubuntu&logoColor=white)](https://code.launchpad.net/~dciabrin/ngdevkit/+git/ngdevkit)
 [![Homebrew](https://img.shields.io/badge/Homebrew-14%20|%2015-informational?logo=Homebrew&logoColor=white)](https://github.com/dciabrin/homebrew-ngdevkit)
 [![MSYS2](https://img.shields.io/badge/MSYS2-ucrt64-informational?logo=Windows&logoColor=white)](https://github.com/dciabrin/msys2-ngdevkit)
 
