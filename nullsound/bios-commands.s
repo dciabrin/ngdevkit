@@ -51,7 +51,7 @@ snd_command_01_prepare_for_rom_switch::
         xor     a
         out     (PORT_TO_68K), a
         out     (PORT_FROM_68K), a
-        ;; reset the ym2610
+        ;; reset the ym2610 (a=0, reset ADPCM-A master volume)
         call    ym2610_reset
         ;; ;; build a jmp-to-self instruction in RAM
         prepare_wait_in_ram_opcodes

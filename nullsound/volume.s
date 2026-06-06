@@ -53,6 +53,8 @@
 ;;;     volume drop across channels.
 state_volume_music_level::      .blkb   1
 
+;;; Are music and SFX currently muted
+state_volume_muted::            .blkb   1
 ;;; Music level catpured at the time the volume was last muted
 state_volume_mute_level::       .blkb   1
 
@@ -105,6 +107,7 @@ init_volume_state_tracker::
         ;; reset music volume to max (no attenuation)
         ld      a, #0x0f
         ld      (state_volume_music_level), a
+        ld      (state_volume_muted), a
         ld      (state_volume_mute_level), a
         ;; reset channel levels
         ld      a, #0
@@ -136,8 +139,12 @@ volume_reset_music_levels::
         ld      a, #1
         ld      (state_volume_fade_speed), a
         ;; reset ADPCM-A master attenuation
+        ld      a, (state_volume_muted)
+        cp      #0
+        jr      nz, _post_reset_master_a
         ld      a, #0
         ld      (state_volume_adpcm_a_master), a
+_post_reset_master_a:
         ;; reset channels level based on current music level
         call    volume_update_channels_levels
         call    volume_update_stream_state
@@ -410,9 +417,13 @@ _post_volume_fade_out::
 
 
 ;;; Raise the current music level by one step
+;;; If the volume is currently muted, this is a no-op
 ;;; ------
 ;;; [a modified - other registers saved]
 stream_volume_down::
+        ld      a, (state_volume_muted)
+        cp      #0
+        jr      nz, _end_vol_down
         push    bc
         ld      a, (state_volume_music_level)
         dec     a
@@ -423,13 +434,18 @@ _post_vol_down:
         call    volume_update_channels_levels
         call    volume_update_stream_state
         pop     bc
+_end_vol_down:
         ret
 
 
 ;;; Raise the current music level by one step
+;;; If the volume is currently muted, this is a no-op
 ;;; ------
 ;;; [a modified - other registers saved]
 stream_volume_up::
+        ld      a, (state_volume_muted)
+        cp      #0
+        jr      nz, _end_vol_up
         push    bc
         ld      a, (state_volume_music_level)
         inc     a
@@ -440,6 +456,7 @@ _post_vol_up:
         call    volume_update_channels_levels
         call    volume_update_stream_state
         pop     bc
+_end_vol_up:
         ret
 
 
@@ -464,6 +481,9 @@ volume_fade_out::
 ;;; ------
 ;;; [a modified - other registers saved]
 volume_mute::
+        ld      a, #1
+        ld      (state_volume_muted), a
+
         ;; force mute ADPCM-A channels with ADPCM-A master volume
         ld      a, #0x3f
         ld      (state_volume_adpcm_a_master), a
@@ -484,8 +504,10 @@ volume_mute::
 ;;; ------
 ;;; [a modified - other registers saved]
 volume_unmute::
+        xor     a
+        ld      (state_volume_muted), a
+
         ;; reset ADPCM-A master volume
-        ld      a, #0x0
         ld      (state_volume_adpcm_a_master), a
 
         ;; reused captured playback level and update at next tick

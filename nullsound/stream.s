@@ -470,6 +470,7 @@ _stream_play_init_loop:
 snd_stream_stop::
 stream_stop::
         ;; force-stop any active channels, disable timers
+        ld      a, (state_volume_muted)
         call    ym2610_reset
         ;; clear playback state tracker
         ld      a, #0

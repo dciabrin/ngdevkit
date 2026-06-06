@@ -145,6 +145,7 @@ snd_init_driver_from_nmi::
 ;;;
 snd_start_driver::
         ;; mute the YM2610
+        xor     a
         call    ym2610_reset
 
         ;; reset Z80 memory layout to map the first 64KB of ROM

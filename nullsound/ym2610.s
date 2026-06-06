@@ -183,9 +183,12 @@ _end_restore_context:
 ;;; Reset YM2610
 ;;; ------------
 ;;; Reset ym2610 timers, channels playback and volumes
+;;;  a : leave ADPCM-A master volume untouched
 ym2610_reset::
         push    bc
         push    de
+
+        push    af              ; +keep A-master volume
 
         ;; reset all timers
         ld      b, #REG_TIMER_FLAGS
@@ -249,9 +252,13 @@ _release_ops:
         ld      b, #REG_ADPCM_PLAYBACK_MASK
         ld      c, #0x3f        ; reset and mask stop flag: all channels A
         call    ym2610_write_port_a
+        pop     af              ; -keep A-master volume
+        cp      #0
+        jr      nz, _post_ym2610_reset_a
         ld      b, #REG_ADPCM_A_MASTER_VOLUME
         ld      c, #0x3f        ; loudest
         call    ym2610_write_port_b
+_post_ym2610_reset_a:
         ;; ADPCM-B
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #0x01        ; channel B reset (stop)
