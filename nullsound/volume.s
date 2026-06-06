@@ -53,7 +53,10 @@
 ;;;     volume drop across channels.
 state_volume_music_level::      .blkb   1
 
-;;; Master level for ADPCM-A
+;;; Music level catpured at the time the volume was last muted
+state_volume_mute_level::       .blkb   1
+
+;;; Master level attenuation for ADPCM-A
 ;;; NOTE: the lowest volume achievable per channel with ADPCM-A seems
 ;;; to be a bit too loud, so for the time being the fade out action
 ;;; relies on the master ADPCM-A volume to implement the effect.
@@ -102,6 +105,7 @@ init_volume_state_tracker::
         ;; reset music volume to max (no attenuation)
         ld      a, #0x0f
         ld      (state_volume_music_level), a
+        ld      (state_volume_mute_level), a
         ;; reset channel levels
         ld      a, #0
         ld      (state_fm_volume_attenuation), a
@@ -232,7 +236,7 @@ _fade_post_bit1:
         ret
 
 
-;;; Update currently playing notes in the YM2610 to reflect the how
+;;; Update currently playing notes in the YM2610 to reflect how
 ;;; the channels' output levels are currently configured in nullsound
 ;;; ------
 ;;; [a, de, bc, hl, modified]
@@ -452,4 +456,42 @@ volume_fade_out::
         ld      (state_volume_fade_progress), a
         ld      a, #1
         ld      (state_volume_fade_out), a
+        ret
+
+
+;;; Mute currently playing music (by using the current music level),
+;;; as well as ADPCM SFX (via the YM2610's master volume)
+;;; ------
+;;; [a modified - other registers saved]
+volume_mute::
+        ;; force mute ADPCM-A channels with ADPCM-A master volume
+        ld      a, #0x3f
+        ld      (state_volume_adpcm_a_master), a
+
+        ;; set music level to min (0) and update at next tick
+        ld      a, (state_volume_music_level)
+        ld      (state_volume_mute_level), a
+        xor     a
+        ld      (state_volume_music_level), a
+        call    volume_update_channels_levels
+        call    volume_update_stream_state
+
+        ret
+
+
+;;; Unmute currently playing music (by using the current music level),
+;;; as well as ADPCM SFX (via the YM2610's master volume)
+;;; ------
+;;; [a modified - other registers saved]
+volume_unmute::
+        ;; reset ADPCM-A master volume
+        ld      a, #0x0
+        ld      (state_volume_adpcm_a_master), a
+
+        ;; reused captured playback level and update at next tick
+        ld      a, (state_volume_mute_level)
+        ld      (state_volume_music_level), a
+        call    volume_update_channels_levels
+        call    volume_update_stream_state
+
         ret
