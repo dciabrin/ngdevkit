@@ -1129,10 +1129,11 @@ fm_instrument::
         call    _fm_port_loop
         ;; adjust for the last two props in the YM2610
         add     a, #NSS_FM_NEXT_REGISTER_GAP
-        ld      d, #2
+        ld      d, #1
         call    _fm_port_loop
 
         ;; set the pan, AMS and PMS settings for this instrument
+        ;; a: FMx_L_R_AMSENSE_PMSENSE
         call    fm_set_pan_ams_pms
         ;; set the state's output OPs from this instrument
         pop     hl              ; -instrument address
