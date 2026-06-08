@@ -775,9 +775,10 @@ ssg_stop_playback:
 
         pop     bc
 
-        ;; disable playback in the pipeline, any note lod_note bit
+        ;; disable playback in the pipeline, any load_note bit
         ;; will get cleaned during the next pipeline run
         res     BIT_PLAYING, PIPELINE(ix)
+        res     BIT_EVAL_MACRO, PIPELINE(ix)
 
         ;; record that playback is stopped
         xor     a
