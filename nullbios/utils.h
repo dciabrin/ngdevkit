@@ -20,10 +20,10 @@
 #ifndef __NULLBIOS_UTILS_H__
 #define __NULLBIOS_UTILS_H__
 
-#define WITH_BACKUP_RAM_RW(x) {                   \
-    __asm__ volatile ("move.b  %d0, 0x3a001d.l"); \
-    x                                             \
-    __asm__ volatile ("move.b  %d0, 0x3a000d.l"); \
+#define WITH_BACKUP_RAM_RW(x) {                                  \
+    __asm__ volatile ("move.b  %d0, 0x3a001d.l" ::: "memory");   \
+    x                                                            \
+    __asm__ volatile ("move.b  %d0, 0x3a000d.l" ::: "memory");   \
     }
 
 #define CC_CLEAR_X_FLAG()                                        \
