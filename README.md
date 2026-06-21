@@ -57,7 +57,7 @@ of dependencies for the examples ROMs:
     apt update
     apt install ngdevkit
     # the remaining packages are only required for the examples
-    apt install pkg-config autoconf zip imagemagick sox libsox-fmt-mp3 ngdevkit-gngeo
+    apt install pkg-config autoconf rsync zip imagemagick sox libsox-fmt-mp3 ngdevkit-gngeo
 
 If you are running a Fedora distribution, pre-built packages are
 available in COPR, and can be installed with the following commands:
@@ -65,7 +65,7 @@ available in COPR, and can be installed with the following commands:
     dnf copr enable dciabrin/ngdevkit
     dnf install ngdevkit
     # the remaining packages are only requred for the examples
-    dnf install install pkg-config autoconf zip ImageMagick sox ngdevkit-gngeo
+    dnf install install pkg-config autoconf rsync zip ImageMagick sox ngdevkit-gngeo
 
 #### macOS
 
@@ -80,7 +80,7 @@ packages, available in the ngdevkit tap:
     brew tap dciabrin/ngdevkit
     brew install ngdevkit
     # the remaining packages are only required for the examples
-    brew install pkg-config autoconf automake zip imagemagick sox ngdevkit-gngeo
+    brew install pkg-config autoconf automake rsync zip imagemagick sox ngdevkit-gngeo
 
 Brew bottles are available for the last two versions of macOS for ARM.
 Intel brew bottles are no longer prebuilt. Older versions of macOS are
@@ -100,7 +100,8 @@ configure the pacman repository as follows:
     pacboy -Sy
     pacboy -S ngdevkit:u
     # the remaining packages are only required for the examples
-    pacboy -S autoconf automake make zip imagemagick:u sox:u ngdevkit-gngeo:u
+    pacman -S autoconf automake make rsync zip
+    pacboy -S ngdevkit-gngeo:u imagemagick:u sox:u
 
 An old version of ngdevkit supported Windows 10 via [WSL][wsl], but it
 is now deprecated in favour of the native MSYS2 environment. Likewise,
