@@ -332,6 +332,110 @@ def zip_build_cartridge(cart: Cartridge, output: str, **kwargs: OptionType):
 
 
 #
+# NEO specialization, ROM build function
+# Single-file cartridge format used by the NeoSD flashcart, the
+# Geolith emulator and the MiSTer Neo Geo core.
+#
+
+
+class NeoGenre(IntEnum):
+    OTHER = 0
+    ACTION = 1
+    BEAT_EM_UP = 2
+    SPORTS = 3
+    DRIVING = 4
+    PLATFORMER = 5
+    MAHJONG = 6
+    SHOOTER = 7
+    QUIZ = 8
+    FIGHTING = 9
+    PUZZLE = 10
+
+
+def neo_genre(name: str) -> NeoGenre:
+    """
+    Look up a NEO genre from a human-readable name, e.g. 'BeatEmUp'.
+    """
+    genres = {g.name.replace("_", ""): g for g in NeoGenre}
+    genre = genres.get(name.upper().replace("_", ""))
+    if genre is None:
+        valid = ", ".join([g.name for g in NeoGenre])
+        raise ValueError(f"unknown NEO genre '{name}', expecting one of {valid}")
+    return genre
+
+
+def neo_build_cartridge(cart: Cartridge, output: str, **kwargs: OptionType):
+    """
+    Build a cartridge file in the NEO format (version 1).
+    The file consists of a 4KiB header with the cartridge's metadata,
+    followed by the data of all the ROM regions, concatenated in
+    P, S, M, V1, V2, C order.
+    """
+
+    def read(rom: ROM) -> bytes:
+        with open(rom.path, "rb") as f:
+            return f.read()
+
+    def pad(data: bytes, multiple: int) -> bytes:
+        if len(data) % multiple == 0:
+            return data
+        return data + b"\xff" * (multiple - (len(data) % multiple))
+
+    def concat(roms: list[ROM], multiple: int = 64 * 1024) -> bytes:
+        return pad(b"".join([read(r) for r in roms]), multiple)
+
+    def interleave(even: bytes, odd: bytes) -> bytes:
+        out = bytearray(len(even) + len(odd))
+        out[0::2] = even
+        out[1::2] = odd
+        return bytes(out)
+
+    pdata = concat(cart.proms)
+    sdata = concat(cart.sroms)
+    mdata = concat(cart.mroms)
+    # ngdevkit generates a single ADPCM region, so all the samples go
+    # into V1 and the V2 region stays empty
+    v1data = concat(cart.vroms)
+    # the NEO format stores C-ROM data as seen by the hardware: every
+    # (c1, c2) pair of ROM files is byte-interleaved into a single bank
+    cpairs = []
+    for c_even, c_odd in zip(cart.croms[0::2], cart.croms[1::2]):
+        even, odd = read(c_even), read(c_odd)
+        if len(even) != len(odd):
+            raise ValueError(
+                f"C-ROMs {c_even.name} and {c_odd.name} form a pair "
+                "and must have the same size"
+            )
+        cpairs.append(interleave(even, odd))
+    cdata = pad(b"".join(cpairs), 256 * 1024)
+
+    for k in kwargs:
+        if k not in ("genre", "screenshot", "ngh"):
+            raise ValueError(f"unknown keyword '{k}' for the neo format")
+        if not isinstance(kwargs[k], str):
+            raise ValueError(f"keyword '{k}' must be of type str")
+    genre = neo_genre(typing.cast(str, kwargs.get("genre", "Other")))
+    screenshot = int(typing.cast(str, kwargs.get("screenshot", "0")))
+    # the NGH number is a hex-looking game id, e.g. NGH-041 is 0x041
+    ngh = int(typing.cast(str, kwargs.get("ngh", "0")), 16)
+
+    out = bytearray()
+    out += struct.pack("3sB", "NEO".encode(), 1)
+    out += struct.pack(
+        "<6I", len(pdata), len(sdata), len(mdata), len(v1data), 0, len(cdata)
+    )
+    out += struct.pack("<4I", cart.year, genre, screenshot, ngh)
+    out += struct.pack("33s", cart.long_name[:32].encode())
+    out += struct.pack("17s", cart.publisher[:16].encode())
+    # zero-fill the remainder of the 4KiB header
+    out += bytes(4096 - len(out))
+    out += pdata + sdata + mdata + v1data + cdata
+
+    with open(output, "wb") as f:
+        f.write(out)
+
+
+#
 # Command-line interface
 #
 
@@ -377,7 +481,7 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "-f", "--format", help="ROM format (mame, gngeo)", default="mame"
+        "-f", "--format", help="ROM format (mame, gngeo, neo)", default="mame"
     )
 
     parser.add_argument(
@@ -495,7 +599,10 @@ def cli_main():
         elif args.format == "gngeo":
             gngeo_build_hash(cart, args.output, **extra.get("gngeo", {}))
     elif args.build == "cartridge":
-        zip_build_cartridge(cart, args.output, **extra.get("zip", {}))
+        if args.format == "neo":
+            neo_build_cartridge(cart, args.output, **extra.get("neo", {}))
+        else:
+            zip_build_cartridge(cart, args.output, **extra.get("zip", {}))
 
 
 if __name__ == "__main__":
