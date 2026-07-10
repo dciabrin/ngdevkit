@@ -92,7 +92,9 @@ install-tools:
 
 install-pkgconfig:
 	$(INSTALL) -d $(DESTDIR)$(prefix)/share/pkgconfig && \
-	$(INSTALL) ngdevkit.pc $(DESTDIR)$(prefix)/share/pkgconfig
+	$(INSTALL) ngdevkit.pc $(DESTDIR)$(prefix)/share/pkgconfig && \
+	$(INSTALL) -d $(DESTDIR)$(prefix)/lib/pkgconfig && \
+	$(INSTALL) ngdevkit.pc $(DESTDIR)$(prefix)/lib/pkgconfig
 
 clean-tools:
 	set -e; \

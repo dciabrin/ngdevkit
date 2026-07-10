@@ -1,13 +1,19 @@
 # ngdevkit pkg-config source file
+#
+# All paths are resolved relative to the location of this file (${pcfiledir})
+# rather than being baked in at configure time. This keeps an installed tree
+# relocatable: extract it anywhere, point PKG_CONFIG_PATH at
+# <tree>/lib/pkgconfig (or <tree>/share/pkgconfig), and it just works. The file
+# is installed two levels below the tree root, so ${pcfiledir}/../.. is prefix.
 
-prefix=@prefix@
-exec_prefix=@exec_prefix@
-bindir=@bindir@
-libdir=@prefix@/m68k-neogeo-elf/lib
-includedir=@prefix@/m68k-neogeo-elf/include
-sharedir=@datarootdir@/ngdevkit
-z80includedir=@prefix@/z80-neogeo-ihx/include
-z80libdir=@prefix@/z80-neogeo-ihx/lib
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+bindir=${exec_prefix}/bin
+libdir=${prefix}/m68k-neogeo-elf/lib
+includedir=${prefix}/m68k-neogeo-elf/include
+sharedir=${prefix}/share/ngdevkit
+z80includedir=${prefix}/z80-neogeo-ihx/include
+z80libdir=${prefix}/z80-neogeo-ihx/lib
 
 Name: ngdevkit
 Description: Opensource development for the Neo-Geo
