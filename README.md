@@ -78,6 +78,7 @@ packages, available in the ngdevkit tap:
     eval $(/opt/homebrew/bin/brew shellenv)
     # install ngdevkit
     brew tap dciabrin/ngdevkit
+    brew trust dciabrin/ngdevkit
     brew install ngdevkit
     # the remaining packages are only required for the examples
     brew install pkg-config autoconf automake rsync zip imagemagick sox ngdevkit-gngeo

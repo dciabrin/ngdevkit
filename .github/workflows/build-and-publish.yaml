@@ -109,6 +109,7 @@ jobs:
       - name: Dependencies
         run: |
           brew tap dciabrin/ngdevkit
+          brew trust dciabrin/ngdevkit
           brew install python3 --overwrite
           brew install pillow
           brew install automake ngdevkit-toolchain zip pkg-config sdl2 sdl2_image
