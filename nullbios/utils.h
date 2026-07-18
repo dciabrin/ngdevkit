@@ -1,6 +1,6 @@
 /*
  * BIOS utility functions
- * Copyright (c) 2025 Damien Ciabrini
+ * Copyright (c) 2025-2026 Damien Ciabrini
  * This file is part of ngdevkit
  *
  * ngdevkit is free software: you can redistribute it and/or modify
@@ -21,9 +21,9 @@
 #define __NULLBIOS_UTILS_H__
 
 #define WITH_BACKUP_RAM_RW(x) {                                  \
-    __asm__ volatile ("move.b  %d0, 0x3a001d.l" ::: "memory");   \
+    __asm__ volatile ("move.b  %%d0, 0x3a001d.l" ::: "memory");   \
     x                                                            \
-    __asm__ volatile ("move.b  %d0, 0x3a000d.l" ::: "memory");   \
+    __asm__ volatile ("move.b  %%d0, 0x3a000d.l" ::: "memory");   \
     }
 
 #define CC_CLEAR_X_FLAG()                                        \
