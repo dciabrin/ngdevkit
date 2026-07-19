@@ -34,15 +34,12 @@ install: install-tools install-pkgconfig
 
 clean: clean-tools
 
-clean:
-	rm -rf local/*
-
 distclean: clean clean-pkgconfig
-	rm -rf build local config.log config.status
+	rm -rf build config.log config.status
 	find . \( -name '*~' -or -name Makefile -or -name Makefile.config \) \
 	-exec rm {} \;
 
-build local:
+build:
 	mkdir $@
 
 .PHONY: clean distclean
@@ -52,7 +49,8 @@ build local:
 # ------ toolchain (gcc, binutils, newlib, gdb) ------
 
 ifeq ($(EXTERNAL_TOOLCHAIN), no)
-build-tools: build-toolchain | $(prefix)/bin
+build-tools: build-toolchain
+install-tools: install-toolchain
 distclean: distclean-toolchain
 endif
 
@@ -125,7 +123,7 @@ distclean-examples:
 
 ifeq ($(EXTERNAL_EMUDBG), no)
 all: build-emudbg
-build-gngeo: install-emudbg
+build-gngeo: build-emudbg
 install: install-emudbg
 distclean: distclean-emudbg
 endif
@@ -190,7 +188,7 @@ build/gngeo: gngeo
 	mkdir -p build/gngeo && \
 	cd build/gngeo && \
 	$$CURPWD/gngeo/configure --program-prefix=ngdevkit- $(GNGEO_BUILD_FLAGS) \
-	CPPFLAGS="$$CPPFLAGS -Wno-implicit-function-declaration -I$(prefix)/include" CFLAGS="$$CFLAGS -Wno-implicit-function-declaration -I$(prefix)/include -DGNGEORC=\\\"ngdevkit-gngeorc\\\"" LDFLAGS="-L$(prefix)/lib" PKG_CONFIG_PATH="$(prefix)/lib/pkgconfig" \
+	CPPFLAGS="$$CPPFLAGS -Wno-implicit-function-declaration -I$$CURPWD/emudbg/src -I$(prefix)/include" CFLAGS="$$CFLAGS -Wno-implicit-function-declaration -I$$CURPWD/emudbg/src -I$(prefix)/include -DGNGEORC=\\\"ngdevkit-gngeorc\\\"" LDFLAGS="-L$$PWD/../emudbg/src -L$(prefix)/lib" PKG_CONFIG_PATH="$$PWD/../emudbg:$(prefix)/lib/pkgconfig" \
 	-v && $(MAKE) -j1 pkgdatadir=$(GNGEOPKGDATADIR)
 
 install-gngeo: $(GNGEO)

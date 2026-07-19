@@ -67,6 +67,8 @@ dnl if ngdevkit-toolkit is already installed system-wide, use it
 if test x"$EXTERNAL_TOOLCHAIN" = x"yes"; then
 AC_PATH_PROG([nggcc], [m68k-neogeo-elf-gcc], [no])
 AS_IF([test x"$nggcc" = x"no"], [AC_MSG_ERROR([m68k-neogeo-elf-gcc not found in path.])])
+nggccld="$nggcc"
+AC_SUBST([nggccld])
 AC_PATH_PROG([ngas], [m68k-neogeo-elf-as], [no])
 AS_IF([test x"$ngas" = x"no"], [AC_MSG_ERROR([m68k-neogeo-elf-as not found in path.])])
 AC_PATH_PROG([ngld], [m68k-neogeo-elf-ld], [no])
@@ -102,18 +104,19 @@ fi
 
 else
 dnl Otherwise we'll build it
-nggcc=$prefix/bin/m68k-neogeo-elf-gcc
-ngas=$prefix/bin/m68k-neogeo-elf-as
-ngld=$prefix/bin/m68k-neogeo-elf-ld
-ngar=$prefix/bin/m68k-neogeo-elf-ar
-ngranlib=$prefix/bin/m68k-neogeo-elf-ranlib
-ngobjcopy=$prefix/bin/m68k-neogeo-elf-objcopy
-ngsdcc=$prefix/bin/z80-neogeo-ihx-sdcc
-ngsdas=$prefix/bin/z80-neogeo-ihx-sdasz80
-ngsdld=$prefix/bin/z80-neogeo-ihx-sdldz80
-ngsdar=$prefix/bin/z80-neogeo-ihx-sdar
-ngsdranlib=$prefix/bin/z80-neogeo-ihx-sdranlib
-ngsdobjcopy=$prefix/bin/z80-neogeo-ihx-sdobjcopy
+ngar='$(BUILD)/ngbinutils/binutils/ar'
+ngranlib='$(BUILD)/ngbinutils/binutils/ranlib'
+ngobjcopy='$(BUILD)/ngbinutils/binutils/objcopy'
+ngld='$(BUILD)/ngbinutils/binutils/ld/ld-new'
+ngas='$(BUILD)/ngbinutils/binutils/gas/as-new'
+nggcc='$(BUILD)/nggcc/gcc/xgcc -B $(BUILD)/nggcc/gcc -isystem $(BUILD)/nggcc/gcc/include'
+nggccld='$(BUILD)/nggcc/gcc/xgcc -B $(BUILD)/nggcc/gcc -L $(BUILD)/ngnewlib/m68k-neogeo-elf/newlib'
+ngsdar='$(BUILD)/ngsdcc/bin/sdar'
+ngsdas='$(BUILD)/ngsdcc/bin/sdasz80'
+ngsdcc='$(BUILD)/ngsdcc/bin/sdcc'
+ngsdld='$(BUILD)/ngsdcc/bin/sdldz80'
+ngsdobjcopy='$(BUILD)/ngsdcc/bin/sdobjcopy'
+ngsdranlib='$(BUILD)/ngsdcc/bin/sdranlib'
 fi
 
 
