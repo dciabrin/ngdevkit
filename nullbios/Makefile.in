@@ -83,13 +83,13 @@ bios-ram.o: BIOSOPTS=-O0
 	$(NGGCC) $(BIOSCFLAGS) $(BIOSOPTS) -c $< -o $@
 
 sp-s2.elf: sp-s2.o $(BIOS_OBJS:%=%.o)
-	$(NGGCC) $(BIOSLDFLAGS) $^ -lngdevkit -o $@
+	$(NGGCCLD) $(BIOSLDFLAGS) $^ -lngdevkit -o $@
 
 sp-s2.o: biosstart.S
 	$(NGGCC) -DBIOS_ROM_HARDWARE=1 -DBIOS_ROM_COUNTRY=2 -I../include -c $< -o $@
 
 aes-bios.elf: aes-bios.o $(BIOS_OBJS:%=%.o)
-	$(NGGCC) $(BIOSLDFLAGS) $^ -lngdevkit -o $@
+	$(NGGCCLD) $(BIOSLDFLAGS) $^ -lngdevkit -o $@
 
 aes-bios.o: biosstart.S
 	$(NGGCC) -DBIOS_ROM_HARDWARE=0 -DBIOS_ROM_COUNTRY=2 -I../include -c $< -o $@

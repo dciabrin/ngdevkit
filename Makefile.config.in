@@ -23,13 +23,17 @@ EXTERNAL_GNGEO=@EXTERNAL_GNGEO@
 EXTERNAL_QCRT=@EXTERNAL_QCRT@
 EXAMPLES=@EXAMPLES@
 
+# build directory from subdirectories
+BUILD=../build
+
 # toolkit binaries
 NGAR=@ngar@
+NGRANLIB=@ngranlib@
+NGOBJCOPY=@ngobjcopy@
+NGLD=@ngld@
 NGAS=@ngas@
 NGGCC=@nggcc@
-NGLD=@ngld@
-NGOBJCOPY=@ngobjcopy@
-NGRANLIB=@ngranlib@
+NGGCCLD=@nggccld@
 NGSDAR=@ngsdar@
 NGSDAS=@ngsdas@
 NGSDCC=@ngsdcc@
