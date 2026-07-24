@@ -1,0 +1,122 @@
+diff --git a/src/menu.c b/src/menu.c
+index 06dcc96..4696d29 100644
+--- a/src/menu.c
++++ b/src/menu.c
+@@ -565,80 +565,74 @@ void gn_reset_pbar(void) {
+ 	pbar_y = 0;
+ }
+ 
+-static SDL_Thread *pbar_th;
+-
+ typedef struct pbar_data {
+ 	char *name;
+ 	int pos;
+ 	int size;
+-	int running;
+ } pbar_data;
+ 
+-static volatile pbar_data pbar;
++static pbar_data pbar;
++static int pbar_x;
++static Uint32 pbar_last_update;
+ 
+-int pbar_anim_thread(void *data) {
+-	pbar_data *p = (pbar_data*) data;
++/*
++ * Draw progress updates on the caller (main) thread. OpenGL contexts are
++ * thread-affine, and dispatching screen_update() from the old worker thread
++ * crashes with NVIDIA's GL implementation.
++ */
++static void pbar_render(void) {
+ 	SDL_Rect src_r = { 2, 0, gngeo_logo->w, gngeo_logo->h };
+ 	SDL_Rect dst_r = { 219 + 26, 146 + 16, gngeo_logo->w, gngeo_logo->h };
+ 	SDL_Rect dst2_r = { 0, 0, gngeo_logo->w, gngeo_logo->h };
+-	int x = 0;
+-
+-	while (p->running) {
+-		draw_back();
+-		draw_string(menu_buf, mfont, MENU_TITLE_X, MENU_TITLE_Y + 150, p->name);
+-		draw_string(menu_buf, sfont, MENU_TITLE_X, MENU_TITLE_Y + 165,
+-				"Please wait!");
+ 
+-		SDL_BlitSurface(gngeo_logo, NULL, pbar_logo, NULL);
++	draw_back();
++	draw_string(menu_buf, mfont, MENU_TITLE_X, MENU_TITLE_Y + 150, pbar.name);
++	draw_string(menu_buf, sfont, MENU_TITLE_X, MENU_TITLE_Y + 165,
++			"Please wait!");
+ 
+-		dst2_r.y = -22 - (p->pos * 64.0) / p->size;
+-		x += 3;
+-		if (x > gngeo_logo->w)
+-			x -= gngeo_logo->w;
++	SDL_BlitSurface(gngeo_logo, NULL, pbar_logo, NULL);
+ 
+-		dst2_r.x = x;
+-		SDL_BlitSurface(gngeo_mask, NULL, pbar_logo, &dst2_r);
++	dst2_r.y = -22;
++	if (pbar.size > 0)
++		dst2_r.y -= (pbar.pos * 64.0) / pbar.size;
++	pbar_x += 3;
++	if (pbar_x > gngeo_logo->w)
++		pbar_x -= gngeo_logo->w;
+ 
+-		dst2_r.x = x - gngeo_logo->w;
+-		dst2_r.y = -22 - (p->pos * 64.0) / p->size;
+-		SDL_BlitSurface(gngeo_mask, NULL, pbar_logo, &dst2_r);
++	dst2_r.x = pbar_x;
++	SDL_BlitSurface(gngeo_mask, NULL, pbar_logo, &dst2_r);
+ 
+-		SDL_BlitSurface(pbar_logo, &src_r, menu_buf, &dst_r);
++	dst2_r.x = pbar_x - gngeo_logo->w;
++	SDL_BlitSurface(gngeo_mask, NULL, pbar_logo, &dst2_r);
+ 
+-		SDL_BlitSurface(menu_buf, NULL, buffer, NULL);
+-#if !defined(__APPLE__) && !defined(MINGW) && !defined(__MINGW32__) && !defined(__MINGW64__)
+-		// Various OpenGL implementations limit the use of
+-		// OpenGL API to the thread that created the OpenGL
+-		// context. Update the screen only if we can.
+-		screen_update();
+-#endif
+-		frame_skip(0);
+-		//printf("TOTO %d %d %d\n",p->pos,p->size,dst2_r.x);
+-	}
+-	SDL_BlitSurface(gngeo_logo, NULL, pbar_logo, NULL);
+ 	SDL_BlitSurface(pbar_logo, &src_r, menu_buf, &dst_r);
+-#if !defined(__APPLE__) && !defined(MINGW) && !defined(__MINGW32__) && !defined(__MINGW64__)
++	SDL_BlitSurface(menu_buf, NULL, buffer, NULL);
+ 	screen_update();
+-#endif
+-	frame_skip(0);
+-	return 0;
+ }
+ 
+ void gn_init_pbar(char *name, int size) {
+ 	pbar.name = name;
+ 	pbar.pos = 0;
+ 	pbar.size = size;
+-	pbar.running = 1;
+-	pbar_th = SDL_CreateThread(pbar_anim_thread, "pbar_th", (void*) &pbar);
++	pbar_x = 0;
++	pbar_render();
++	pbar_last_update = SDL_GetTicks();
+ }
+ 
+ void gn_update_pbar(int pos) {
++	Uint32 now;
++
+ 	pbar.pos = pos;
++	now = SDL_GetTicks();
++	if (pos >= pbar.size || now - pbar_last_update >= 16) {
++		pbar_render();
++		pbar_last_update = now;
++	}
+ }
+ 
+ void gn_terminate_pbar(void) {
+-	pbar.running = 0;
+-	SDL_WaitThread(pbar_th, NULL);
++	pbar.pos = pbar.size;
++	pbar_render();
+ }
+ 
+ void gn_popup_error(char *name, char *fmt, ...) {

@@ -20,6 +20,7 @@ include Makefile.config
 # External subpackages
 EMUDBG_GIT=https://github.com/dciabrin/emudbg
 GNGEO_GIT=https://github.com/dciabrin/gngeo
+GNGEO_PATCHES=patches/gngeo-main-thread-progress.patch
 TOOLCHAIN_GIT=https://github.com/dciabrin/ngdevkit-toolchain
 EXAMPLES_GIT=https://github.com/dciabrin/ngdevkit-examples
 
@@ -173,9 +174,22 @@ GNGEO=$(prefix)/bin/ngdevkit-gngeo
 GNGEOPKGDATADIR=$(prefix)/share/ngdevkit-gngeo
 endif
 
-gngeo:
-	$(GIT) clone --branch ngdevkit $(GNGEO_GIT) $@ && \
-	cd gngeo && autoreconf -iv $(GNGEO_ACLOCAL_PATH)
+gngeo: $(GNGEO_PATCHES)
+	if test ! -d $@/.git; then \
+		$(GIT) clone --branch ngdevkit $(GNGEO_GIT) $@; \
+	fi && \
+	set -e; \
+	for patch in $(GNGEO_PATCHES); do \
+		if $(GIT) -C $@ apply --check ../$$patch 2>/dev/null; then \
+			$(GIT) -C $@ apply ../$$patch; \
+		elif $(GIT) -C $@ apply --reverse --check ../$$patch 2>/dev/null; then \
+			:; \
+		else \
+			echo "cannot apply GnGeo patch $$patch" >&2; \
+			exit 1; \
+		fi; \
+	done && \
+	cd $@ && autoreconf -iv $(GNGEO_ACLOCAL_PATH)
 
 build-gngeo: build/gngeo
 
