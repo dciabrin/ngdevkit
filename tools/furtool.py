@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2024 Damien Ciabrini
+# Copyright (c) 2024-2026 Damien Ciabrini
 # This file is part of ngdevkit
 #
 # ngdevkit is free software: you can redistribute it and/or modify
@@ -263,7 +263,6 @@ def read_element_sng2(mod, bs):
     mod.speeds = [bs.u2() for i in range(16)][:speed_length]
     subsong_name = bs.ustr()
     mod.comment = bs.ustr()
-    mod.fxcolumns = [bs.u1() for x in range(14)]
     # 14 tracks in YM2610 (4 FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
     # 17 tracks in extended YM2610 (3 FM, 4 extended FM, 3 SSG, 6 ADPCM-A, 1 ADPCM-B)
     tracks = 17 if mod.ext_fm else 14
@@ -271,6 +270,7 @@ def read_element_sng2(mod, bs):
     for i in range(tracks):
         for o in range(nb_orders):
             mod.orders[o][i] = bs.u1()
+    mod.fxcolumns = [bs.u1() for x in range(tracks)]
     bs.read(tracks) # skip channel hide status (UI)
     bs.read(tracks) # skip channel collapse status (UI)
     for i in range(tracks): bs.ustr() # skip channel names
@@ -294,7 +294,7 @@ def read_module(bs):
         return read_module_pre240(bs, mod)
 
     assert bs.read(4) == b"INF2"
-    block_size = bs.read(4) # TODO assert correct size below
+    block_size = bs.u4() # TODO assert correct size below
 
     # song information
     song_name = bs.ustr()
@@ -356,7 +356,10 @@ def read_module(bs):
     # otherwise consider the module relies on Furnace defaults (currently half volume)
     if 0x02 in elements:
         el_flag_pos = elements[0x02][0]
-        check_chip_flags(el_flag_pos, bs)
+        # Element 2 might be present but point to a null offset,
+        # which isn't a real element and should be ignored
+        if el_flag_pos:
+            check_chip_flags(el_flag_pos, bs)
     else:
         HALF_SSG_VOL = True
 
