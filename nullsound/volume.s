@@ -104,11 +104,12 @@ state_volume_adpcm_a_master_ramp::
 
 
 init_volume_state_tracker::
-        ;; reset music volume to max (no attenuation)
+        ;; reset music volume to max (no attenuation), start unmuted
         ld      a, #0x0f
         ld      (state_volume_music_level), a
-        ld      (state_volume_muted), a
         ld      (state_volume_mute_level), a
+        xor     a
+        ld      (state_volume_muted), a
         ;; reset channel levels
         ld      a, #0
         ld      (state_fm_volume_attenuation), a
