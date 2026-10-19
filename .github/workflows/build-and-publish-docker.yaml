@@ -1,0 +1,35 @@
+name: Build and Publish Docker
+
+on:
+ workflow_dispatch:
+  inputs:
+    image:
+      default: "hldtux/ndevkit"
+      description: "Docker image name"
+
+jobs:
+  build:
+    name: ngdevkit ${{ github.event.inputs.image }}
+    runs-on: ubuntu-latest
+    environment: DockerHub
+
+    steps:
+
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          path: .
+    
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Deploy
+        run: |
+            make IMAGE=${{ github.event.inputs.image }} -f Makefile.docker docker push
+            echo "https://hub.docker.com/r/${{ github.event.inputs.image }}"
+            
