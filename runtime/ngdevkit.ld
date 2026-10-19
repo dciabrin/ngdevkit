@@ -133,6 +133,16 @@ SECTIONS {
    * reference is not resolved properly by the MEMORY command
    */
   rom_backup_data_address = DEFINED(rom_backup_data_address)? rom_backup_data_address : 0x100000;
+
+  /* Catch overridden backup-RAM placements that would land outside the
+   * 60 KB of m68k work RAM. Without these guards, ld would silently lay
+   * out .bss.bram at whatever address was given and the runtime would
+   * read/write garbage on access. */
+  ASSERT(rom_backup_data_address >= ORIGIN(RAM),
+         "rom_backup_data_address is below RAM origin (0x100000)")
+  ASSERT(rom_backup_data_address + LENGTH(BRAM) <= ORIGIN(RAM) + LENGTH(RAM),
+         "rom_backup_data_address + BRAM length (0x1000) extends past RAM end")
+
   .bss.bram rom_backup_data_address : SUBALIGN(0) {
     *(.bss.bram)
     . = ALIGN(4);
