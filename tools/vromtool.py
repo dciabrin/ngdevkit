@@ -85,6 +85,15 @@ def validate(s):
            val["uri"].startswith("data:;base64,")
 
 
+def align_adpcm_a_sample(s, start):
+    if isinstance(s, adpcm_a):
+        if len(s.data) > 0x100000:
+            error("ADPCM-A sample '%s' is larger than one 1 MiB page" % s.name)
+        if s.data and start // 0x100000 != (start + len(s.data) - 1) // 0x100000:
+            return start + 0x100000 - start % 0x100000
+    return start
+
+
 # Basic sample packing: allocate ADPCM samples in sequence
 # until a ROM is full. Assume ADPCM A and B share the same ROM
 def allocate_samples(smp, vrom_size, out_vrom_pattern):
@@ -96,14 +105,8 @@ def allocate_samples(smp, vrom_size, out_vrom_pattern):
     for s in smp:
         if len(s.data) > vrom_size:
             error("Sample '%s' is larger than one VROM" % s.name)
-        if isinstance(s, adpcm_a) and len(s.data) > 0x100000:
-            error("ADPCM-A sample '%s' is larger than one 1 MiB page" % s.name)
         while True:
-            # ADPCM-A start and inclusive end addresses must share a 1 MiB page.
-            start = absolute_pos + vrom_pos
-            if isinstance(s, adpcm_a) and s.data and \
-               start // 0x100000 != (start + len(s.data) - 1) // 0x100000:
-                vrom_pos += 0x100000 - start % 0x100000
+            vrom_pos = align_adpcm_a_sample(s, absolute_pos + vrom_pos) - absolute_pos
             if vrom_pos + len(s.data) <= vrom_size:
                 break
             if f:
