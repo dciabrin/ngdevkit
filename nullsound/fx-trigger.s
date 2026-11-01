@@ -30,10 +30,14 @@
 
 ;;; Enable delayed trigger for the next note and volume
 ;;; (note and volume and played after a number of ticks)
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: delay
-;;; [ hl modified ]
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | delay
+;;;
+;;; @modified af, hl
+;;;
 trigger_delay_init::
         ;; a: delay
         ld      a, (hl)
@@ -52,10 +56,14 @@ trigger_delay_init::
 
 ;;; Enable delayed cut for the note currently playing
 ;;; (note is stopped after a defined number of steps)
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: delay
-;;; [ hl modified ]
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | delay
+;;;
+;;; @modified af, hl
+;;;
 trigger_cut_init::
         ;; a: delay
         ld      a, (hl)
@@ -73,10 +81,14 @@ trigger_cut_init::
 
 
 ;;; Enable another note trigger after a defined number of steps
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: delay
-;;; [ hl modified ]
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | delay
+;;;
+;;; @modified af, hl
+;;;
 trigger_retrigger_init::
         ;; a: delay
         ld      a, (hl)
@@ -94,11 +106,13 @@ trigger_retrigger_init::
 
 
 ;;; Call an function from the action lookup table
-;;; ------
-;;; hl: function lookup table
-;;; bc: offset in bytes in the function lookup table
-;;;  a: input (note, vol...)
-;;; [bc, de modified]
+;;;
+;;; @param[in] hl: function lookup table
+;;; @param[in] bc: offset in bytes in the function lookup table
+;;; @param[in] a: input (note, vol...)
+;;;
+;;; @modified af, bc, de
+;;;
 trigger_action_function::
         push    hl
 
@@ -119,10 +133,12 @@ _trigger_post_action:
 
 
 ;;; Update the trigger configuration for the current channel
-;;; ------
-;;; ix: mirrored state of the current channel
-;;; hl: function lookup table for the current channel
-;;; [hl, bc, de modified]
+;;;
+;;; @param[in] ix: mirrored state of the current channel
+;;; @param[in] hl: function lookup table for the current channel
+;;;
+;;; @modified af, hl, bc, de
+;;;
 eval_trigger_step::
         ;; if this is a retrigger, check whether we reached the last tick
         ;; for this row, and stop it after this eval
