@@ -45,6 +45,7 @@ def yaml_load_all(f):
 
 
 VERBOSE = False
+ADPCM_A_PAGE_SIZE = 0x100000
 
 
 def error(s):
@@ -106,6 +107,15 @@ def reuse_allocated_location(sample, allocated_samples):
     return True
 
 
+# Skip to the next 1 MiB page when an ADPCM-A sample would end past the page it starts in 
+def padding_before_sample(sample, vrom_address):
+    padding = 0
+    page_offset = vrom_address % ADPCM_A_PAGE_SIZE
+    if isinstance(sample, adpcm_a) and page_offset + len(sample.data) > ADPCM_A_PAGE_SIZE:
+        padding = ADPCM_A_PAGE_SIZE - page_offset
+    return padding
+
+
 # Basic sample packing: allocate ADPCM samples in sequence
 # until a ROM is full. Assume ADPCM A and B share the same ROM
 def allocate_samples(smp, vrom_size, out_vrom_pattern):
@@ -118,6 +128,7 @@ def allocate_samples(smp, vrom_size, out_vrom_pattern):
     for s in smp:
         if reuse_allocated_location(s, allocated_samples):
             continue
+        vrom_pos += padding_before_sample(s, absolute_pos + vrom_pos)
         if vrom_pos+len(s.data) > vrom_size:
             if f:
                 f.close()
