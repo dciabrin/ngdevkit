@@ -27,15 +27,17 @@
 
         .area  CODE
 
-;;; multiply a 24bit integer by a 8bit integer, yielding a 32bit integer
+;;; Multiply a 24bit integer by a 8bit integer, yielding a 32bit integer
 ;;; unrolled loop for slightly faster operation
-;;; ----
-;;; IN:
-;;;    bc:de : 24bits multiplicand
-;;;    a: multiplier
-;;; OUT:
-;;;    hl:iy : multiplied number
-;;; bc, de, hl, iy modified
+;;;
+;;; @param[in] bc: 24bit multiplicand (MSB)
+;;; @param[in] de: 24bit multiplicand (LSB)
+;;; @param[in] a: multiplier
+;;; @param[out] hl: multiplied number (MSB)
+;;; @param[out] iy: multiplied number (LSB)
+;;;
+;;; @modified af, bc, de, hl, iy
+;;;
 mul_int24_by_int8:
         ;; setup output
         ld      hl, #0
@@ -120,15 +122,17 @@ mul_int24_by_int8:
         ret
 
 
-;;; scale a 24bit integer i by a 16bit factor in [0..1[
+;;; Scale a 24bit integer i by a 16bit factor in [0..1[
 ;;; the scaling yields a 24bit integer in [0..i[
-;;; ----
-;;; IN:
-;;;    cde: 24bit integer
-;;;     hl: 16bit scaling factor
-;;; OUT:
-;;;    deb: scaled 24bit integer
-;;; bc, de, hl, iy modified
+;;;
+;;; @param[in] c: integer i (MSB)
+;;; @param[in] de: integer i (LSB)
+;;; @param[in] hl: scaling factor
+;;; @param[out] de: scaled 24bit integer (MSB)
+;;; @param[out] b: scaled 24bit integer (LSB)
+;;;
+;;; @modified af, bc, de, hl, iy
+;;;
 scale_int24_by_factor16:
         ld      b, #0
         push    de              ; +distance __:16

@@ -121,10 +121,12 @@ init_z80_and_wait:
 
 
 ;;; Intialize and start the sound driver
+;;;
 ;;; This function is called during a NMI, this is the last
 ;;; function called from the NMI before starting the driver
-;;; ------
-;;; [ bc ]: optional hook, called after the driver is initialized
+;;;
+;;; @param[in] bc: optional hook, called after the driver is initialized
+;;;
 snd_init_driver_from_nmi::
         di
         ld      (#POST_INIT_HOOK), bc
@@ -134,14 +136,14 @@ snd_init_driver_from_nmi::
         retn
 
 
-;;; Sound driver
-;;; ------------
+;;; Start the sound driver
+;;;
 ;;; This is a simple state machine:
-;;;  . process pending commands received via NMI
-;;;  . update the various state trackers
-;;;     . interrupts received
-;;;     . state of the ym2610 (ADPCM playing...)
-;;;     . long running tasks (music player, volume fading...)
+;;;  - process pending commands received via NMI
+;;;  - update the various state trackers
+;;;     - interrupts received
+;;;     - state of the ym2610 (ADPCM playing...)
+;;;     - long running tasks (music player, volume fading...)
 ;;;
 snd_start_driver::
         ;; mute the YM2610
@@ -191,8 +193,10 @@ snd_mainloop:
 ;;;
 
 ;;; Register a sound request for processing after the NMI
+;;;
 ;;; push the request from the m68k to the list of pending sound requests
 ;;; the processing is delayed to allow the 68k to wait as few as possible
+;;;
 snd_push_pending_command:
         exx
         ;; bump the pending offset
