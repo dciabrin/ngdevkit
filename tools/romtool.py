@@ -477,16 +477,21 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Neo Geo ROM management.")
 
     parser.add_argument(
-        "-b", "--build", help="Build action (cartridge, hash)", default="cartridge"
+        "-b", "--build",
+        dest="build",
+        help="Build action (cartridge, hash)", default="cartridge"
     )
 
     parser.add_argument(
-        "-f", "--format", help="ROM format (mame, gngeo, neo)", default="mame"
+        "-f", "--format",
+        dest="format",
+        help="ROM format (mame, gngeo, neo)", default="mame"
     )
 
     parser.add_argument(
         "-p",
         "--prom",
+        dest="prom",
         action="extend",
         nargs="+",
         help="program ROM files",
@@ -495,6 +500,7 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-m",
         "--mrom",
+        dest="mrom",
         action="extend",
         nargs="+",
         help="sound driver ROM files",
@@ -503,6 +509,7 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-v",
         "--vrom",
+        dest="vrom",
         action="extend",
         nargs="+",
         help="ADPCM ROM files",
@@ -511,6 +518,7 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-s",
         "--srom",
+        dest="srom",
         action="extend",
         nargs="+",
         help="fixed graphics ROM files",
@@ -519,21 +527,27 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-c",
         "--crom",
+        dest="crom",
         action="extend",
         nargs="+",
         help="sprite graphics ROM files",
         required=True,
     )
 
-    parser.add_argument("-n", "--name", help="game name", required=True)
-    parser.add_argument("-l", "--long-name", help="long descriptive game name")
-    parser.add_argument("-y", "--year", type=int, help="publishing year")
+    parser.add_argument("-n", "--name", dest="name",
+                        help="game name", required=True)
+    parser.add_argument("-l", "--long-name", dest="long_name",
+                        help="long descriptive game name")
+    parser.add_argument("-y", "--year", dest="year",
+                        type=int, help="publishing year")
     parser.add_argument("--publisher", help="publisher")
-    parser.add_argument("-o", "--output", help="name of output file")
+    parser.add_argument("-o", "--output", dest="output",
+                        help="name of output file")
 
     parser.add_argument(
         "-x",
         "--extra",
+        dest="extra",
         action="extend",
         nargs="+",
         help="emulator-specific extra config",

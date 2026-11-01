@@ -1171,15 +1171,15 @@ def main():
                        help="extract samples data from a Furnace module")
 
     parser.add_argument("FILE", help="Furnace module")
-    parser.add_argument("-o", "--output", help="Output file name")
+    parser.add_argument("-o", "--output", dest="output", help="Output file name")
 
-    parser.add_argument("-b", "--bank", type=int,
+    parser.add_argument("-b", "--bank", dest="bank", type=int,
                        help="generate data for a bank-switched Z80 memory area")
 
-    parser.add_argument("-n", "--name",
+    parser.add_argument("-n", "--name", dest="name",
                         help="Name of the generated instrument table")
 
-    parser.add_argument("-m", "--map",
+    parser.add_argument("-m", "--map", dest="map",
                         help="Name of the ADPCM sample map file to include")
 
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",

@@ -240,17 +240,21 @@ def main():
     parser.add_argument("FILE", nargs="+",
                         help="ADPCM map file to process")
     parser.add_argument("-o", "--output", required=True,
+                        dest="output",
                         help="Output file path. When generating multiple VROMs, the"\
                         " basename will substitute 'X' for the ROM number")
 
     parser.add_argument("-m", "--output-map",
+                        dest="output_map",
                         help="Output sample map offsets as ASM defines")
 
     parser.add_argument("-s", "--size",
+                        dest="size",
                         type=int, required=True,
                         help="size of one VROM in bytes")
 
     parser.add_argument("-n", "--nb",
+                        dest="nb",
                         type=int, default="1",
                         help="number of VROMs to generate")
 

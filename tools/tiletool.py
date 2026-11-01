@@ -538,12 +538,14 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     pmode.add_argument(
         "-x",
         "-extract",
+        dest="extract",
         action="store_true",
         help="extract tiles from ROM into a 2D image",
     )
     pmode.add_argument(
         "-c",
         "-create",
+        dest="create",
         action="store_true",
         help="create ROM with tiles from a 2D image",
     )
@@ -558,12 +560,15 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("FILE", nargs="+", help="file to process")
-    parser.add_argument("-o", "--output", nargs="+", help="name of output file")
+    parser.add_argument("-o", "--output",
+                        dest="output",
+                        nargs="+", help="name of output file")
 
     parser.add_argument(
         "-s",
         "--size",
         metavar="BYTES",
+        dest="size",
         type=int,
         help="size of the generated ROM (create)",
     )
@@ -571,6 +576,7 @@ def cli_arguments_parser() -> argparse.ArgumentParser:
         "-w",
         "--width",
         metavar="PIXELS",
+        dest="width",
         type=int,
         help="width of the generated 2D image (extract)",
     )
@@ -595,18 +601,18 @@ def cli_main():
     arguments = cli_arguments_parser().parse_args()
 
     # filename order depends on the actions to execute
-    image_name: str = arguments.output[0] if arguments.x else arguments.FILE[0]
-    rom_args: List[str] = arguments.FILE if arguments.x else arguments.output
+    image_name: str = arguments.output[0] if arguments.extract else arguments.FILE[0]
+    rom_args: List[str] = arguments.FILE if arguments.extract else arguments.output
 
     # input checks
-    if arguments.x:
+    if arguments.extract:
         for r in rom_args:
             if not os.path.exists(r):
                 error(f"file does not exist: {r}")
         if arguments.sprite:
             if os.path.getsize(rom_args[0]) != os.path.getsize(rom_args[1]):
                 error("input C-ROMs have different sizes")
-    elif arguments.c:
+    elif arguments.create:
         if not os.path.exists(image_name):
             error(f"file does not exist: {image_name}")
 
@@ -629,7 +635,7 @@ def cli_main():
 
     try:
         # mode: ROM extraction
-        if arguments.x:
+        if arguments.extract:
             num_tiles = len(rom)
             image = empty_image_for_tiles(
                 len(rom), tile_size, width=tile_strip_in_pixels
@@ -647,7 +653,7 @@ def cli_main():
             image.save(image_name)
 
         # mode: ROM creation
-        elif arguments.c:
+        elif arguments.create:
             image = Image.open(image_name, "r")
             if (image.width % tile_size != 0) or (image.height % tile_size != 0):
                 error(f"image dimensions are not multiple of {tile_size}")

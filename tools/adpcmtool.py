@@ -380,16 +380,16 @@ def main():
 
     paction = parser.add_argument_group('action')
     pmode = paction.add_mutually_exclusive_group(required=True)
-    pmode.add_argument('-e', '--encode', action='store_true',
+    pmode.add_argument('-e', '--encode', dest='encode', action='store_true',
                        help='encode a input WAV file into ADPCM')
-    pmode.add_argument('-d', '--decode', action='store_true',
+    pmode.add_argument('-d', '--decode', dest='decode', action='store_true',
                        help='decode raw ADPCM input into a WAV file')
 
     parser.add_argument('FILE', help='file to process')
-    parser.add_argument('-o', '--output', required=True,
+    parser.add_argument('-o', '--output', dest='output', required=True,
                         help='name of output file')
 
-    parser.add_argument('-r', '--rate',
+    parser.add_argument('-r', '--rate', dest='rate',
                         type=int,
                         help='set sample rate of decoded ADPCM-B')
 

@@ -48,7 +48,9 @@ def main():
     parser = argparse.ArgumentParser(
         description='Extract palette from a 2D image and convert it.')
     parser.add_argument('FILE', help='file to process')
-    parser.add_argument('-o', '--output', metavar='OUTFILE', type=str,
+    parser.add_argument('-o', '--output',
+                        dest='output',
+                        metavar='OUTFILE', type=str,
                         required = True,
                         help='extracted 16-colours palette')
 

@@ -1740,17 +1740,20 @@ def main():
         description="Convert Furnace module patterns to NSS stream")
 
     parser.add_argument("FILE", help="Furnace module")
-    parser.add_argument("-o", "--output", help="Output file name")
+    parser.add_argument("-o", "--output",
+                        dest="output", help="Output file name")
 
-    parser.add_argument("-b", "--bank", type=int,
+    parser.add_argument("-b", "--bank", dest="bank", type=int,
                        help="generate data for a bank-switched Z80 memory area")
 
-    parser.add_argument("-n", "--name",
+    parser.add_argument("-n", "--name", dest="name",
                         help="Name of the ASM label for the NSS data. Empty name skips label.")
 
-    parser.add_argument("-c", "--channels", help="Process specific channels. One hex digit per channel",
+    parser.add_argument("-c", "--channels", dest="channels",
+                        help="Process specific channels. One hex digit per channel",
                         default='0123456789abcd')
-    parser.add_argument("-z", "--compact", help="Generate compact NSS stream", action="store_true")
+    parser.add_argument("-z", "--compact", dest="compact",
+                        help="Generate compact NSS stream", action="store_true")
 
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
                         default=False, help="print details of processing")

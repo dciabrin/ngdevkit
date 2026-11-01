@@ -411,9 +411,11 @@ def main():
     parser.add_argument("FILE", nargs="*",
                         help="Input sound assets directories for the --generate action")
     parser.add_argument("-s", "--soundmap", nargs="+",
+                        dest="soundmap",
                         help="Input soundmap to be used by action")
 
     parser.add_argument("-o", "--output",
+                        dest="output",
                         help="Output file path, contents depends on the action")
 
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
