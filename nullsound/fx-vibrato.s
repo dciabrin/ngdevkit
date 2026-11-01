@@ -34,11 +34,15 @@
 
 
 ;;; Enable vibrato effect for the current channel
-;;; ------
-;;;   ix  : state for channel
-;;;   de  : offset to the note or vol FX state
-;;; [ hl ]: speed (4bits) and depth (4bits)
-;;; iy modified
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] de: offset to the note or vol FX state
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | speed (4bits) and depth (4bits)
+;;;
+;;; @modified af, iy
+;;;
 vibrato_init::
         ;; iy: FX state for channel
         push    ix
@@ -79,13 +83,15 @@ _post_vibrato_pos:
 
 
 ;;; Scale a fixed point 16bit value into x/16 fraction
-;;; ------
+;;;
 ;;; IN:
 ;;;   bc : distance
 ;;;    a : scale factor [1..16]
 ;;; OUT:
 ;;;   hl : scaled base increment
-;;; bc, hl modified
+;;;
+;;; @modified af, bc, hl
+;;;
 vibrato_scale_increment:
         ;; bc: base increment (fixed point)
         ;; there are 8 possible levels, so bc = fixed point distance / 8
@@ -132,11 +138,12 @@ _post_bit1:
 ;;; and the next semitones [-1.0..+1.0], and follows a sine wave.
 ;;; This function update the frequency by one step among the 64 steps
 ;;; defined in the sine wave.
-;;; ------
-;;; IN:
-;;;   ix : state for channel
-;;;   iy : FX state for channel
-;;; bc, de, hl modified
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] iy: FX state for channel
+;;;
+;;; @modified af, bc, de, hl
+;;;
 eval_vibrato_step::
         ;; e: next vibrato pos
         ld      a, VIBRATO_POS(iy)
@@ -227,20 +234,30 @@ _v_post_sign:
 
         ret
 
+;;;
+;;; @ingroup nss_fx
+;;; @{
+;;;
 
-;;; VIBRATO
+
 ;;; Enable vibrato for the current channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | speed (4bits) and depth (4bits)
+;;;
+;;; @modified af
+;;;
 vibrato::
         push    de
         ld      de, #NOTE_CTX
         jp      vibrato_init
 
 
-;;; VIBRATO_OFF
 ;;; Disable vibrato for the current channel
-;;; ------
+;;;
+;;; @modified af
+;;;
 vibrato_off::
         ;; disable FX
         res     BIT_FX_VIBRATO, NOTE_FX(ix)
@@ -249,3 +266,6 @@ vibrato_off::
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         ld      a, #1
         ret
+
+;;; @}
+;;; 

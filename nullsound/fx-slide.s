@@ -31,11 +31,13 @@
 
 
 ;;; Setup the fixed-point increment for the slide
-;;; ------
-;;;   iy  : FX state for channel
-;;;    c  : increment size (increment = 1/2^c)
-;;;    e  : speed (increments)
-;;; bc, de modified
+;;;
+;;;   iy: FX state for channel
+;;;    c: increment size (increment = 1/2^c)
+;;;    e: speed (increments)
+;;;
+;;; @modified af, bc, de
+;;;
 slide_init_increment::
 
         ;; de: inc16 = speed / 2^c
@@ -55,10 +57,11 @@ __slide_divide:
 
 
 ;;; Initialize the source value for the slide
-;;; ------
+;;;
 ;;;   ix  : state for channel
 ;;;   iy  : FX state for channel
 ;;;    b  : current value
+;;;
 slide_init_source::
         ;; init slide position if no slide FX is ongoing
         bit     BIT_FX_SLIDE, DATA_FX(iy)
@@ -70,10 +73,11 @@ _post_init_slide:
 
 
 ;;; Initialize a target value for the slide
-;;; ------
+;;;
 ;;;   iy  : state for channel
 ;;;    b  : current value
 ;;;    d  : target offset (signed)
+;;;
 slide_init_target::
         ;; init slide direction
         res     BIT_SLIDE_DIRECTION, SLIDE_CFG(iy)
@@ -100,11 +104,13 @@ _post_neg_slide:
 
 ;;; Increment current fixed point displacement and
 ;;; stop effects when the target displacement is reached
-;;; ------
+;;;
 ;;; IN:
-;;;   ix : state for channel
-;;;   iy : FX state for channel
-;;; bc, de, hl modified
+;;;   ix: state for channel
+;;;   iy: FX state for channel
+;;;
+;;; @modified af, bc, de, hl
+;;;
 eval_slide_step:
         ;; bc: increment
         ld      c, SLIDE_INC16(iy)
@@ -181,13 +187,17 @@ _slide_intermediate:
 
 
 ;;; Initialize a slide effect for the current channel
-;;; ------
-;;;   ix  : state for channel
-;;;    a  : slide configuration (direction, ending...)
-;;;    c  : increment size (1/2^c)
-;;;   de  : offset to the note or vol FX state
-;;; [ hl ]: increment
-;;; iy modified
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] a: slide configuration (direction, ending...)
+;;; @param[in] c: increment size (1/2^c)
+;;; @param[in] de: offset to the note or vol FX state
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | increment
+;;;
+;;; @modified af, iy
+;;;
 slide_init::
         ;; iy: FX state for channel
         push    ix
@@ -232,13 +242,17 @@ _slide_init_direction:
 
 
 ;;; Initialize a slide effect for the current channel
-;;; ------
-;;;   ix  : state for channel
-;;;    a  : slide configuration (direction, ending...)
-;;;    c  : increment size (1/2^c)
-;;;   de  : offset to the note or vol FX state
-;;; [ hl ]: speed (4bits) and depth (4bits)
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] a: slide configuration (direction, ending...)
+;;; @param[in] c: increment size (1/2^c)
+;;; @param[in] de: offset to the note or vol FX state
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | speed (4bits) and depth (4bits)
+;;;
 ;;; iy modified
+;;;
 slide_init_with_target::
         ;; iy: FX state for channel
         push    ix
@@ -292,13 +306,17 @@ _targey_post_depth:
 
 
 ;;; Initialize a slide portamento effect for the current channel
-;;; ------
-;;;   ix  : state for channel
-;;;    a  : slide configuration (direction, ending...)
-;;;    c  : increment size (1/2^c)
-;;;   de  : offset to the note or vol FX state
-;;; [ hl ]: speed
-;;; iy modified
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] a: slide configuration (direction, ending...)
+;;; @param[in] c: increment size (1/2^c)
+;;; @param[in] de: offset to the note or vol FX state
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | speed
+;;;
+;;; @modified af, iy
+;;;
 slide_portamento_init::
         ;; iy: FX state for channel
         push    ix
@@ -334,11 +352,13 @@ slide_portamento_init::
 
 
 ;;; Update an ongoing slide effect with a new value (note or volume)
-;;; ------
-;;;   ix  : state for channel
-;;;   bc  : offset to the note or vol FX state
-;;;     a : new value for channel
-;;; bc modified
+;;;
+;;;   ix: state for channel
+;;;   bc: offset to the note or vol FX state
+;;;     a: new value for channel
+;;;
+;;; @modified af, bc
+;;;
 slide_update::
         ;; iy: volume FX state for channel
         push    ix
@@ -371,8 +391,9 @@ _slide_update_target:
 
 
 ;;; Stop a slide effect in progress for the current channel
-;;; ------
-;;; iy modified
+;;;
+;;; @modified af, iy
+;;;
 slide_off::
         ;; iy: FX state for channel
         push    ix
@@ -388,13 +409,63 @@ slide_off::
 
 ;;;
 ;;; VOLUME NSS OPCODES
-;;; ----------------
+;;;----------
 
 
-;;; VOL_SLIDE_OFF
+;;; Enable volume slide effect for the current channel
+;;;
+;;; @param[in] a: slide direction
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | increment
+;;;
+;;; @return parse next opcode
+;;;
+__vol_slide::
+        push    bc
+        ld      c, #2
+        push    de
+        ld      de, #VOL_CTX
+        set     BIT_SLIDE_KEEP_RUNNING, a
+        jp      slide_init
+
+
+;;;
+;;; @ingroup nss_fx
+;;; @{
+;;;
+
+;;; Enable volume slide up effect for the current channel
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | increment
+;;;
+;;; @return parse next opcode
+;;;
+vol_slide_up::
+        ld      a, #0
+        jp      __vol_slide
+
+
+;;; Enable volume slide down effect for the current channel
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | increment
+;;;
+;;; @return parse next opcode
+;;;
+vol_slide_down::
+        ld      a, #1
+        jp      __vol_slide
+
 ;;; Stop the volume slide effect in progress for the current channel
-;;; ------
-;;; iy modified
+;;;
+;;; @return parse next opcode
+;;;
+;;; @modified af, iy
+;;;
 vol_slide_off::
         push    de
         ld      de, #VOL_CTX
@@ -404,52 +475,66 @@ vol_slide_off::
         jp      slide_off
 
 
-;;; VOL_SLIDE_UP/DOWN
-;;; Enable volume slide effect for the current channel
-;;; ------
-;;; [ hl ]: increment
-__vol_slide::
-        push    bc
-        ld      c, #2
-        push    de
-        ld      de, #VOL_CTX
-        set     BIT_SLIDE_KEEP_RUNNING, a
-        jp      slide_init
-vol_slide_up::
-        ld      a, #0
-        jp      __vol_slide
-vol_slide_down::
-        ld      a, #1
-        jp      __vol_slide
-
+;;; @}
+;;;
 
 ;;;
 ;;; NOTE NSS OPCODES
-;;; ----------------
+;;;----------
 
 
-;;; NOTE_PITCH_SLIDE_UP/DOWN
 ;;; Enable note pitch slide effect for the current channel
-;;; ------
-;;; [ hl ]: increment
+;;;
+;;; @param[in] a: slide direction
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | increment
+;;;
+;;; @return parse next opcode
+;;;
 __note_pitch_slide::
         push    bc
         ld      c, #5
         push    de
         ld      de, #NOTE_CTX
         jp      slide_init
+
+;;;
+;;; @ingroup nss_fx
+;;; @{
+;;;
+
+;;; Enable note pitch slide up effect for the current channel
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | increment
+;;;
+;;; @return parse next opcode
+;;;
 note_pitch_slide_up::
         ld      a, #0
         jp      __note_pitch_slide
+
+;;; Enable note pitch slide down effect for the current channel
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | increment
+;;;
+;;; @return parse next opcode
+;;;
 note_pitch_slide_down::
         ld      a, #1
         jp      __note_pitch_slide
 
 
-;;; NOTE_PORTAMENTO
 ;;; Enable note pitch slide effect for the current channel
-;;; ------
-;;; [ hl ]: speed
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | speed
+;;;
 note_portamento::
         push    bc
         ld      c, #5
@@ -458,29 +543,61 @@ note_portamento::
         xor     a
         jp      slide_portamento_init
 
+;;; @}
+;;; 
 
-;;; NOTE_SLIDE_UP/DOWN
 ;;; Enable note slide effect for the current channel
-;;; ------
-;;; [ hl ]: speed (4bits) and depth (4bits)
+;;;
+;;; @param[in] a: slide direction
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | speed (4bits) and depth (4bits)
+;;;
+;;; @modified af, hl
+;;;
 __note_slide::
         push    bc
         ld      c, #3
         push    de
         ld      de, #NOTE_CTX
         jp      slide_init_with_target
+
+;;;
+;;; @ingroup nss_fx
+;;; @{
+;;;
+
+;;; Enable note slide effect for the current channel
+;;;
+;;; @param[in] a: slide direction
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | speed (4bits) and depth (4bits)
+;;;
+;;; @modified af, hl
+;;;
 note_slide_up::
         ld      a, #0
         jp      __note_slide
+
+;;; Enable note slide effect for the current channel
+;;;
+;;; @param[in] a: slide direction
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | speed (4bits) and depth (4bits)
+;;;
+;;; @modified af, hl
+;;;
 note_slide_down::
         ld      a, #1
         jp      __note_slide
 
 
-;;; NOTE_SLIDE_OFF
 ;;; Stop the note slide effect in progress for the current channel
-;;; ------
-;;; iy modified
+;;;
+;;; @modified af, iy
+;;;
 note_slide_off::
         push    de
         ld      de, #NOTE_CTX
@@ -488,3 +605,6 @@ note_slide_off::
         ;; make sure to load this new note at next pipeline run
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         jp      slide_off
+
+;;; @}
+;;; 

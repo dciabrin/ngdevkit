@@ -252,10 +252,11 @@ state_fm_action_funcs:
         .dw     fm_stop_playback
 
 
-;;;  Reset FM playback state.
-;;;  Called before playing a stream
-;;; ------
-;;; bc, de, hl, iy modified
+;;; Reset FM playback state.
+;;; Called before playing a stream
+;;;
+;;; @modified af, bc, de, hl, iy
+;;;
 init_nss_fm_state_tracker::
         ld      hl, #(state_fm1_pipeline-FM_CHANNEL_STATE_SIZE)
         call    _fm_zero_channel_state
@@ -296,8 +297,10 @@ init_nss_fm_state_tracker::
 
 
 ;;; reset a FM or OP pipeline state.
-;;; ------
+;;;
 ;;; hl: start of channel state (prior to FM/OP pipeline)
+;;;
+;;; @modified af, bc, de, hl, iy
 ;;;
 _fm_zero_channel_state::
         ;; clear data from start state to pipeline offset
@@ -321,8 +324,9 @@ _fm_zero_channel_state::
 
 ;;;  Reset FM playback state.
 ;;;  Called before waiting for the next tick
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 fm_ctx_reset::
         ld      a, #0
         call    fm_ctx_set_current
@@ -330,8 +334,11 @@ fm_ctx_reset::
 
 
 ;;; Set the current FM track and YM2610 load function for this track
-;;; ------
-;;;   a : FM channel [0..3]
+;;;
+;;; @param[in] a : FM channel [0..3]
+;;;
+;;; @modified af
+;;;
 fm_ctx_set_current::
         push    hl
 
@@ -400,8 +407,12 @@ _fm_ctx_data:
         .dw     state_fm4_pipeline
 
 
-;;; a: OP number in YM2610 order (OP1: 0, OP2: 2, OP3:1, OP4:3)
-;;; modified: bc, de, hl, ix, iy
+;;; fm_ctx_op_set_current
+;;; 
+;;; @param[in] a: OP number in YM2610 order (OP1: 0, OP2: 2, OP3:1, OP4:3)
+;;;
+;;; @modified af, bc, de, hl, ix, iy
+;;;
 fm_ctx_op_set_current::
         ld      (state_fm_ym2610_op), a
 
@@ -450,10 +461,12 @@ _fm_ctx_op_pipeline_data:
 
 
 ;;; Configure the current FM channel's note frequency
-;;; ------
-;;;   hl : base frequency (f_num)
-;;;    c : block (multiplier)
-;;; [bc modified]
+;;;
+;;; @param[in] hl: base frequency (f_num)
+;;; @param[in] c: block (multiplier)
+;;;
+;;; @modified af, bc
+;;;
 fm_set_fnum_registers::
         ;; configure REG_FMx_BLOCK_FNUM_2
         ;; this is buffered by the YM2610 and must be set
@@ -477,13 +490,16 @@ fm_set_fnum_registers::
         call    ym2610_write_func
         ret
 
+;;; 
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_fm FM opcodes
+;;; @{
+;;;
 
-;;; FM NSS opcodes
-;;; ------
-
-;;; FM_CTX_1
 ;;; Set the current FM track to be FM1 for the next FM opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 fm_ctx_1::
         ld      a, #0
         call    fm_ctx_set_current
@@ -491,9 +507,10 @@ fm_ctx_1::
         ret
 
 
-;;; FM_CTX_2
 ;;; Set the current FM track to be FM2 for the next FM opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 fm_ctx_2::
         ld      a, #1
         call    fm_ctx_set_current
@@ -501,9 +518,10 @@ fm_ctx_2::
         ret
 
 
-;;; FM_CTX_3
 ;;; Set the current FM track to be FM3 for the next FM opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 fm_ctx_3::
         ld      a, #2
         call    fm_ctx_set_current
@@ -511,16 +529,20 @@ fm_ctx_3::
         ret
 
 
-;;; FM_CTX_4
 ;;; Set the current FM track to be FM4 for the next FM opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 fm_ctx_4::
         ld      a, #3
         call    fm_ctx_set_current
         ld      a, #1
         ret
 
-
+;;; 
+;;; @}
+;;;
+        
 ;;; output OPs based on the layout of each FM algorithm of the YM2610
 ;;;  7   6   5   4   3   2   1   0
 ;;; ___ ___ ___ ___ OP4 OP2 OP3 OP1
@@ -536,9 +558,11 @@ fm_out_ops_table:
 
 
 ;;; Configure the output OPs on an instrument's data
-;;; ------
-;;; hl: instrument address
-;;; modified: hl, bc
+;;;
+;;; @param[in] hl: instrument address
+;;;
+;;; @modified af, hl, bc
+;;;
 fm_set_out_ops_bitfield::
         push    iy
         push    hl
@@ -564,10 +588,12 @@ fm_set_out_ops_bitfield::
 
 
 ;;; Update the current state's output level for all OPs based on an instrument
-;;; ------
-;;; ix: state for the current channel
-;;; hl: address of the instrument's data
-;;; [hl, iy modified]
+;;;
+;;; @param[in] ix: state for the current channel
+;;; @param[in] hl: address of the instrument's data
+;;;
+;;; @modified af, hl, iy
+;;;
 fm_set_ops_level::
         push    hl
         pop     iy
@@ -599,8 +625,9 @@ fm_set_ops_level::
 
 
 ;;; Stop operators from the current operator mask on the current FM channel
-;;; ------
-;;; [bc modified]
+;;;
+;;; @modified af, bc
+;;;
 fm_stop_op_from_mask::
         ;; stop the current OP
         ;; bc: address OPs running
@@ -632,11 +659,12 @@ fm_stop_op_from_mask::
 
 
 ;;; Compute fixed-point note position after FX-pipeline
-;;; ------
-;;; IN:
-;;;     ix: state for the current channel
-;;; OUT:
-;;;     hl: 16bits fixed-point note
+;;;
+;;; @param[in] ix: state for the current channel
+;;; @param[out] hl: 16bits fixed-point note
+;;;
+;;; @modified af
+;;;
 compute_fm_fixed_point_note::
         ;; hl: current decimal note
         ld      l, NOTE16(ix)
@@ -658,14 +686,15 @@ compute_fm_fixed_point_note::
         ld      c, NOTE_CTX+VIBRATO_POS16(ix)
         ld      b, NOTE_CTX+VIBRATO_POS16+1(ix)
         add     hl, bc
-_fm_post_add_vibrato::
+_fm_post_add_vibrato:
 
         ret
 
 
 ;;; Compute the YM2610's volume registers value from the OP's volumes
-;;; ------
-;;; modified: bc, de, hl
+;;;
+;;; modified: af, bc, de, hl
+;;;
 compute_ym2610_fm_vol::
         push    iy
 
@@ -738,8 +767,9 @@ _c_ops_next:
 
 
 ;;; Compute the YM2610's note registers value from state's fixed-point note
-;;; ------
-;;; modified: bc, de, hl
+;;;
+;;; modified: af, bc, de, hl
+;;;
 compute_ym2610_fm_note::
         ;; b: current note (integer part)
         ld      l, NOTE_POS16+1(ix)
@@ -831,11 +861,12 @@ compute_ym2610_fm_note::
 
 
 ;;; run_fm_channel_pipeline
-;;; ------
+;;;
 ;;; Run the entire FM pipeline for a channel
 ;;;  - update the state of all enabled FX
 ;;;  - load specific parts of the state (note, vol...) into YM2610 registers
 ;;; Meant to run once per tick
+;;;
 run_fm_channel_pipeline::
         ;; bail out if the current channel is not in use
         ld      a, PIPELINE(ix)
@@ -1028,13 +1059,19 @@ _post_fm2_pipeline:
         pop     de
         ret
 
+;;; @ingroup nss_fm
+;;; @{
 
-;;; FM_VOL
 ;;; Register a pending volume change for the current FM channel
 ;;; The next note to be played or instrument change will pick
 ;;; up this volume configuration change
-;;; ------
-;;; [ hl ]: volume [0-0x7f]
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | volume [0-0x7f]
+;;;
+;;; @return parse next opcode
+;;;
 fm_vol::
         ;; a: volume
         ld      a, (hl)
@@ -1056,10 +1093,14 @@ _fm_vol_end:
         ret
 
 
-;;; FM_INSTRUMENT
 ;;; Configure the operators of an FM channel based on an instrument's data
-;;; ------
-;;; [ hl ]: instrument number
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | instrument number
+;;;
+;;; @return parse next opcode
+;;;
 fm_instrument::
         ;; a: instrument
         ld      a, (hl)
@@ -1153,8 +1194,12 @@ _fm_instr_end:
         ld      a, #1
         ret
 
+;;; 
+;;; @}   
+;;;
+        
 ;;; Load data into consecutive YM2610 registers
-;;; ------
+;;;
 ;;;    a  : start FM register
 ;;;    d  : number of FM registers to load data into
 ;;; [ hl ]: YM2610 register data
@@ -1169,13 +1214,15 @@ _fm_port_loop:
         jp      nz, _fm_port_loop
         ret
 
+;;; @}
+;;; 
 
-;;; fm_set_pan_ams_pms
 ;;; set the AMS and PMS settings for this instrument,
 ;;; augmented with the current pan config for the channel
-;;; ------
-;;;    a  : value for the AMS/PMS register
-;;; [ hl ]: AMS/PMS instrument data
+;;;
+;;; @param[in] a: value for the AMS/PMS register
+;;; @param[in] hl: AMS/PMS instrument data
+;;;
 fm_set_pan_ams_pms::
         ;; b: ams/pms register
         ld      b, a
@@ -1203,13 +1250,14 @@ fm_set_pan_ams_pms::
         ret
 
 
+
 ;;; build the 16bit signed detune displacement
-;;; ------
-;;; IN
-;;;   [ hl ]: detune
-;;; OUT:
-;;;     bc  : 16bits signed displacement
-;;; bc, hl modified
+;;;
+;;; param[in] hl: adress of the detune value
+;;; param[out] bc: 16bits signed tune displacement
+;;;
+;;; @modified af, bc, hl modified
+;;;
 common_pitch::
         ;; a: detune [0..255]
         ld      a, (hl)
@@ -1234,11 +1282,18 @@ common_pitch::
         ld      a, #1
         ret
 
+;;; @ingroup nss_fm
+;;; @{
+;;; 
 
-;;; FM_PITCH
 ;;; Detune up to -+1 semitone for the current FM channel
-;;; ------
-;;; [ hl ]: detune
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | detune
+;;;
+;;; @return parse next opcode
+;;;
 fm_pitch::
         push    bc
         call    common_pitch
@@ -1248,9 +1303,11 @@ fm_pitch::
         ld      a, #1
         ret
 
+;;; @}
+;;; 
 
 ;;; Configure state for new note and trigger a load in the pipeline
-;;; ------
+;;;
 fm_configure_note_on:
         push    bc
         ;; if a slide is ongoing, this is treated as a slide FX update
@@ -1296,7 +1353,7 @@ _fm_cfg_note_end:
 
 
 ;;; Configure state for new volume and trigger a load in the pipeline
-;;; ------
+;;;
 fm_configure_vol:
         ;; if a volume slide is ongoing, treat it as a volume slide FX update
         bit     BIT_FX_SLIDE, FX(ix)
@@ -1315,11 +1372,17 @@ _fm_cfg_vol_update:
 _fm_cfg_vol_end:
         ret
 
+;;; @ingroup nss_fm
+;;; @{
 
-;;; FM_NOTE_ON
 ;;; Emit a specific note (frequency) on an FM channel
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 fm_note_on::
         ;; a: note (0xAB: A=octave B=semitone)
         ld      a, (hl)
@@ -1341,11 +1404,15 @@ _fm_note_on_end:
         ret
 
 
-;;; FM_NOTE_ON_AND_NEXT_CTX
 ;;; Emit a specific note (frequency) on an FM channel and
 ;;; immediately switch to the next FM context
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 fm_note_on_and_next_ctx::
         ;; process a regular note opcode
         call    fm_note_on
@@ -1359,11 +1426,15 @@ fm_note_on_and_next_ctx::
         ret
 
 
-;;; FM_NOTE_ON_AND_WAIT
 ;;; Emit a specific note (frequency) on an FM channel and
 ;;; immediately wait as many rows as the last wait
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 fm_note_on_and_wait::
         ;; process a regular note opcode
         call    fm_note_on
@@ -1372,12 +1443,13 @@ fm_note_on_and_wait::
         call    wait_last_rows
         ret
 
+;;; @}
 
 ;;; Release the note on an FM channel and update the pipeline state
-;;; ------
-;;; IN:
-;;;    a: OP enable mask
-;;;   ix: FM pipeline
+;;;
+;;; @param[in] a: OP enable mask
+;;; @param[in] ix: FM pipeline
+;;;
 fm_stop_playback:
         push    bc
 
@@ -1407,12 +1479,15 @@ fm_stop_playback:
 
         ret
 
+;;; @ingroup nss_fm
+;;; @{
 
-;;; FM_NOTE_OFF
-;;; TODO implement delayed stop
 ;;; Release the note on an FM channel. The sound will decay according
 ;;; to the current configuration of the FM channel's operators.
-;;; ------
+;;; @todo implement delayed stop
+;;;
+;;; @return parse next opcode
+;;;
 fm_note_off::
         ld      a, #0x0f
         call    fm_stop_playback
@@ -1421,11 +1496,12 @@ fm_note_off::
         ret
 
 
-;;; FM_NOTE_OFF_AND_NEXT_CTX
 ;;; Release the note on an FM channel. The sound will decay according
 ;;; to the current configuration of the FM channel's operators.
 ;;; Immediately switch to the next FM context.
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 fm_note_off_and_next_ctx::
         call    fm_note_off
 
@@ -1438,10 +1514,14 @@ fm_note_off_and_next_ctx::
         ret
 
 
-;;; OP1_LVL
 ;;; Set the volume of OP1 for the current FM channel
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 op1_lvl::
         ld      a, (hl)
         inc     hl
@@ -1451,10 +1531,14 @@ op1_lvl::
         ret
 
 
-;;; OP2_LVL
 ;;; Set the volume of OP2 for the current FM channel
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 op2_lvl::
         ld      a, (hl)
         inc     hl
@@ -1464,10 +1548,14 @@ op2_lvl::
         ret
 
 
-;;; OP3_LVL
 ;;; Set the volume of OP3 for the current FM channel
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 op3_lvl::
         ld      a, (hl)
         inc     hl
@@ -1477,10 +1565,14 @@ op3_lvl::
         ret
 
 
-;;; OP4_LVL
 ;;; Set the volume of OP4 for the current FM channel
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 op4_lvl::
         ld      a, (hl)
         inc     hl
@@ -1489,10 +1581,23 @@ op4_lvl::
         ld      a, #1
         ret
 
-;;; FM2_OP1_VOL
+;;; @}
+;;;
+
+;;; 
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_fm2 FM2 extended opcodes
+;;; @{
+;;;
+
 ;;; Set the volume of OP1 for the FM2 channel when used in extended mode
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op1_vol::
         push    ix
         ld      ix, #state_op1_pipeline
@@ -1500,10 +1605,14 @@ fm2_op1_vol::
         pop     ix
         ret
 
-;;; FM2_OP2_VOL
 ;;; Set the volume of OP2 for the FM2 channel when used in extended mode
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op2_vol::
         push    ix
         ld      ix, #state_op2_pipeline
@@ -1511,10 +1620,14 @@ fm2_op2_vol::
         pop     ix
         ret
 
-;;; FM2_OP3_VOL
 ;;; Set the volume of OP3 for the FM2 channel when used in extended mode
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op3_vol::
         push    ix
         ld      ix, #state_op3_pipeline
@@ -1522,10 +1635,14 @@ fm2_op3_vol::
         pop     ix
         ret
 
-;;; FM2_OP4_VOL
 ;;; Set the volume of OP4 for the FM2 channel when used in extended mode
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op4_vol::
         push    ix
         ld      ix, #state_op4_pipeline
@@ -1534,10 +1651,14 @@ fm2_op4_vol::
         ret
 
 
-;;; FM_PAN
 ;;; Enable left/right output for the current FM channel
-;;; ------
-;;; [ hl ]: pan mask (0x01: left, 0x10: right)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | pan mask (0x01: left, 0x10: right)
+;;;
+;;; @return parse next opcode
+;;;
 fm_pan::
         push    de
         push    bc
@@ -1575,11 +1696,15 @@ fm_pan::
         ret
 
 
-;;; FM_DELAY
 ;;; Enable delayed trigger for the next note and volume
 ;;; (note and volume and played after a number of ticks)
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 fm_delay::
         call    trigger_delay_init
 
@@ -1587,10 +1712,14 @@ fm_delay::
         ret
 
 
-;;; FM_CUT
 ;;; Record that the note being played must be stopped after some steps
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 fm_cut::
         call    trigger_cut_init
 
@@ -1604,16 +1733,18 @@ fm_cut::
 ;;; Helper functions for extended FM2 channels
 ;;;
 
-;;; FM2_INSTRUMENT
 ;;; Configure an OP of FM2 channel based on an instrument's data
-;;; ------
-;;; IN:
-;;;     a: OPx in YM2610 offset
-;;;    ix: FM pipeline
-;;;    iy: OP pipeline
 ;;;
-;;; [ hl ]: OP
-;;; [hl+1]: instrument number
+;;; @param[in] a: OPx in YM2610 offset
+;;; @param[in] ix: FM pipeline
+;;; @param[in] iy: OP pipeline
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OP
+;;;   | hl+1 | instrument number
+;;;
+;;; @return parse next opcode
+;;;
 fm2_instrument::
         push    bc
         push    de
@@ -1760,13 +1891,16 @@ _fm2_instr_end:
         ld      a, #1
         ret
 
-
+;;; @}
+;;;
+        
 ;;; Compute the YM2610's volume registers value from the OP's volumes
-;;; ------
-;;; IN:
-;;;    ix: OP pipeline
-;;;    iy: FM pipeline
-;;; modified: bc, de, hl
+;;;
+;;; @param[in] ix: OP pipeline
+;;; @param[in] iy: FM pipeline
+;;;
+;;; @modified af, bc, de, hl
+;;;
 compute_ym2610_op_vol::
         ;; hl: address of instrument's op volume
         push    iy
@@ -1827,7 +1961,7 @@ _c_op_post_global_clamp:
 ;;;   stack popped
 ;;;   ix, bc restored
 ;;;   result in a
-;;; ------
+;;;
 ;;; [ hl ]: OPx
 ;;; [hl+1]: vibrato params
 fm2_op_ctx_and_action:
@@ -1856,17 +1990,14 @@ _post_op_handler:
         ret
 
 
-;;; run_op_channel_pipeline
-;;; ------
 ;;; Run the entire FM pipeline for an FM2 channel operator
 ;;;  - update the state of all enabled FX
 ;;;  - prepare YM2610 state update (note, vol...)
 ;;; Meant to run once per tick
-;;; IN:
-;;;   ix: OP pipeline
-;;;   iy: FM pipeline
-;;; OUT:
-;;;   ix: FM pipeline (important!)
+;;; @note ix: FM pipeline (important!)
+;;; 
+;;; @param[in] ix: OP pipeline
+;;; @param[in] iy: FM pipeline
 ;;;
 run_op_pipeline::
         ;; bail out if the current channel is not in use
@@ -1996,13 +2127,13 @@ _end_op_pipeline:
         ret
 
 
-;;; run_fm2_pipeline
-;;; ------
 ;;; Finish loading parts of the FM2 state (note, vol...) into YM2610 registers
-;;; NOTE: for extended FM2, each OP pipeline holds its own load bits. All the
+;;;
+;;; @note: for extended FM2, each OP pipeline holds its own load bits. All the
 ;;; load bits are consolidated into another FM pipeline state, which is used
 ;;; to group loads to the YM2610 after each OP pipeline has run.
-;;; ix: FM pipeline
+;;;
+;;; @param[in] ix: FM pipeline
 ;;;
 run_fm2_pipeline::
         bit     BIT_LOAD_NOTE, PIPELINE(ix)
@@ -2018,18 +2149,22 @@ _post_load_fm2_note:
         ret
 
 
-
+;;; @ingroup nss_fm2
+;;; @{
 
 ;;;
 ;;; NSS opcodes applied on extended FM2 channels
 ;;;
 
-;;; FM2_OPx_INSTR
 ;;; Configure an OP of FM2 channel based on an instrument's data
-;;; ------
-;;; IN:
-;;;    ix: FM2 pipeline
-;;; [ hl ]: detune
+;;;
+;;; @param[in] ix: FM2 pipeline
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | instrument
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op1_instr::
         push    iy
         ld      iy, #state_op1_pipeline
@@ -2039,6 +2174,15 @@ fm2_op1_instr::
         ld      a, #1
         ret
 
+;;; Configure an OP of FM2 channel based on an instrument's data
+;;;
+;;; @param[in] ix: FM2 pipeline
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | instrument
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op2_instr::
         push    iy
         ld      iy, #state_op2_pipeline
@@ -2048,6 +2192,15 @@ fm2_op2_instr::
         ld      a, #1
         ret
 
+;;; Configure an OP of FM2 channel based on an instrument's data
+;;;
+;;; @param[in] ix: FM2 pipeline
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | instrument
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op3_instr::
         push    iy
         ld      iy, #state_op3_pipeline
@@ -2057,6 +2210,15 @@ fm2_op3_instr::
         ld      a, #1
         ret
 
+;;; Configure an OP of FM2 channel based on an instrument's data
+;;;
+;;; @param[in] ix: FM2 pipeline
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | instrument
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op4_instr::
         push    iy
         ld      iy, #state_op4_pipeline
@@ -2067,10 +2229,14 @@ fm2_op4_instr::
         ret
 
 
-;;; FM2_OP1_NOTE_ON
 ;;; Emit a specific note (frequency) on the OP1 FM2 channel
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op1_note_on::
         ld      a, #0x10
         ld      (state_fm_ym2610_op_mask), a
@@ -2081,10 +2247,14 @@ fm2_op1_note_on::
         ret
 
 
-;;; FM2_OP2_NOTE_ON
 ;;; Emit a specific note (frequency) on the OP2 FM2 channel
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op2_note_on::
         ld      a, #0x20
         ld      (state_fm_ym2610_op_mask), a
@@ -2095,10 +2265,14 @@ fm2_op2_note_on::
         ret
 
 
-;;; FM2_OP3_NOTE_ON
 ;;; Emit a specific note (frequency) on the OP3 FM2 channel
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op3_note_on::
         ld      a, #0x40
         ld      (state_fm_ym2610_op_mask), a
@@ -2109,10 +2283,14 @@ fm2_op3_note_on::
         ret
 
 
-;;; FM2_OP4_NOTE_ON
 ;;; Emit a specific note (frequency) on the OP4 FM2 channel
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 fm2_op4_note_on::
         ld      a, #0x80
         ld      (state_fm_ym2610_op_mask), a
@@ -2123,11 +2301,15 @@ fm2_op4_note_on::
         ret
 
 
-;;; FM_OPS_OFF
 ;;; Release the note on an FM channel. The sound will decay according
 ;;; to the current configuration of the FM channel's operators.
-;;; ------
-;;; [ hl ]: o4|o3|o2|o1|.1|.1|.1|.1, 0 means off
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | o4|o3|o2|o1|.1|.1|.1|.1, 0 means off
+;;;
+;;; @return parse next opcode
+;;;
 fm2_ops_off::
         ld      a, (hl)
         xor     #0xff
@@ -2158,10 +2340,15 @@ _ops_check_off_ret:
         ret
 
 
-;;; FM2_DELAY
-;;; ------
-;;; [ hl ]: OP
-;;; [hl+1]: delay params
+;;; fm2_delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;   | hl+1 | delay parameter
+;;;
+;;; @return parse next opcode
+;;;
 fm2_delay::
         push    ix
         push    bc
@@ -2169,10 +2356,15 @@ fm2_delay::
         jp      fm2_op_ctx_and_action
 
 
-;;; FM2_VIBRATO
-;;; ------
-;;; [ hl ]: OPx
-;;; [hl+1]: vibrato params
+;;; fm2_vibrato
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;   | hl+1 | vibrato parameter
+;;;
+;;; @return parse next opcode
+;;;
 fm2_vibrato:
         push    ix
         push    bc
@@ -2180,9 +2372,14 @@ fm2_vibrato:
         jp      fm2_op_ctx_and_action
 
 
-;;; FM2_VIBRATO_OFF
-;;; ------
-;;; [ hl ]: OPx
+;;; fm2_vibrato_off
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;
+;;; @return parse next opcode
+;;;
 fm2_vibrato_off:
         push    ix
         push    bc
@@ -2190,10 +2387,15 @@ fm2_vibrato_off:
         jp      fm2_op_ctx_and_action
 
 
-;;; NOTE_PORTAMENTO
-;;; ------
-;;; [ hl ]: OPx
-;;; [hl+1]: portamento params
+;;; fm2_note_portamento
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;   | hl+1 | portamento parameter
+;;;
+;;; @return parse next opcode
+;;;
 fm2_note_portamento::
         push    ix
         push    bc
@@ -2201,9 +2403,14 @@ fm2_note_portamento::
         jp      fm2_op_ctx_and_action
 
 
-;;; FM2_LEGATO
-;;; ------
-;;; [ hl ]: OPx
+;;; fm2_legato
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;
+;;; @return parse next opcode
+;;;
 fm2_legato:
         push    ix
         push    bc
@@ -2211,9 +2418,14 @@ fm2_legato:
         jp      fm2_op_ctx_and_action
 
 
-;;; FM2_LEGATO_OFF
-;;; ------
-;;; [ hl ]: OPx
+;;; fm2_legato_off
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;
+;;; @return parse next opcode
+;;;
 fm2_legato_off:
         push    ix
         push    bc
@@ -2221,9 +2433,14 @@ fm2_legato_off:
         jp      fm2_op_ctx_and_action
 
 
-;;; FM2_VOL_SLIDE_OFF
-;;; ------
-;;; [ hl ]: OPx
+;;; fm2_vol_slide_off
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;
+;;; @return parse next opcode
+;;;
 fm2_vol_slide_off:
         push    ix
         push    bc
@@ -2231,10 +2448,15 @@ fm2_vol_slide_off:
         jp      fm2_op_ctx_and_action
 
 
-;;; FM2_VOL_SLIDE_UP
-;;; ------
-;;; [ hl ]: OPx
-;;; [hl+1]: slide params
+;;; fm2_vol_slide_up
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;   | hl+1 | slide parameters
+;;;
+;;; @return parse next opcode
+;;;
 fm2_vol_slide_up::
         push    ix
         push    bc
@@ -2242,12 +2464,21 @@ fm2_vol_slide_up::
         jp      fm2_op_ctx_and_action
 
 
-;;; FM2_VOL_SLIDE_DOWN
-;;; ------
-;;; [ hl ]: OPx
-;;; [hl+1]: slide params
+;;; fm2_vol_slide_down
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | OPx
+;;;   | hl+1 | slide parameters
+;;;
+;;; @return parse next opcode
+;;;
 fm2_vol_slide_down::
         push    ix
         push    bc
         ld      bc, #vol_slide_down
         jp      fm2_op_ctx_and_action
+
+;;; @}
+;;;
+        

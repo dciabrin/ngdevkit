@@ -68,9 +68,11 @@ init_timer_state_tracker::
 
 
 ;;; Acknowledge and re-arm YM2610 timers
-;;; all registers must be preserved, no shadow register must be
+;;; @note All registers must be preserved, no shadow register must be
 ;;; used as they are currently reserved for processing NMI
-;;; ------
+;;;
+;;; @modified none
+;;;
 update_timer_state_tracker::
         push    af
         push    bc
@@ -112,8 +114,13 @@ update_timer_state_tracker::
 
 
 ;;; Initialize speed1 and speed2 from the stream's config
-;;; ------
-;;;  iy : speed1 and speed2 (if use)
+;;;
+;;; @param[in] iy: speed arguments in memory
+;;; @memory
+;;;   iy | speed1 and speed2 (if use)
+;;;
+;;; @modified af
+;;;
 timer_init_ticks::
         push    bc
         push    hl
@@ -151,7 +158,7 @@ timer_init_ticks::
 
 ;;; set the number of ticks for the current row from the
 ;;; position in the groove pattern
-;;; ------
+;;;
 ;;; hl modified
 timer_set_ticks_per_row::
         ;; hl: current tick pos (8bit aligned add)
@@ -169,7 +176,7 @@ timer_set_ticks_per_row::
 
 ;;; update the position in the groove pattern and set the new
 ;;; numer of ticks per row
-;;; ------
+;;;
 ;;; bc modified
 timer_update_ticks_for_next_row::
         push    hl
@@ -192,9 +199,14 @@ _timer_set_pos:
 ;;; NSS opcodes
 ;;;
 
-;;; SET_2CH
+;;;
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_misc Misc opcodes
+;;; @{
+;;;
+
 ;;; Enable independent notes for each operator in FM2
-;;; ------
+;;;
 set_2ch::
         ld      a, (state_timer_base_flags)
         set     REG_TIMER_FLAGS_2CH_BIT, a
@@ -202,10 +214,15 @@ set_2ch::
         ret
 
 
-;;; TIMER_TEMPO
 ;;; configure YM2610's timer B for a specific tempo and start it
-;;; ------
+;;;
 ;;; [hl]: Timer B counter
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | Timer B counter
+;;;
+;;; @return parse next opcode
+;;;
 timer_tempo::
         ;; reset all timers
         ld      b, #REG_TIMER_FLAGS
@@ -238,11 +255,15 @@ timer_tempo::
         ret
 
 
-;;; ROW_SPEED
 ;;; number of ticks to wait before processing the next row in the streams
 ;;; when groove is in use, only speed2 is modified
-;;; ------
-;;; [hl]: ticks
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | ticks
+;;;
+;;; @return parse next opcode
+;;;
 row_speed::
         push    de
 
@@ -268,11 +289,15 @@ row_speed::
         ret
 
 
-;;; ROW_GROOVE
 ;;; number of ticks to wait before processing the next row in the streams
 ;;; this always modified speed1
-;;; ------
-;;; [hl]: ticks
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | ticks
+;;;
+;;; @return parse next opcode
+;;;
 row_groove::
         push    de
         ;; de: tick position to store groove
@@ -291,3 +316,6 @@ row_groove::
         pop     de
         ld      a, #1
         ret
+
+;;; @}
+;;;

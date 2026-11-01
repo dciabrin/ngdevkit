@@ -119,8 +119,9 @@ state_b_action_funcs::
 
 ;;;  Reset ADPCM playback state.
 ;;;  Called before playing a stream
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 init_nss_adpcm_b_state_tracker::
         ld      hl, #state_b_start
         ld      d, h
@@ -143,12 +144,11 @@ init_nss_adpcm_b_state_tracker::
         ret
 
 
-;;; run_adpcm_b_pipeline
-;;; ------
 ;;; Run the entire ADPCM-B pipeline once:
 ;;;  - update the state of all enabled FX
 ;;;  - load specific parts of the state (note, vol...) into ADPCM-B registers
 ;;; Meant to run once per tick
+;;;
 run_adpcm_b_pipeline::
         push    de
         push    iy
@@ -276,15 +276,16 @@ _end_b_channel_pipeline:
 
 
 ;;; ADPCM NSS opcodes
-;;; ------
+;;;
 
-;;; adpcm_b_scale_output
 ;;; adjust ADPCM-B volume to match configured ADPCM-B output level
 ;;; output volume = [0..1] * input volume, where the scale factor
 ;;; is the currently configured ADPCM-B output level [0x00..0xff]
-;;; ------
-;;; a: input level [0x00..0xff]
-;;; modified: bc
+;;;
+;;; @param[in] a: input level [0x00..0xff]
+;;;
+;;; @modified af, bc
+;;; 
 adpcm_b_scale_output::
         push    hl
 
@@ -354,10 +355,19 @@ _b_level_post:
         ret
 
 
-;;; ADPCM_B_INSTRUMENT
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_adpcm_b ADPCM-B opcodes
+;;; @{
+
+
 ;;; Configure the ADPCM-B channel based on an instrument's data
-;;; ------
-;;; [ hl ]: instrument number
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | instrument number
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_b_instrument::
         ;; a: instrument
         ld      a, (hl)
@@ -436,9 +446,11 @@ _adpcm_b_instr_end:
         ld      a, #1
         ret
 
+;;; @}
+;;; 
 
 ;;; Configure state for new note and trigger a load in the pipeline
-;;; ------
+;;;
 adpcm_b_configure_note_on:
         push    bc
         ;; if a slide is ongoing, this is treated as a slide FX update
@@ -485,7 +497,7 @@ _b_cfg_note_end:
 
 
 ;;; Configure state for new note and trigger a load in the pipeline
-;;; ------
+;;;
 adpcm_b_configure_vol:
         ;; if a volume slide is ongoing, treat it as a volume slide FX update
         bit     BIT_FX_SLIDE, FX(ix)
@@ -504,11 +516,17 @@ _b_cfg_vol_update:
 _b_cfg_vol_end:
         ret
 
+;;; @ingroup nss_adpcm_b
+;;; @{
 
-;;; ADPCM_B_NOTE_ON
 ;;; Emit a specific note (frequency) on the ADPCM-B channel
-;;; ------
-;;; [ hl ]: note
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_b_note_on::
         ;; a: note
         ld      a, (hl)
@@ -531,10 +549,13 @@ _b_note_on_end:
         ld      a, #1
         ret
 
-
+;;; @}
+;;;
+        
 ;;; Compute the YM2610's volume registers value from the ADPCM-B channel
-;;; ------
-;;; modified: bc
+;;;
+;;; @modified af, bc
+;;;
 compute_ym2610_adpcm_b_vol::
         ;; a: note vol
         ld      a, VOL16+1(ix)
@@ -548,8 +569,9 @@ compute_ym2610_adpcm_b_vol::
 
 
 ;;; Compute fixed-point note position after FX-pipeline
-;;; ------
-;;; ix: state for the current channel
+;;;
+;;; @param[in] ix: state for the current channel
+;;;
 compute_adpcm_b_fixed_point_note::
         ;; hl: current decimal note
         ld      l, NOTE16(ix)
@@ -575,8 +597,9 @@ _b_post_add_vibrato::
 
 
 ;;; Compute the YM2610's note registers value from state's fixed-point note
-;;; ------
-;;; modified: bc, de, hl
+;;;
+;;; @modified af, bc, de, hl
+;;;
 compute_ym2610_adpcm_b_note::
         ;; l: current note
         ld      l, NOTE_POS16+1(ix)
@@ -685,10 +708,13 @@ _post_delta_shift:
 
         ret
 
+;;; @ingroup nss_adpcm_b
+;;; @{
 
-;;; ADPCM_B_NOTE_OFF
 ;;; Stop sample playback on the ADPCM-B channel
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_b_note_off::
         push    bc
 
@@ -706,9 +732,14 @@ adpcm_b_note_off::
         ret
 
 
-;;; ADPCM_B_VOL
 ;;; Set playback volume of the ADPCM-B channel
-;;; ------
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_b_vol::
         ;; a: volume
         ld      a, (hl)
@@ -730,9 +761,8 @@ _b_vol_end:
         ret
 
 
-;;; ADPCM_B_CTX
-;;; ------
 ;;; Set the current ctx for ADPCM-B
+;;;
 adpcm_b_ctx:
         ;; set ADPCM-B struct pointer for context
         ld      ix, #state_b
@@ -742,11 +772,15 @@ adpcm_b_ctx:
         ret
 
 
-;;; ADPCM_B_DELAY
 ;;; Enable delayed trigger for the next note and volume
 ;;; (note and volume and played after a number of ticks)
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_b_delay::
         call    trigger_delay_init
 
@@ -754,10 +788,14 @@ adpcm_b_delay::
         ret
 
 
-;;; ADPCM_B_CUT
 ;;; Record that the note being played must be stopped after some steps
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_b_cut::
         call    trigger_cut_init
 
@@ -765,10 +803,14 @@ adpcm_b_cut::
         ret
 
 
-;;; ADPCM_B_PAN
 ;;; Set the pan (l/r) for the channel
-;;; ------
-;;; [ hl ]: pan (b7: left, b6: right)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | pan (b7: left, b6: right)
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_b_pan::
         ld      a, (hl)
         inc     hl
@@ -777,3 +819,6 @@ adpcm_b_pan::
 
         ld      a, #1
         ret
+
+;;; @}
+;;; 

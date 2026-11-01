@@ -148,7 +148,7 @@ state_ssg_action_funcs:
 
 ;;;  Reset SSG playback state.
 ;;;  Called before playing a stream
-;;; ------
+;;;
 ;;; bc, de, hl modified
 init_nss_ssg_state_tracker::
         ld      hl, #_state_ssg_begin
@@ -180,11 +180,11 @@ _ssg_init:
 ;;; Macro instrument - internal functions
 ;;;
 
-;;; eval_macro_step
 ;;; update the mirror state for a SSG channel based on
 ;;; the macro program configured for this channel
-;;; ------
-;;; bc, de, hl modified
+;;;
+;;; @modified af, bc, de, hl modified
+;;;
 eval_macro_step::
         ;; de: state_mirrored_ssg_props (8bit add)
         push    ix
@@ -238,8 +238,11 @@ _finish_macro_step:
 
 
 ;;; Set the current SSG channel and SSG state context
-;;; ------
-;;;   a : SSG channel
+;;;
+;;; @param[in] a: SSG channel
+;;;
+;;; @modified af
+;;;
 ssg_ctx_set_current::
         ld      (state_ssg_channel), a
         ld      ix, #state_mirrored_ssg
@@ -258,13 +261,12 @@ _ssg_ctx_post_bit1:
         ret
 
 
-;;; run_ssg_pipeline
-;;; ------
 ;;; Run the entire SSG pipeline once. for each SSG channels:
 ;;;  - run a single round of macro steps configured
 ;;;  - update the state of all enabled FX
 ;;;  - load specific parts of the state (note, vol...) into YM2610 registers
 ;;; Meant to run once per tick
+;;; 
 run_ssg_pipeline::
         push    de
         ;; TODO should we consider IX and IY scratch registers?
@@ -466,8 +468,9 @@ _ssg_end_macro:
 
 
 ;;; Update the current fixed-point position
-;;; ------
+;;;
 ;;; current note (integer) + all the note effects (fixed point)
+;;; 
 compute_ssg_fixed_point_note::
         ;; hl: current decimal note
         ld      l, NOTE16(ix)
@@ -587,8 +590,9 @@ compute_ym2610_ssg_note::
 
 
 ;;; Blend all volumes together to yield the volume for the ym2610 register
-;;; ------
-;;; [b modified]
+;;;
+;;; @modified af, b
+;;; 
 compute_ym2610_ssg_vol::
         ;; a: note volume for channel
         ld      a, VOL16+1(ix)
@@ -616,7 +620,7 @@ _post_ssg_vol_clamp:
 
 
 ;;; Set the right waveform value for the current SSG channel
-;;; ------
+;;;
 ;;; IN:
 ;;;   c: waveform
 ;;; OUT
@@ -637,10 +641,10 @@ _post_waveform_shift:
         ret
 
 
-;;;  Reset SSG playback state.
-;;;  Called before waiting for the next tick
-;;; ------
-;;; [a modified - other registers saved]
+;;; Reset SSG playback state.
+;;; Called before waiting for the next tick
+;;;
+;;; @modified af
 ssg_ctx_reset::
         ld      a, #0
         call    ssg_ctx_set_current
@@ -650,11 +654,18 @@ ssg_ctx_reset::
 
 
 ;;; SSG NSS opcodes
-;;; ------
+;;;
 
-;;; SSG_CTX_1
+;;; 
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_ssg SSG opcodes
+;;; @{
+;;;
+
 ;;; Set the current SSG track to be SSG1 for the next SSG opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 ssg_ctx_1::
         ;; set new current SSG channel
         ld      a, #0
@@ -663,9 +674,10 @@ ssg_ctx_1::
         ret
 
 
-;;; SSG_CTX_2
 ;;; Set the current SSG track to be SSG3 for the next SSG opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 ssg_ctx_2::
         ;; set new current SSG channel
         ld      a, #1
@@ -674,9 +686,10 @@ ssg_ctx_2::
         ret
 
 
-;;; SSG_CTX_3
 ;;; Set the current SSG track to be SSG3 for the next SSG opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 ssg_ctx_3::
         ;; set new current SSG channel
         ld      a, #2
@@ -685,10 +698,14 @@ ssg_ctx_3::
         ret
 
 
-;;; SSG_MACRO
 ;;; Configure the SSG channel based on a macro's data
-;;; ------
-;;; [ hl ]: macro number
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | macro number
+;;;
+;;; @return parse next opcode
+;;;
 ssg_macro::
         push    de
 
@@ -748,9 +765,11 @@ ssg_macro::
         ld      a, #1
         ret
 
+;;; @}
+;;;
 
 ;;; Release the note on a SSG channel and update the pipeline state
-;;; ------
+;;;
 ssg_stop_playback:
         push    bc
 
@@ -786,10 +805,13 @@ ssg_stop_playback:
 
         ret
 
+;;; @ingroup nss_ssg
+;;; @{
 
-;;; SSG_NOTE_OFF
 ;;; Release (stop) the note on the current SSG channel.
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 ssg_note_off::
         call    ssg_stop_playback
 
@@ -797,10 +819,11 @@ ssg_note_off::
         ret
 
 
-;;; SSG_NOTE_OFF_AND_NEXT_CTX
 ;;; Release (stop) the note on the current SSG channel.
 ;;; Immediately switch to the next SSG context.
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 ssg_note_off_and_next_ctx::
         call    ssg_note_off
 
@@ -813,10 +836,14 @@ ssg_note_off_and_next_ctx::
         ret
 
 
-;;; SSG_VOL
 ;;; Set the volume of the current SSG channel
-;;; ------
-;;; [ hl ]: volume level
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume level
+;;;
+;;; @return parse next opcode
+;;;
 ssg_vol::
         ;; a: volume
         ld      a, (hl)
@@ -838,9 +865,11 @@ _ssg_vol_end:
         ld      a, #1
         ret
 
+;;; @}
+;;; 
 
 ;;; Configure state for new note and trigger a load in the pipeline
-;;; ------
+;;;
 ssg_configure_note_on:
         push    bc
         ;; if a slide is ongoing, this is treated as a slide FX update
@@ -889,7 +918,7 @@ _ssg_cfg_note_end:
 
 
 ;;; Configure state for new volume and trigger a load in the pipeline
-;;; ------
+;;;
 ssg_configure_vol:
         ;; if a volume slide is ongoing, treat it as a volume slide FX update
         bit     BIT_FX_SLIDE, FX(ix)
@@ -908,11 +937,18 @@ _ssg_cfg_vol_update:
 _ssg_cfg_vol_end:
         ret
 
-
-;;; SSG_NOTE_ON
+;;; @ingroup nss_ssg
+;;; @{
+;;;
+        
 ;;; Emit a specific note (frequency) on a SSG channel
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 ssg_note_on::
         ;; a: note (0xAB: A=octave B=semitone)
         ld      a, (hl)
@@ -934,11 +970,15 @@ _ssg_note_on_end:
         ret
 
 
-;;; SSG_NOTE_ON_AND_NEXT_CTX
 ;;; Emit a specific note (frequency) on a SSG channel and
 ;;; immediately switch to the next SSG context
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 ssg_note_on_and_next_ctx::
         ;; process a regular note opcode
         call    ssg_note_on
@@ -952,11 +992,15 @@ ssg_note_on_and_next_ctx::
         ret
 
 
-;;; SSG_NOTE_ON_AND_WAIT
 ;;; Emit a specific note (frequency) on a SSG channel and
 ;;; immediately wait as many rows as the last wait
-;;; ------
-;;; [ hl ]: note (0xAB: A=octave B=semitone)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | note (0xAB: A=octave B=semitone)
+;;;
+;;; @return parse next opcode
+;;;
 ssg_note_on_and_wait::
         ;; process a regular note opcode
         call    ssg_note_on
@@ -966,11 +1010,15 @@ ssg_note_on_and_wait::
         ret
 
 
-;;; SSG_ENV_PERIOD
 ;;; Set the period of the SSG envelope generator
-;;; ------
-;;; [ hl ]: fine envelope period
-;;; [hl+1]: coarse envelope period
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | fine envelope period
+;;;   | hl+1 | coarse envelope period
+;;;
+;;; @return parse next opcode
+;;;
 ssg_env_period::
         push    bc
 
@@ -992,11 +1040,15 @@ ssg_env_period::
         ret
 
 
-;;; SSG_DELAY
 ;;; Enable delayed trigger for the next note and volume
 ;;; (note and volume and played after a number of ticks)
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 ssg_delay::
         call    trigger_delay_init
 
@@ -1004,10 +1056,14 @@ ssg_delay::
         ret
 
 
-;;; SSG_PITCH
 ;;; Detune up to -+1 semitone for the current channel
-;;; ------
-;;; [ hl ]: detune
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | detune
+;;;
+;;; @return parse next opcode
+;;;
 ssg_pitch::
         push    bc
         call    common_pitch
@@ -1018,12 +1074,18 @@ ssg_pitch::
         ret
 
 
-;;; SSG_CUT
 ;;; Record that the note being played must be stopped after some steps
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 ssg_cut::
         call    trigger_cut_init
 
         ld      a, #1
         ret
+
+;;; @}
