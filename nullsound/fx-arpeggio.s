@@ -30,8 +30,11 @@
 
 
 ;;; Update the arpeggio state for the current channel
-;;; ------
-;;; ix: mirrored state of the current channel
+;;;
+;;; @param[in] ix: mirrored state of the current channel
+;;;
+;;; @modified af
+;;;
 eval_arpeggio_step::
         ;; assert: speed is always >=1, so count is never 0 here
         dec     ARPEGGIO_COUNT(ix)
@@ -73,13 +76,22 @@ _arpeggio_not1:
 _arpeggio_eval_end:
         ret
 
+;;;
+;;; @ingroup nss_fx
+;;; @{
+;;;
 
-;;; ARPEGGIO
 ;;; Enable arpeggio chord for note playback
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: semitone:4 - semitone:4
-;;; hl modified
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | semitone:4 - semitone:4
+;;;
+;;; @return parse next opcode
+;;;
+;;; @modified af, hl
+;;;
 arpeggio::
         ;; 2nd note in chord
         ld      a, (hl)
@@ -113,12 +125,16 @@ _arpeggio_end:
         ret
 
 
-;;; ARPEGGIO_SPEED
-;;; configure the number of ticks between two notes of the chord
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: speed
-;;; hl modified
+;;; Configure the number of ticks between two notes of the chord
+;;;
+;;; @param[in] ix: state for channel
+;;; @memory
+;;;   |  hl  | speed
+;;;
+;;; @return parse next opcode
+;;;
+;;; @modified af, hl
+;;;
 arpeggio_speed::
         ld      a, (hl)
         inc     hl
@@ -127,10 +143,14 @@ arpeggio_speed::
         ret
 
 
-;;; ARPEGGIO_OFF
 ;;; Disable arpeggio chord for note playback
-;;; ------
-;;;   ix  : state for channel
+;;;
+;;; @param[in] ix: state for channel
+;;;
+;;; @return parse next opcode
+;;;
+;;; @modified af
+;;;
 arpeggio_off::
         ;; disable FX
         res     BIT_FX_ARPEGGIO, NOTE_FX(ix)
@@ -140,3 +160,5 @@ arpeggio_off::
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         ld      a, #1
         ret
+
+;;; @}
