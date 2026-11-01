@@ -94,7 +94,18 @@ def allocate_samples(smp, vrom_size, out_vrom_pattern):
     vrom = 0
     f = None
     for s in smp:
-        if vrom_pos+len(s.data) > vrom_size:
+        if len(s.data) > vrom_size:
+            error("Sample '%s' is larger than one VROM" % s.name)
+        if isinstance(s, adpcm_a) and len(s.data) > 0x100000:
+            error("ADPCM-A sample '%s' is larger than one 1 MiB page" % s.name)
+        while True:
+            # ADPCM-A start and inclusive end addresses must share a 1 MiB page.
+            start = absolute_pos + vrom_pos
+            if isinstance(s, adpcm_a) and s.data and \
+               start // 0x100000 != (start + len(s.data) - 1) // 0x100000:
+                vrom_pos += 0x100000 - start % 0x100000
+            if vrom_pos + len(s.data) <= vrom_size:
+                break
             if f:
                 f.close()
             vrom_pos = 0
