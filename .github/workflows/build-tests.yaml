@@ -100,7 +100,7 @@ jobs:
 
   macos:
     name: "macOS build"
-    runs-on: macos-15
+    runs-on: xcode-27
     env:
       PREFIX: "/opt/homebrew"
       PY3PATH: "/opt/homebrew/bin"
