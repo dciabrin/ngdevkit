@@ -22,9 +22,10 @@ class AdpcmAPagePlacementTests(unittest.TestCase):
     def test_adpcm_a_crossing_page_moves_to_next_page(self):
         samples = [sample(vromtool.adpcm_a, "first", 0xfe300),
                    sample(vromtool.adpcm_a, "earthquake", 0x2300),
-                   sample(vromtool.adpcm_a, "next", 0x100)]
+                   sample(vromtool.adpcm_a, "duplicate", 0x2300),
+                   sample(vromtool.adpcm_a, "next", 0x100, 0xaa)]
         vromtool.allocate_samples(samples, 2 * PAGE, "sampleX.rom")
-        self.assertEqual([s.start for s in samples], [0, PAGE, PAGE + 0x2300])
+        self.assertEqual([s.start for s in samples], [0, PAGE, PAGE, PAGE + 0x2300])
         output = io.StringIO()
         vromtool.generate_asm_defines(samples, output)
         self.assertIn("[100000..1022ff] ADPCM-A", output.getvalue())
@@ -32,7 +33,7 @@ class AdpcmAPagePlacementTests(unittest.TestCase):
     def test_exact_page_end_does_not_add_padding(self):
         samples = [sample(vromtool.adpcm_a, "first", PAGE - 0x100),
                    sample(vromtool.adpcm_a, "end", 0x100),
-                   sample(vromtool.adpcm_a, "next", 0x100)]
+                   sample(vromtool.adpcm_a, "next", 0x100, 0xaa)]
         vromtool.allocate_samples(samples, 2 * PAGE, "sampleX.rom")
         self.assertEqual([s.start for s in samples], [0, PAGE - 0x100, PAGE])
 

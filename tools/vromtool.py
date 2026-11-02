@@ -94,6 +94,26 @@ def align_adpcm_a_sample(s, start):
     return start
 
 
+def record_sample(sample, recorded_samples):
+    data_key = (type(sample), bytes(sample.data))
+    recorded_sample = recorded_samples.get(data_key)
+    if recorded_sample is None:
+        recorded_samples[data_key] = sample
+        return True
+    sample.out = recorded_sample.out
+    sample.vrom_start = recorded_sample.vrom_start
+    sample.start = recorded_sample.start
+    sample.length = recorded_sample.length
+    sample.start_lsb = recorded_sample.start_lsb
+    sample.start_msb = recorded_sample.start_msb
+    sample.stop_lsb = recorded_sample.stop_lsb
+    sample.stop_msb = recorded_sample.stop_msb
+    dbg("    [%06x..%06x] %s (same data as %s)" %
+        (sample.start, sample.start+sample.length,
+         sample.name, recorded_sample.name))
+    return False
+
+
 # Basic sample packing: allocate ADPCM samples in sequence
 # until a ROM is full. Assume ADPCM A and B share the same ROM
 def allocate_samples(smp, vrom_size, out_vrom_pattern):
@@ -102,13 +122,14 @@ def allocate_samples(smp, vrom_size, out_vrom_pattern):
     absolute_pos = 0
     vrom = 0
     f = None
+    recorded_samples = {}
     for s in smp:
+        if not record_sample(s, recorded_samples):
+            continue
         if len(s.data) > vrom_size:
             error("Sample '%s' is larger than one VROM" % s.name)
-        while True:
-            vrom_pos = align_adpcm_a_sample(s, absolute_pos + vrom_pos) - absolute_pos
-            if vrom_pos + len(s.data) <= vrom_size:
-                break
+        vrom_pos = align_adpcm_a_sample(s, absolute_pos + vrom_pos) - absolute_pos
+        while vrom_pos + len(s.data) > vrom_size:
             if f:
                 f.close()
             vrom_pos = 0
@@ -116,6 +137,7 @@ def allocate_samples(smp, vrom_size, out_vrom_pattern):
             vrom += 1
             out = out_vrom_pattern.replace("X", str(vrom))
             dbg("  New VROM '%s'" % out)
+            vrom_pos = align_adpcm_a_sample(s, absolute_pos) - absolute_pos
         s.out = out
         s.vrom_start = vrom_pos
         s.start = absolute_pos + vrom_pos
