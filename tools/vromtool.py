@@ -85,6 +85,27 @@ def validate(s):
            val["uri"].startswith("data:;base64,")
 
 
+# Reuse the VROM location of an earlier sample with identical data
+def reuse_allocated_location(sample, allocated_samples):
+    data_key = (type(sample), bytes(sample.data))
+    allocated_sample = allocated_samples.get(data_key)
+    if allocated_sample is None:
+        allocated_samples[data_key] = sample
+        return False
+    sample.out = allocated_sample.out
+    sample.vrom_start = allocated_sample.vrom_start
+    sample.start = allocated_sample.start
+    sample.length = allocated_sample.length
+    sample.start_lsb = allocated_sample.start_lsb
+    sample.start_msb = allocated_sample.start_msb
+    sample.stop_lsb = allocated_sample.stop_lsb
+    sample.stop_msb = allocated_sample.stop_msb
+    dbg("    [%06x..%06x] %s (same data as %s)" %
+        (sample.start, sample.start+sample.length,
+         sample.name, allocated_sample.name))
+    return True
+
+
 # Basic sample packing: allocate ADPCM samples in sequence
 # until a ROM is full. Assume ADPCM A and B share the same ROM
 def allocate_samples(smp, vrom_size, out_vrom_pattern):
@@ -93,7 +114,10 @@ def allocate_samples(smp, vrom_size, out_vrom_pattern):
     absolute_pos = 0
     vrom = 0
     f = None
+    allocated_samples = {}
     for s in smp:
+        if reuse_allocated_location(s, allocated_samples):
+            continue
         if vrom_pos+len(s.data) > vrom_size:
             if f:
                 f.close()
