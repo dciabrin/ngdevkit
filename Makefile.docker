@@ -1,0 +1,19 @@
+# Remote image
+IMAGE=hldtux/ndevkit
+# Local image
+# make IMAGE=ndevkit -f Makefile.docker 
+# or
+#IMAGE=ndevkit
+TAG=latest
+# Forcing amd64 arch
+DOCKER_DEFAULT_PLATFORM=linux/amd64
+
+docker:
+	docker build . -t ${IMAGE}
+
+shell:	docker
+	docker run -it --rm -v `pwd`:/tmp/workdir -w /tmp/workdir ${IMAGE} bash
+
+push:
+	docker push ${IMAGE}:${TAG}
+
