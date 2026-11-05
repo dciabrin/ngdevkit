@@ -378,7 +378,8 @@ def read_module(bs):
     # WAVE element: skip, we don't use it
 
     # SMP2 elements: pointers to samples get parsed later
-    mod.samples = elements[0x06]
+    if 0x06 in elements:
+        mod.samples = elements[0x06]
 
     # PATN elements: pointers to patterns get parsed later
     mod.patterns = elements[0x07]
