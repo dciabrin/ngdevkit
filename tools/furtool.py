@@ -512,6 +512,20 @@ class adpcm_b_instrument:
         return self._sample
 
 
+# Default FM instrument data when Furnace module doesn't include
+# one. This maps to Furnace default for FM channels.
+def default_fm_instrument():
+    return fm_instrument('', 0, 4, 0, 0,
+                         [fm_operator(2, 5, 42, 0, 31, 0, 8, 2, 0, 15, 3, 0),
+                          fm_operator(2, 1, 48, 0, 31, 0, 4, 2, 0, 11, 1, 0),
+                          fm_operator(7, 1, 18, 0, 31, 0, 10, 2, 0, 15, 4, 0),
+                          fm_operator(7, 1, 2, 0, 31, 0, 9, 2, 0, 15, 9, 0)])
+
+
+# Default SSG macro data when Furnace module doesn't include
+# one. This emulates Furnace default: full volume, output enabled
+def default_ssg_macro():
+    return ssg_macro('', [3, 15, 0, 8, 255, 255], [3, 4], [3, 0], [40], 255, False)
 
 
 def read_fm_instrument(bs, version):
@@ -824,11 +838,17 @@ def read_instrument(m, nth, bs, smp):
                38: make_adpcm_b_instrument}[itype](m, smp, sample)
     # generate a ASM name for the instrument or macro
     if itype == 6:
+        if mac == None:
+            warning("corrected default SSG macro for instrument %02x%s" % \
+                    (nth, (" (%s)"%name if name else "")))
+            mac = default_ssg_macro()
         mac.name = asm_ident("macro_%02x_%s"%(nth, name))
         mac.load_name = asm_ident("macro_%02x_load_func"%nth)
         mac.loop_name = asm_ident("macro_%02x_loop"%nth)
         return mac
     else:
+        if ins == None:
+            ins = default_fm_instrument()
         ins.name = asm_ident("instr_%02x_%s"%(nth, name))
         if itype == 38 and mac:
             configure_b_macros(ins, mac)
