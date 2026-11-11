@@ -93,6 +93,7 @@ state_ssg_vol16:                .blkb   2       ; current decimal volume
 ;;; common FX state tracker
 state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
 state_ssg_fx_vol_slide:         .blkb   SLIDE_SIZE
+state_ssg_fx_tremolo:           .blkb   VIBRATO_SIZE
 state_ssg_trigger:              .blkb   TRIGGER_SIZE
 
 ;;; actions to run at the end of every tick
@@ -323,6 +324,11 @@ _ssg_post_fx_trigger:
         call    eval_slide_step
         set     #BIT_LOAD_VOL, PIPELINE(ix)
 _ssg_post_fx_vol_slide:
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _ssg_post_fx_tremolo
+        call    eval_tremolo_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_ssg_post_fx_tremolo:
 
         ;; iy: note FX state for channel
         push    ix
@@ -591,11 +597,32 @@ compute_ym2610_ssg_note::
 
 ;;; Blend all volumes together to yield the volume for the ym2610 register
 ;;;
-;;; @modified af, b
+;;; @modified af, bc
 ;;; 
 compute_ym2610_ssg_vol::
-        ;; a: note volume for channel
+        ;; a: integer part of the decimal volume
         ld      a, VOL16+1(ix)
+
+        ;; b: tremolo attenuation
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _ssg_post_add_tremolo
+        ld      c, a
+        ld      a, VOL_CTX+VIBRATO_POS16+1(ix)
+        ;; TODO: check division is correct
+        ;; as 0xf is the max output level for SSG
+        srl     a
+        srl     a
+        ld      b, a
+
+        ;; a: vol - vibrato attenuation (min-clamped to 0)
+        ;; only consider the integer-part of the tremolo (8bit)
+        ;; for a slightly faster computation
+        ld      a, c
+        sub     b
+        jp      nc, _ssg_post_add_tremolo
+        xor     a
+_ssg_post_clamp_vol:
+_ssg_post_add_tremolo:
 
         ;; a: volume converted to attenuation
         sub     #SSG_MAX_VOL

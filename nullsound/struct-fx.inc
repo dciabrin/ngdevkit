@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024-2025 Damien Ciabrini
+;;; Copyright (c) 2024-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -28,7 +28,7 @@
         .local  _data_ctx, _data_fx, _data_cfg, _data16
         .local  pipeline
         .local  fx_fx, cfg_vol, vol16, fx_vol_slide
-        .local  note_fx, note_cfg, note16, fx_note_slide, fx_vibrato, fx_arpeggio, fx_legato
+        .local  note_fx, note_cfg, note16, fx_note_slide, fx_vibrato, fx_arpeggio, fx_legato, fx_tremolo
         .local  _trigger, _trigger_action, _trigger_note, _trigger_vol, _trigger_arg, _trigger_cur, _trigger_size
         .local  _vol_slide, _vol_slide_cfg, _vol_slide_inc16, _vol_slide_end, _vol_slide_max, _vol_slide_size
         .local  _vibrato, _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
@@ -73,6 +73,7 @@ vol16:                  .blkb 2         ; current decimal volume
 ;;; common FX state tracker
 fx_fx:                  .blkb 1         ; enabled FX
 fx_vol_slide:           .blkb SLIDE_SIZE
+fx_tremolo:             .blkb VIBRATO_SIZE
 fx_trigger:             .blkb TRIGGER_SIZE
 
 ;;; strean pipeline

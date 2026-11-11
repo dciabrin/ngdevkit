@@ -27,6 +27,7 @@
 
 
         .equ    VIBRATO_PRECALC_SIZE, 64
+        .equ    TREMOLO_PRECALC_SIZE, 128
 
 
 
@@ -75,7 +76,7 @@ _post_vibrato_pos:
 
         inc     hl
 
-        ;; pop the vol of note config
+        ;; pop the vol or note config
         pop     de
 
         ld      a, #1
@@ -234,6 +235,88 @@ _v_post_sign:
 
         ret
 
+
+;;; Update the tremolo for the current channel
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] iy: FX state for channel
+;;;
+;;; @modified af, bc, de, hl
+;;;
+eval_tremolo_step::
+        ;; e: next vibrato pos
+        ld      a, VIBRATO_POS(iy)
+        add     a, VIBRATO_SPEED(iy)
+        and     #(TREMOLO_PRECALC_SIZE-1)
+        ld      VIBRATO_POS(iy), a
+        ;; bc: offset for sine precalc
+        ld      c, a
+        ld      b, #0
+        ;; hl: pos in sine precalc
+        ld      hl, #volsine
+        add     hl, bc
+
+        ;; a: precalc from vol sine precalc (8bit, shifted)
+        ld      a, (hl)
+
+        ;; bc: precalc increment, prepared for scaling computation
+        ;;    format: ....XXXX XXXX....
+        ld      l, a
+        xor     a
+        ld      h, a
+        add     hl, hl
+        add     hl, hl
+        add     hl, hl
+        add     hl, hl
+        ld      b, h
+        ld      c, l
+
+        ld      h, a
+        ld      l, a
+
+        ;; a: effect depth clamped to [1..16] (5 bits)
+        ld      a, VIBRATO_DEPTH(iy)
+        ;; TODO move shifts in the vibrato setup, and store bounds
+        ;; as [0..15], to avoid shifts at every tick (FM and SSG)
+        sla     a
+        sla     a
+        sla     a
+
+        ;; hl: displacement = precalc * depth scaling
+        sla     a
+        jr      nc, _t_post_bit4
+        add     hl, bc
+_t_post_bit4:
+        add     hl, hl
+        add     a, a
+        jr      nc, _t_post_bit3
+        add     hl, bc
+_t_post_bit3:
+        add     hl, hl
+        add     a, a
+        jr      nc, _t_post_bit2
+        add     hl, bc
+_t_post_bit2:
+        add     hl, hl
+        add     a, a
+        jr      nc, _t_post_bit1
+        add     hl, bc
+_t_post_bit1:
+        ;; this 16bit shift might overflow now if the precalc is one full
+        ;; note displacement (0x1000) and depth is full (0x10). Recall
+        ;; the potential overflow bit in e
+        add     hl, hl
+        rl      e
+        add     a, a
+        jr      nc, _t_post_bit0
+        add     hl, bc
+_t_post_bit0:
+
+        ld      VIBRATO_POS16(iy), l
+        ld      VIBRATO_POS16+1(iy), h
+
+        ret
+
 ;;;
 ;;; @ingroup nss_fx
 ;;; @{
@@ -246,7 +329,7 @@ _v_post_sign:
 ;;; @memory
 ;;;   hl | speed (4bits) and depth (4bits)
 ;;;
-;;; @modified af
+;;; @modified af, hl
 ;;;
 vibrato::
         push    de
@@ -266,6 +349,35 @@ vibrato_off::
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         ld      a, #1
         ret
+
+
+;;; Enable tremolo for the current channel
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | speed (4bits) and depth (4bits)
+;;;
+;;; @modified af
+;;;
+tremolo::
+        push    de
+        ld      de, #VOL_CTX
+        jp      vibrato_init
+
+
+;;; Disable trmolo for the current channel
+;;;
+;;; @modified af
+;;;
+tremolo_off::
+        ;; disable FX
+        res     BIT_FX_VIBRATO, FX(ix)
+        ;; since we disable the FX outside of the pipeline process
+        ;; make sure to load this new note at next pipeline run
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+        ld      a, #1
+        ret
+
 
 ;;; @}
 ;;; 

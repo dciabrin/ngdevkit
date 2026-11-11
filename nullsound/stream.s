@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2023-2024 Damien Ciabrini
+;;; Copyright (c) 2023-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -23,6 +23,7 @@
 
         .include "ym2610.inc"
         .include "timer.inc"
+        .include "align.inc"
 
         .equ    CH_STREAM_SAVED, (state_ch_stream_saved_pos-state_ch_stream)
         .equ    CH_STREAM_START, (state_ch_stream_start-state_ch_stream)
@@ -99,6 +100,7 @@ state_ch_stream:
 state_ch_stream_saved_pos::     .blkb   2
 state_ch_stream_start::         .blkb   2
 state_ch_stream_pos::           .blkb   2
+;;; TODO check whether this needs to be duplicated
 state_ch_stream_entries::       .blkb   1
 state_ch_stream_end:
         .blkb   CH_STREAM_SIZE*(NB_YM2610_CHANNELS-1)
@@ -117,9 +119,10 @@ state_nss_process_func::
         .blkb   2         ; func offset in ROM
 
 
-        ;; FIXME: temporary padding to ensures the next data sticks into
+        ;; Padding to ensures the next data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   70
+_state_stream_align::
+        .blkb   _padding_state_stream
 
 
         .area  CODE
@@ -633,6 +636,8 @@ nss_opcodes:
         .nss_op fm2_vol_slide_off
         .nss_op fm2_vol_slide_up
         .nss_op fm2_vol_slide_down
+        .nss_op tremolo
+        .nss_op tremolo_off
 
 
 

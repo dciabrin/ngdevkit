@@ -143,6 +143,7 @@ state_fm_vol16:                 .blkb   2      ; current decimal volume
 ;;; common FX state tracker
 state_fm_fx:                    .blkb   1      ; enabled FX
 state_fm_fx_vol_slide:          .blkb   SLIDE_SIZE
+state_fm_fx_tremolo:            .blkb   VIBRATO_SIZE
 state_fm_fx_trigger:            .blkb   TRIGGER_SIZE
 state_fm_channel_state_end:
 
@@ -182,26 +183,52 @@ state_fm_ym2610_state_end:
 ;;; FM2 state tracker
 ;;; This is a bigger state tracker, where the channel state tracker part
 ;;; is duplicated for the four operators
-.align_begin state_fm2
-;;; { ...
-state_fm2:
+
+;;; state_fm2:
 ;;; OP1-specific channel state
+.align_begin state_op1
+;;; { ...
+state_op1:
                                 .blkb   FM_CHANNEL_STATE_SIZE
 state_op1_pipeline:             .blkb   1
                                 .blkb   FM_YM2610_OP_STATE_SIZE
+;;; ... }
+.align_end state_op1
+
 ;;; OP2-specific channel state
+;;; { ...
+.align_begin state_op2
+state_op2:
                                 .blkb   FM_CHANNEL_STATE_SIZE
 state_op2_pipeline:             .blkb   1
                                 .blkb   FM_YM2610_OP_STATE_SIZE
+;;; ... }
+.align_end state_op2
+
 ;;; OP3-specific channel state
+;;; { ...
+.align_begin state_op3
+state_op3:
                                 .blkb   FM_CHANNEL_STATE_SIZE
 state_op3_pipeline:             .blkb   1
                                 .blkb   FM_YM2610_OP_STATE_SIZE
+;;; ... }
+.align_end state_op3
+
 ;;; OP4-specific channel state
+;;; { ...
+.align_begin state_op4
+state_op4:
                                 .blkb   FM_CHANNEL_STATE_SIZE
 state_op4_pipeline:             .blkb   1
                                 .blkb   FM_YM2610_OP_STATE_SIZE
+;;; ... }
+.align_end state_op4
+
 ;;; FM2-specific channel state
+;;; { ...
+.align_begin state_fm2
+state_fm2:
                                 .blkb   FM_CHANNEL_STATE_SIZE
 state_fm2_pipeline:             .blkb   1
 ;;; FM-specific YM2610 state tracker
@@ -698,10 +725,33 @@ _fm_post_add_vibrato:
 compute_ym2610_fm_vol::
         push    iy
 
-        ;; a: note vol for current channel
+        ;; a: integer part of the fixed-point vol
+        ;; ld      l, VOL16(ix)
+        ;; ld      h, VOL16+1(ix)
         ld      a, VOL16+1(ix)
 
-        ;; b: convert volume to attenuation
+        ;; b: tremolo note vol for current channel
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _fm_post_add_tremolo
+        ld      c, a
+        ld      a, VOL_CTX+VIBRATO_POS16+1(ix)
+        ;; TODO: check why we need to divide by 4 and not by 2
+        ;; as 0x7f is the max output level for FM
+        srl     a
+        srl     a
+        ld      b, a
+
+        ;; a: vol - vibrato attenuation (min-clamped to 0)
+        ;; only consider the integer-part of the tremolo (8bit)
+        ;; for a slightly faster computation
+        ld      a, c
+        sub     b
+        jp      nc, _fm_post_clamp_vol
+        xor     a
+_fm_post_clamp_vol:
+_fm_post_add_tremolo:
+
+        ;; b: convert volume to attenuation (ym2610 representation)
         neg
         add     #FM_MAX_VOL
         ld      b, a
@@ -895,6 +945,11 @@ _fm_channel_post_fx_trigger:
         call    eval_slide_step
         set     BIT_LOAD_VOL, PIPELINE(ix)
 _fm_channel_post_fx_vol_slide:
+        bit     BIT_FX_VIBRATO, FX(ix)
+        jr      z, _fm_channel_post_fx_tremolo
+        call    eval_tremolo_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_fm_channel_post_fx_tremolo:
 
         ;; iy: note FX state for channel
         push    ix

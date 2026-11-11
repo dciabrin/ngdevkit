@@ -63,6 +63,7 @@ state_a_vol16:                  .blkb   2       ; current decimal volume
 ;;; FX state trackers
 state_a_fx:                     .blkb   1       ; enabled FX for this channel
 state_a_fx_vol_slide:           .blkb   SLIDE_SIZE
+state_a_fx_tremolo:             .blkb   VIBRATO_SIZE
 state_a_fx_trigger:             .blkb   TRIGGER_SIZE
 
 ;;; actions to run at the end of every tick
