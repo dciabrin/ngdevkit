@@ -103,9 +103,11 @@ _adpcm_no_state_update:
 
 
 ;;; Play a ROM sample on a ADPCM-A channel
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;; 
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_a_play_common::
         push    bc
         ;; stop playback
@@ -162,11 +164,14 @@ _snd_adpcm_a_end:
 
 
 ;;; Play a ROM sample on a ADPCM-A channel
+;;;
 ;;; If the channel is currently locked by an ongoing play,
 ;;; no action is taken and the ongoing play continues.
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_a_play::
         push    bc
         ld      a, (state_adpcm_exclusive)
@@ -181,11 +186,14 @@ _snd_adpcm_a_busy:
 
 
 ;;; Play a ROM sample on a ADPCM-A channel
+;;;
 ;;; If the channel is currently locked by an ongoing play,
 ;;; replace it and play the new sample while keeping this channel locked.
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_a_play_exclusive::
         push    bc
         ;; lock the channel
@@ -200,9 +208,11 @@ snd_adpcm_a_play_exclusive::
 
 
 ;;; Configure a ROM sample on the ADPCM-B channel for playback
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_b_play_common::
         ;; stop playback
         ld      b, #REG_ADPCM_B_START_STOP
@@ -256,11 +266,14 @@ snd_adpcm_b_play_common::
 
 
 ;;; Play a ROM sample on the ADPCM-B channel
+;;;
 ;;; If the channel is currently locked by an ongoing play,
 ;;; replace it and play the new sample while keeping this channel locked.
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_b_play_exclusive::
         push    bc
         ;; lock the channel
@@ -278,11 +291,14 @@ snd_adpcm_b_play_exclusive::
 
 
 ;;; Play and loop a ROM sample on the ADPCM-B channel
+;;;
 ;;; If the channel is currently locked by an ongoing play,
 ;;; replace it and play the new sample while keeping this channel locked.
-;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_b_play_loop_exclusive::
         push    bc
         ;; lock the channel
@@ -300,11 +316,14 @@ snd_adpcm_b_play_loop_exclusive::
 
 
 ;;; Play a ROM sample on the ADPCM-B channel
+;;;
 ;;; If the channel is currently locked by an ongoing play,
 ;;; no action is taken and the ongoing play continues.
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_b_play::
         push    bc
         ld      a, (state_adpcm_exclusive)
@@ -322,11 +341,14 @@ _snd_adpcm_b_busy:
 
 
 ;;; Play and loop a ROM sample on the ADPCM-B channel
+;;;
 ;;; If the channel is currently locked by an ongoing play,
 ;;; no action is taken and the ongoing play continues.
-;;; ------
-;;; ix: sample play config
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] ix: sample play config
+;;;
+;;; @modified af
+;;;
 snd_adpcm_b_play_loop::
         push    bc
         ld      a, (state_adpcm_exclusive)
@@ -344,9 +366,11 @@ _snd_adpcm_b_loop_busy:
 
 
 ;;; Stop playback on the ADPCM-B channel
+;;;
 ;;; If the channel is currently locked by an ongoing play, reset the lock.
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 snd_adpcm_b_stop::
         push    bc
         ;; reset playback busy state

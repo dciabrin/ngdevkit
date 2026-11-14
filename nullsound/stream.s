@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2023-2024 Damien Ciabrini
+;;; Copyright (c) 2023-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -23,6 +23,7 @@
 
         .include "ym2610.inc"
         .include "timer.inc"
+        .include "align.inc"
 
         .equ    CH_STREAM_SAVED, (state_ch_stream_saved_pos-state_ch_stream)
         .equ    CH_STREAM_START, (state_ch_stream_start-state_ch_stream)
@@ -99,6 +100,7 @@ state_ch_stream:
 state_ch_stream_saved_pos::     .blkb   2
 state_ch_stream_start::         .blkb   2
 state_ch_stream_pos::           .blkb   2
+;;; TODO check whether this needs to be duplicated
 state_ch_stream_entries::       .blkb   1
 state_ch_stream_end:
         .blkb   CH_STREAM_SIZE*(NB_YM2610_CHANNELS-1)
@@ -117,9 +119,10 @@ state_nss_process_func::
         .blkb   2         ; func offset in ROM
 
 
-        ;; FIXME: temporary padding to ensures the next data sticks into
+        ;; Padding to ensures the next data sticks into
         ;; a single 256 byte boundary to make 16bit arithmetic faster
-        .blkb   70
+_state_stream_align::
+        .blkb   _padding_state_stream
 
 
         .area  CODE
@@ -136,14 +139,16 @@ init_stream_state_tracker::
         call    init_nss_fm_state_tracker
         ret
 
-;;; substract one row from every stream's wait state
-;;; ------
-;;; . When called, one row passed since last update, so substract
+;;; Substract one row from every stream's wait state
+;;;
+;;; - When called, one row passed since last update, so substract
 ;;;   it from the wait state of all streams.
-;;; . Streams whose wait_rows value goes down to 0 become ready
-;;;   for processing NSS opcodes (in process_streams_opcodes)
-;;; . By design, substraction should never yield a negative wait
-;;; [no register modified]
+;;; - Streams whose wait_rows value goes down to 0 become ready
+;;;   for processing NSS opcodes (in `process_streams_opcodes`)
+;;; - By design, substraction should never yield a negative wait
+;;;
+;;; @modified af
+;;;
 update_streams_wait_rows::
         push    de
         push    bc
@@ -165,9 +170,10 @@ _tick_sub_loop:
         ret
 
 
-;;; process opcodes for all the streams that are not waiting for ticks
-;;; ------
-;;; [all registers modified]
+;;; Process opcodes for all the streams that are not waiting for ticks
+;;;
+;;; @modified all registers
+;;;
 process_streams_opcodes::
         ;; init stream state pointers
         ld      a, #0
@@ -236,8 +242,9 @@ _end_process:
 ;;; Evaluate the opcodes from the current nullsound stream,
 ;;; until an opcode must yield the execution (end of stream, timer wait)
 ;;; the current stream and current opcode pointer are in memory
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 update_stream_state_tracker::
         push    hl
         push    bc
@@ -279,7 +286,7 @@ _end_update_stream:
 
 
 ;;; Initialize subsystems' state trackers and stream wait state
-;;; ------
+;;;
 snd_stream_reset_state::
 stream_reset_state::
         ;; reset state trackers
@@ -310,10 +317,12 @@ _post_memset_wait_rows:
 
 ;;; Play music or sfx from a series of NSS sound opcodes stored
 ;;; in ROM in inline (1 stream) or compact (multi-stream) format
-;;; ------
-;;; bc: nullsound instruments
-;;; de: nullsound stream (inline or compact format)
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] bc: nullsound instruments
+;;; @param[in] de: nullsound stream (inline or compact format)
+;;;
+;;; @modified af
+;;;
 snd_stream_play::
 stream_play::
         ;; (de) = 0xff: inline NSS stream
@@ -363,9 +372,11 @@ stream_play::
 
 ;;; Initialize the context table based on the number and type
 ;;; of channels in use in the stream
-;;; ------
-;;; bc: stream usage bitfield
-;;; [a, bc, de, hl modified]
+;;;
+;;; @param[in] bc: stream usage bitfield
+;;;
+;;; @modified af, bc, de, hl
+;;;
 snd_configure_stream_ctx_switches::
         ld      hl, #stream_all_ctx_switch
         ld      de, #state_ch_ctx_switch
@@ -393,10 +404,12 @@ stream_all_ctx_switch::
 
 ;;; Play music or sfx from a pre-compiled list of NSS opcodes,
 ;;; encoded as multiple NSS streams (compact representation)
-;;; ------
-;;; bc: nullsound instruments
-;;; de: NSS data (compact representation)
-;;; [a modified - other registers saved]
+;;;
+;;; @param[in] bc: nullsound instruments
+;;; @param[in] de: NSS data (compact representation)
+;;;
+;;; @modified af
+;;;
 stream_play_multi::
         call    stream_stop
         push    de
@@ -465,8 +478,9 @@ _stream_play_init_loop:
 
 
 ;;; Stop music or sfx stream playback
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 snd_stream_stop::
 stream_stop::
         ;; force-stop any active channels, disable timers
@@ -483,18 +497,22 @@ stream_stop::
 
 
 ;;; NSS opcodes lookup table
-;;; ------
-;;; The functions below all follow the same interface
-;;; hl [IN]: arguments of the current NSS opcode in the stream
+;;;
+;;; Every function in the table process a specific NSS opcode, and
+;;; if follows the following calling convention:
+;;;
+;;; @param[in] hl: arguments of the current NSS opcode in the stream
 ;;;          when the function for a NSS opcode is called, hl points
 ;;;          to the arguments of that opcode.
 ;;;          on function exit, hl must point to the next NSS opcode
 ;;;          in the stream
-;;; a [OUT]: 1: processing of the next opcode can continue
-;;;          0: processing must stop (the playback must wait for
-;;;             the timer for sync, or the stream is finished)
 ;;;
-;;; [a and hl modified - other registers must be saved]
+;;; @return
+;;;  - 1: processing of the next opcode can continue
+;;;  - 0: processing must stop (the playback must wait for
+;;;       the timer for sync, or the stream is finished)
+;;;
+;;; @modified af and hl, all other must be saved
 nss_opcodes:
         ;; 0x00
         .nss_op write_port_a
@@ -618,13 +636,17 @@ nss_opcodes:
         .nss_op fm2_vol_slide_off
         .nss_op fm2_vol_slide_up
         .nss_op fm2_vol_slide_down
+        .nss_op tremolo
+        .nss_op tremolo_off
 
 
 
 ;;; Process a single NSS opcode
-;;; ------
-;;; hl: address in the stream pointing to the opcode and its args
-;;; [a, bc, iy modified - other registers saved]
+;;;
+;;; @param[in] hl: address in the stream pointing to the opcode and its args
+;;;
+;;; @modified af, hl, iy
+;;;
 process_nss_opcode::
         ;; op
         ld      a, (hl)
@@ -640,16 +662,27 @@ process_nss_opcode::
         push    bc
         ret
 
+;;; @defgroup nss_opcodes NSS opcodes
+;;; @{
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_fx Effect opcodes
+;;; @}
 
 ;;;
-;;; NSS opcodes
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_misc Misc opcodes
+;;; @{
 ;;;
 
-;;; WRITE_PORT_A
 ;;; generic write to YM2610 register reacheable from port A
-;;; ------
-;;; [ hl ]: register
-;;; [hl+1]: value
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | register
+;;;   | hl+1 | value
+;;;
+;;; @return parse next opcode
+;;;
 write_port_a::
         ld      b, (hl)
         inc     hl
@@ -660,11 +693,15 @@ write_port_a::
         ret
 
 
-;;; WRITE_PORT_B
 ;;; generic write to YM2610 register reacheable from port B
-;;; ------
-;;; [ hl ]: register
-;;; [hl+1]: value
+;;;
+;;; @param[in] hl: NSS bytecode arguments in memory
+;;; @memory
+;;;   |  hl  | register
+;;;   | hl+1 | value
+;;;
+;;; @return parse next opcode
+;;;
 write_port_b::
         ld      b, (hl)
         inc     hl
@@ -674,12 +711,22 @@ write_port_b::
         ld      a, #1
         ret
 
+;;; @}
+;;;
 
-;;; NSS_JMP
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_flow Control flow opcodes
+;;; @{
+
 ;;; jump to a location from the start of the NSS stream
-;;; ------
-;;; [ hl ]: offset LSB
-;;; [hl+1]: offset MSB
+;;;
+;;; @param[in] hl: NSS bytecode arguments in memory
+;;; @memory
+;;;   |  hl  | offset LSB
+;;;   | hl+1 | offset MSB
+;;;
+;;; @return parse next opcode
+;;;
 nss_jmp::
         push    bc
         ;; bc: location offset
@@ -699,9 +746,10 @@ nss_jmp::
         ret
 
 
-;;; NSS_END
 ;;; signal the end of the NSS stream to the player
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 nss_end::
         ;; signal the end of playback for the entire music
         call    stream_stop
@@ -715,11 +763,15 @@ nss_end::
         ret
 
 
-;;; WAIT_N_ROWS
 ;;; Suspend stream playback, resume after a number of rows
 ;;; worth of time has passed (Timer B interrupts * speed).
-;;; ------
-;;; [hl]: number of interrupts until playback resumes
+;;;
+;;; @param[in] hl: NSS bytecode arguments in memory
+;;; @memory
+;;;   | hl | number of interrupts until playback resumes
+;;;
+;;; @return parse next opcode
+;;;
 wait_n_rows::
         push    bc
         ;;  how many interrupts to wait for before moving on
@@ -742,10 +794,11 @@ _post_wait_rows:
         ret
 
 
-;;; WAIT_LAST_ROWS
 ;;; Suspend stream playback, resume after a number of rows
 ;;; worth of time has passed (same as the last wait_n_rows)
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 wait_last_rows::
         push    bc
         ;; last wait for this channel
@@ -758,14 +811,19 @@ wait_last_rows::
         jp      _post_wait_rows
 
 
-;;; NSS_CALL
 ;;; Continue playback to a new position in the stream
-;;; Recall the current position so that a NSS_RET opcode
+;;; Recall the current position so that a `NSS_RET` opcode
 ;;; continue execution from there.
-;;; Note: no NSS_CALL can be executed again before a NSS_RET
-;;; ------
-;;; [ hl ]: LSB forward offset to jump to
-;;; [hl+1]: MSB forward offset to jump to
+;;;
+;;; Note: no `NSS_CALL` can be executed again before a `NSS_RET`
+;;;
+;;; @param[in] hl: NSS bytecode arguments in memory
+;;; @memory
+;;;   |  hl  | LSB forward offset to jump to
+;;;   | hl+1 | MSB forward offset to jump to
+;;;
+;;; @return parse next opcode
+;;;
 nss_call::
         push    bc
 
@@ -791,10 +849,14 @@ nss_call::
         ret
 
 
-;;; NSS_CALL_TABLE
 ;;; Set up a series of calls to different locations in the stream
-;;; ------
-;;; [ hl ]: number of calls
+;;;
+;;; @param[in] hl: NSS bytecode arguments in memory
+;;; @memory
+;;;   | hl | number of calls
+;;;
+;;; @return parse next opcode
+;;;
 nss_call_table::
         ;; bc: number of calls
         ld      a, (hl)
@@ -814,11 +876,17 @@ nss_call_table::
 
 
 ;;; Continue playback to a new position in the stream
+;;;
 ;;; Recall the current position so that a NSS_RET opcode
 ;;; continues execution from there.
 ;;; Note: no CALL entry can be processed again before a NSS_RET
-;;; ------
-;;; [ hl ]: pattern offset in the entry table
+;;;
+;;; @param[in] hl: NSS bytecode arguments in memory
+;;; @memory
+;;;   | hl | pattern offset in the entry table
+;;;
+;;; @return parse next opcode
+;;;
 process_table_entry::
         push    bc
 
@@ -867,9 +935,10 @@ process_table_entry::
         ret
 
 
-;;; NSS_RET
-;;; Continue playback past the previous NSS_CALL statement
-;;; ------
+;;; Continue playback past the previous `NSS_CALL` statement
+;;;
+;;; @return parse next opcode
+;;;
 nss_ret::
         ld      iy, (state_current_ch_stream)
         ;; hl: saved current stream pos
@@ -893,9 +962,17 @@ _ret_set_process:
         ret
 
 
-;;; NSS_NOP
 ;;; Empty operation
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 nss_nop::
         ld      a, #1
         ret
+
+;;; @}
+;;;
+
+;;;
+;;; @}
+;;;

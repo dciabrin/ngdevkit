@@ -51,11 +51,12 @@ state_ym2610_context_address::
 
 
 ;;; ym2610_write_port_a
-;;; -------------------
-;;; IN:
-;;;    b: register address in ym2610
-;;;    c: data to set
-;;; (all registers are preserved)
+;;;
+;;; @param[in] b: register address in ym2610
+;;; @param[in] c: data to set
+;;;
+;;; @modified none
+;;;
 ym2610_write_port_a::
         push    af
         ;; reentrant: save register context
@@ -78,11 +79,12 @@ ym2610_write_port_a::
         ret
 
 ;;; ym2610_write_port_a_no_ctx
-;;; --------------------------
-;;; IN:
-;;;    b: register address in ym2610
-;;;    c: data to set
-;;; (all registers are preserved)
+;;;
+;;; @param[in] b: register address in ym2610
+;;; @param[in] c: data to set
+;;;
+;;; @modified none
+;;;
 ym2610_write_port_a_no_ctx::
         push    af
         ;; select register address
@@ -97,11 +99,12 @@ ym2610_write_port_a_no_ctx::
         ret
 
 ;;; ym2610_write_port_b
-;;; -------------------
-;;; IN:
-;;;    b: register address in ym2610
-;;;    c: data to set
-;;; (all registers are preserved)
+;;;
+;;; @param[in] b: register address in ym2610
+;;; @param[in] c: data to set
+;;;
+;;; @modified none
+;;;
 ym2610_write_port_b::
         push    af
         ;; reentrant: save register context
@@ -181,9 +184,13 @@ _end_restore_context:
 
 
 ;;; Reset YM2610
-;;; ------------
+;;;
 ;;; Reset ym2610 timers, channels playback and volumes
-;;;  a : leave ADPCM-A master volume untouched
+;;;
+;;; @param[in] a : leave ADPCM-A master volume untouched
+;;;
+;;; @modified af
+;;; 
 ym2610_reset::
         push    bc
         push    de

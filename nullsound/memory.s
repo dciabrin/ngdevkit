@@ -34,12 +34,16 @@ bank_64k_linear::
 
 
 ;;; Reconfigure the ROM window accessed from address 0x8000..0xf7ff
-;;; ------
-;;;   [ bc ] window 0 : (val * 0x0800) 0xf000..0xf7ff
-;;;   [bc+1] window 1 : (val * 0x1000) 0xe000..0xefff
-;;;   [bc+2] window 2 : (val * 0x2000) 0xc000..0xdfff
-;;;   [bc+3] window 3 : (val * 0x4000) 0x8000..0xbfff
-;;; [bc modified]
+;;;
+;;; @param[in] bc: memory map configuration in memory
+;;; @memory
+;;;    bc  | window 0 : (val * 0x0800) 0xf000..0xf7ff
+;;;   bc+1 | window 1 : (val * 0x1000) 0xe000..0xefff
+;;;   bc+2 | window 2 : (val * 0x2000) 0xc000..0xdfff
+;;;   bc+3 | window 3 : (val * 0x4000) 0x8000..0xbfff
+;;;
+;;; @modified af, bc
+;;;
 bank_switch::
         ld      a, (bc)
         in      a, (PORT_BANK_WINDOW_0)

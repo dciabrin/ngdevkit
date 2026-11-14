@@ -36,10 +36,15 @@
         ;; our 256bytes boundaries constraints.
 
         .lclequ _padding_state_timer,   0x0
-        .lclequ _padding_state_fm1,     0xb5
-        .lclequ _padding_state_fm2,     0xc6
-        .lclequ _padding_state_fm3,     0x26
+        .lclequ _padding_state_stream,  0x0
+        .lclequ _padding_state_fm1,     0x0
+        .lclequ _padding_state_op1,     0x0
+        .lclequ _padding_state_op2,     0x0
+        .lclequ _padding_state_op3,     0x0
+        .lclequ _padding_state_op4,     0x18
+        .lclequ _padding_state_fm2,     0x0
+        .lclequ _padding_state_fm3,     0x0
         .lclequ _padding_state_fm4,     0x0
-        .lclequ _padding_state_ssg,     0x8c
-        .lclequ _padding_state_adpcm,   0x48
-        .lclequ _padding_state_adpcm_b, 0xc0
+        .lclequ _padding_state_ssg,     0x9
+        .lclequ _padding_state_adpcm,   0x3d
+        .lclequ _padding_state_adpcm_b, 0x0

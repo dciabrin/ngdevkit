@@ -29,22 +29,25 @@
         .area   CODE
 
 ;;; Reserved commands as defined in the BIOS
-;;; --------------------
-;;; 00: <unused>
-;;; 01: wait in RAM
-;;; 02: play eye catcher music <provided by the game ROM>
-;;; 03: init and start sound driver
+;;;
+;;; - 00: unused
+;;; - 01: wait in RAM
+;;; - 02: play eye catcher music (provided by the game ROM)
+;;; - 03: init and start sound driver
 ;;;
 
 ;;; Unused sound command
+;;;
 snd_command_unused::
         retn
 
 ;;; Prepare for ROM switch on multi-cart board
+;;;
 ;;; Stop sound and wait in RAM, to allow the 68k to switch
 ;;; cartridge (thus switch z80 ROM). Once done, the 68k will
 ;;; trigger sound request #3, to init the sound driver from
 ;;; the new ROM.
+;;;
 snd_command_01_prepare_for_rom_switch::
         di
         ;; Acknowledge command to the 68k
@@ -62,14 +65,18 @@ snd_command_01_prepare_for_rom_switch::
         retn
 
 ;;; Reset the sound driver and play the eye catcher music
-;;; NOTE: the eye catcher music is not part of nullsound,
+;;;
+;;; Note: the eye catcher music is not part of nullsound,
 ;;; it must be provided by the game ROM
+;;;
 snd_command_02_eye_catcher_music::
         ld      bc, #cmd_jmptable + (2 * JMPTABLE_ENTRY_SIZE)
         jp      snd_init_driver_from_nmi
 
 ;;; Reset the sound driver
-;;; reset stack and start the sound driver
+;;;
+;;; Reset stack and start the sound driver
+;;;
 snd_command_03_reset_driver::
         ld      bc, #0
         jp      snd_init_driver_from_nmi

@@ -31,11 +31,15 @@
 
 
 ;;; Configure the quick legato FX
-;;; ------
-;;; ;  a  : direction (0:up, 1:down)
-;;;   ix  : state for channel
-;;; [ hl ]: ticks:4 - transpose:4
-;;; hl modified
+;;;
+;;; @param[in] a: direction (0:up, 1:down)
+;;; @param[in] ix: state for channel
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | ticks:4 - transpose:4
+;;;
+;;; @modified af, hl
+;;;
 legato_init::
         push    bc
 
@@ -70,8 +74,11 @@ _legato_post_sign:
 
 
 ;;; Update the legato state for the current channel
-;;; ------
-;;;   ix : mirrored state of the current channel
+;;;
+;;; @param[in] ix: mirrored state of the current channel
+;;;
+;;; @modified af
+;;;
 eval_legato_step::
 
         ld      a, LEGATO_DELAY(ix)
@@ -101,47 +108,63 @@ _legato_update_end:
         ret
 
 
-;;; QUICK_LEGATO_UP
+;;;
+;;; @ingroup nss_fx
+;;; @{
+;;;
+
 ;;; Change pitch up by some semitones, after some ticks have passed
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: ticks:4 - transpose:4
-;;; hl modified
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | ticks:4 - transpose:4
+;;;
+;;; @modified af, hl
+;;;
 quick_legato_up::
         ;; a: direction
         xor     a
         jp      legato_init
 
 
-;;; QUICK_LEGATO_DOWN
 ;;; Change pitch down by some semitones, after some ticks have passed
-;;; ------
-;;;   ix  : state for channel
-;;; [ hl ]: ticks:4 - transpose:4
-;;; hl modified
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | ticks:4 - transpose:4
+;;;
+;;; @modified af, hl
+;;;
 quick_legato_down::
         ;; a: direction
         xor     a
         jp      legato_init
 
 
-;;; LEGATO
 ;;; Enable the legato mode for current channel
-;;; ------
-;;;   ix  : state for channel
-;;; hl modified
+;;;
+;;; @param[in] ix: state for channel
+;;;
+;;; @modified af
+;;;
 legato::
         set     BIT_FX_LEGATO, NOTE_FX(ix)
         ld      a, #1
         ret
 
 
-;;; LEGATO_OFF
 ;;; Disable the legato mode for current channel
-;;; ------
-;;;   ix  : state for channel
-;;; hl modified
+;;;
+;;; @param[in] ix: state for channel
+;;;
+;;; @modified af
+;;;
 legato_off::
         res     BIT_FX_LEGATO, NOTE_FX(ix)
         ld      a, #1
         ret
+
+;;; @}
+;;; 

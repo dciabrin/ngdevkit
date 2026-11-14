@@ -127,8 +127,9 @@ init_volume_state_tracker::
 
 
 ;;; Reset music output levels
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 volume_reset_music_levels::
         push    bc
         push    de
@@ -157,8 +158,10 @@ _post_reset_master_a:
 
 ;;; Reconfigure each channel's output level after the music level
 ;;; was updated by a volume up/down operation
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;;
+;;; @modified af
+;;;
 volume_update_channels_levels:
         push    hl
         push    bc
@@ -192,14 +195,16 @@ volume_update_channels_levels:
 
 
 ;;; Return an interpolated output level from a output level ramp
-;;; . The position in the ramp is given by a fixed point level
+;;; - The position in the ramp is given by a fixed point level
 ;;;   (4bit integer + 2bit fractional)
-;;; . The output level is the interpolated level between the two
+;;; - The output level is the interpolated level between the two
 ;;;   adjacent integer levels in the ramp
-;;; ------
-;;; hl: output level ramp
-;;; a: fixed point level
-;;; [a, bc, de, hl modified]
+;;;
+;;; @param[in] hl: output level ramp address
+;;; @param[in] a: fixed point level
+;;;
+;;; @modified af, bc, de, hl
+;;;
 volume_level_from_ramp::
         ;; bc: 16bit-extended level
         ld      a, (state_volume_fade_progress)
@@ -246,7 +251,7 @@ _fade_post_bit1:
 
 ;;; Update currently playing notes in the YM2610 to reflect how
 ;;; the channels' output levels are currently configured in nullsound
-;;; ------
+;;;
 ;;; [a, de, bc, hl, modified]
 volume_update_stream_state:
         push    iy
@@ -338,8 +343,9 @@ _vol_post_adpcm_b:
 
 ;;; Check whether a volume fade out is in progress, update the
 ;;; channels output levels accordingly
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 update_volume_state_tracker::
         ld      a, (state_volume_fade_out)
         bit     0, a
@@ -419,8 +425,9 @@ _post_volume_fade_out::
 
 ;;; Raise the current music level by one step
 ;;; If the volume is currently muted, this is a no-op
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 stream_volume_down::
         ld      a, (state_volume_muted)
         cp      #0
@@ -441,8 +448,9 @@ _end_vol_down:
 
 ;;; Raise the current music level by one step
 ;;; If the volume is currently muted, this is a no-op
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 stream_volume_up::
         ld      a, (state_volume_muted)
         cp      #0
@@ -464,8 +472,9 @@ _end_vol_up:
 ;;; Fade the music level down to zero
 ;;; This takes up to 64 ticks in time, when started from the maximum volume
 ;;; and with the minimum fade speed (0.25 level per tick)
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 volume_fade_out::
         ;; start the fade out from the current music level
         ld      a, (state_volume_music_level)
@@ -479,8 +488,9 @@ volume_fade_out::
 
 ;;; Mute currently playing music (by using the current music level),
 ;;; as well as ADPCM SFX (via the YM2610's master volume)
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 volume_mute::
         ld      a, #1
         ld      (state_volume_muted), a
@@ -502,8 +512,9 @@ volume_mute::
 
 ;;; Unmute currently playing music (by using the current music level),
 ;;; as well as ADPCM SFX (via the YM2610's master volume)
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 volume_unmute::
         xor     a
         ld      (state_volume_muted), a

@@ -63,6 +63,7 @@ state_a_vol16:                  .blkb   2       ; current decimal volume
 ;;; FX state trackers
 state_a_fx:                     .blkb   1       ; enabled FX for this channel
 state_a_fx_vol_slide:           .blkb   SLIDE_SIZE
+state_a_fx_tremolo:             .blkb   VIBRATO_SIZE
 state_a_fx_trigger:             .blkb   TRIGGER_SIZE
 
 ;;; actions to run at the end of every tick
@@ -122,8 +123,9 @@ state_a_action_funcs::
 
 ;;;  Reset ADPCM playback state.
 ;;;  Called before playing a stream
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 init_nss_adpcm_state_tracker::
         ld      hl, #state_a_start
         ld      d, h
@@ -151,8 +153,9 @@ _a_init:
 
 ;;;  Reset ADPCM-A playback state.
 ;;;  Called before waiting for the next tick
-;;; ------
-;;; [a modified - other registers saved]
+;;;
+;;; @modified af
+;;;
 adpcm_a_ctx_reset::
         ld      a, #0
         ld      (state_adpcm_a_channel), a
@@ -160,8 +163,11 @@ adpcm_a_ctx_reset::
 
 
 ;;; Set the current ADPCM-A track and YM2610 load function for this track
-;;; ------
-;;;   a : ADPCM-A channel
+;;;
+;;; @param[in] a: ADPCM-A channel
+;;;
+;;; @modified af
+;;;        
 adpcm_a_ctx_set_current::
         ;; set ADPCM-A context
         ld      (state_adpcm_a_channel), a
@@ -191,12 +197,11 @@ _adpcm_a_ctx_post_bit2:
         ret
 
 
-;;; run_adpcm_a_pipeline
-;;; ------
 ;;; Run the entire ADPCM-A pipeline once. for each ADPCM-A channels:
 ;;;  - update the state of all enabled FX
 ;;;  - load specific parts of the state (pan, vol...) into ADPCM-A registers
 ;;; Meant to run once per tick
+;;;
 run_adpcm_a_pipeline::
         push    de
         push    iy
@@ -315,66 +320,82 @@ _a_end_pipeline:
 
 
 ;;; ADPCM NSS opcodes
-;;; ------
+;;;
 
-;;; ADPCM_A_CTX_1
+;;; 
+;;; @ingroup nss_opcodes
+;;; @defgroup nss_adpcm_a ADPCM-A opcodes
+;;; @{
+;;;
+
 ;;; Set the current ADPCM-A context to channel 1 ADPCM-A opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_ctx_1::
         ;; set new current ADPCM-A channel
         ld      a, #0
         jp      adpcm_a_ctx_set_current
 
 
-;;; ADPCM_A_CTX_2
 ;;; Set the current ADPCM-A context to channel 2 ADPCM-A opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_ctx_2::
         ;; set new current ADPCM-A channel
         ld      a, #1
         jp      adpcm_a_ctx_set_current
 
 
-;;; ADPCM_A_CTX_3
 ;;; Set the current ADPCM-A context to channel 3 ADPCM-A opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_ctx_3::
         ;; set new current ADPCM-A channel
         ld      a, #2
         jp      adpcm_a_ctx_set_current
 
 
-;;; ADPCM_A_CTX_4
 ;;; Set the current ADPCM-A context to channel 4 ADPCM-A opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_ctx_4::
         ;; set new current ADPCM-A channel
         ld      a, #3
         jp      adpcm_a_ctx_set_current
 
 
-;;; ADPCM_A_CTX_5
 ;;; Set the current ADPCM-A context to channel 5 ADPCM-A opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_ctx_5::
         ;; set new current ADPCM-A channel
         ld      a, #4
         jp      adpcm_a_ctx_set_current
 
 
-;;; ADPCM_A_CTX_6
 ;;; Set the current ADPCM-A context to channel 6 ADPCM-A opcode processing
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_ctx_6::
         ;; set new current ADPCM-A channel
         ld      a, #5
         jp      adpcm_a_ctx_set_current
 
 
-;;; ADPCM_A_INSTRUMENT
 ;;; Configure an ADPCM-A channel based on an instrument's data
-;;; ------
-;;; [ hl ]: instrument number
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | instrument number
+;;;
+;;; @return parse next opcode
+;;; 
 adpcm_a_instrument::
         push    bc
 
@@ -439,9 +460,11 @@ _adpcm_a_instr_post_vol:
         ld      a, #1
         ret
 
-
+;;; @}
+;;;
+        
 ;;; Configure state for new note and trigger a load in the pipeline
-;;; ------
+;;;
 adpcm_a_configure_on:
         ;; load a new note means "restart the current sample"
 
@@ -453,7 +476,7 @@ adpcm_a_configure_on:
 
 
 ;;; Configure state for new volume and trigger a load in the pipeline
-;;; ------
+;;;
 adpcm_a_configure_vol:
         ;; if a volume slide is ongoing, treat it as a volume slide FX update
         bit     BIT_FX_SLIDE, FX(ix)
@@ -472,10 +495,13 @@ _a_cfg_vol_update:
 _a_cfg_vol_end:
         ret
 
+;;; @ingroup nss_adpcm_a
+;;; @{
 
-;;; ADPCM_A_ON
 ;;; Start sound playback on the current ADPCM-A channel
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_on::
         ;; delay the start via the trigger FX?
         bit     BIT_TRIGGER_ACTION_DELAY, TRIGGER_ACTION(ix)
@@ -499,10 +525,11 @@ _a_on_end:
         ret
 
 
-;;; ADPCM_A_ON_AND_WAIT
 ;;; Start sound playback on the current ADPCM-A channel and
 ;;; immediately wait as many rows as the last wait
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_on_and_wait::
         ;; process a regular note opcode
         call    adpcm_a_on
@@ -513,7 +540,7 @@ adpcm_a_on_and_wait::
 
 
 ;;; Release the note on a ADPCM-A channel and update the pipeline state
-;;; ------
+;;;
 adpcm_a_stop_playback:
         push    bc
         push    de
@@ -543,9 +570,10 @@ _off_bit:
         ret
 
 
-;;; ADPCM_A_OFF
 ;;; Stop the playback on a ADPCM-A channel
-;;; ------
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_off::
         call    adpcm_a_stop_playback
 
@@ -557,15 +585,18 @@ adpcm_a_off::
         ld      a, #1
         ret
 
-
-;;; adpcm_a_scale_output
-;;; adjust a channel volume to match configured ADPCM-A output level
+;;; @}
+;;;
+        
+;;; Adjust a channel volume to match configured ADPCM-A output level
 ;;; the YM2610's ADPCM-A output level ramp follows an exponential
 ;;; curve, so we implement this output level attenuation via a basic
 ;;; substraction, clamped to 0.
-;;; ------
-;;; a: input level [0x00..0x1f]
-;;; modified: bc
+;;;
+;;; @param[in] a: input level [0x00..0x1f]
+;;;
+;;; @modified af, bc
+;;;
 adpcm_a_scale_output::
         ;; b: pan info
         ld      c, a
@@ -594,11 +625,12 @@ _adpcm_a_clamp_level:
 
 
 ;;; Compute the YM2610 output volume from the current channel
-;;; ------
-;;; IN:
-;;;    ix: FM pipeline
-;;;    iy: Volume FX
-;;; modified: c
+;;;
+;;; @param[in] ix: FM pipeline
+;;; @param[in] iy: Volume FX
+;;; 
+;;; @modified: af, c
+;;;
 compute_ym2610_a_vol::
         ;; c: instrument attenuation [-0x1f..0]
         ld      a, #-0x1f
@@ -622,13 +654,19 @@ _a_post_global_vol:
 
         ret
 
+;;; @ingroup nss_adpcm_a
+;;; @{
 
-;;; ADPCM_A_VOL
 ;;; Register a pending volume change for the current ADPCM-A channel
 ;;; The next note to be played or instrument change will pick
 ;;; up this volume configuration change
-;;; ------
-;;; [ hl ]: volume [0-0x1f]
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | volume [0-0x1f]
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_vol::
         ;; a: volume
         ld      a, (hl)
@@ -650,11 +688,15 @@ _a_vol_end:
         ret
 
 
-;;; ADPCM_A_DELAY
 ;;; Enable delayed trigger for the next note and volume
 ;;; (note and volume and played after a number of ticks)
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_delay::
         call    trigger_delay_init
 
@@ -662,10 +704,14 @@ adpcm_a_delay::
         ret
 
 
-;;; ADPCM_A_CUT
 ;;; Record that the note being played must be stopped after some steps
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_cut::
         call    trigger_cut_init
 
@@ -673,10 +719,14 @@ adpcm_a_cut::
         ret
 
 
-;;; ADPCM_A_RETRIGGER
 ;;; Enable another trigger of the current note after a number of steps
-;;; ------
-;;; [ hl ]: delay
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | delay
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_retrigger::
         call    trigger_retrigger_init
 
@@ -684,10 +734,14 @@ adpcm_a_retrigger::
         ret
 
 
-;;; ADPCM_A_PAN
 ;;; Set the pan (l/r) for the current ADPCM-A channel
-;;; ------
-;;; [ hl ]: pan (b7: left, b6: right)
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   |  hl  | pan (b7: left, b6: right)
+;;;
+;;; @return parse next opcode
+;;;
 adpcm_a_pan::
         ld      a, (hl)
         inc     hl
@@ -696,3 +750,6 @@ adpcm_a_pan::
 
         ld      a, #1
         ret
+
+;;; @}
+;;; 
