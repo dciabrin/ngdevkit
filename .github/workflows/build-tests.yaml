@@ -2,9 +2,11 @@ name: Build and Test
 on:
   workflow_dispatch:
   pull_request:
-  push:
     branches-ignore:
-      - 'master'
+      - "ci/**"
+  push:
+    branches:
+      - "ci/**"
     paths-ignore:
       - 'README*.md'
 jobs:
