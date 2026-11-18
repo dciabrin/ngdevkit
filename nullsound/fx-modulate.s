@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024-2025 Damien Ciabrini
+;;; Copyright (c) 2024-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 ;;; You should have received a copy of the GNU Lesser General Public License
 ;;; along with ngdevkit.  If not, see <http://www.gnu.org/licenses/>.
 
-;;; Vibrato effect, common functions all channel types
+;;; Modulation effects (vibrato/tremolo), common to all channel types
 ;;;
 
         .module nullsound
@@ -27,6 +27,7 @@
 
 
         .equ    VIBRATO_PRECALC_SIZE, 64
+        .equ    TREMOLO_PRECALC_SIZE, 128
 
 
 
@@ -55,7 +56,7 @@ vibrato_init::
         bit     BIT_FX_VIBRATO, DATA_FX(iy)
         jp      nz, _post_vibrato_pos
         ;; else reset vibrato sine pos
-        ld      VIBRATO_POS(iy), #0
+        ld      MODULATE_POS(iy), #0
 _post_vibrato_pos:
         ;; enable vibrato FX
         set      BIT_FX_VIBRATO, DATA_FX(iy)
@@ -67,71 +68,65 @@ _post_vibrato_pos:
         rra
         rra
         and     #0xf
-        ld      VIBRATO_SPEED(iy), a
+        ld      MODULATE_SPEED(iy), a
 
         ;; depth, clamped to [1..16]
         ld      a, (hl)
         and     #0xf
         inc     a
-        ld      VIBRATO_DEPTH(iy), a
+        ld      MODULATE_DEPTH(iy), a
 
         inc     hl
 
-        ;; pop the vol of note config
+        ;; pop the vol or note config
         pop     de
 
         ld      a, #1
         ret
 
 
-;;; Scale a fixed point 16bit value into x/16 fraction
+;;; Scale a fixed point 8:8 value into x/16 fraction
 ;;;
 ;;; IN:
-;;;   bc : distance
+;;;   bc : distance [8:8 increment]
 ;;;    a : scale factor [1..16]
 ;;; OUT:
-;;;   hl : scaled base increment
+;;;    h : integer part of the scaled value
+;;;    l : frcational part of the scaled value
+;;;    e : carry bit from scaling operation
 ;;;
-;;; @modified af, bc, hl
+;;; @modified af, bc, hl, e
 ;;;
-vibrato_scale_increment:
-        ;; bc: base increment (fixed point)
-        ;; there are 8 possible levels, so bc = fixed point distance / 8
-        ld      c, #0
-        srl     b
-        rr      c
-        srl     b
-        rr      c
-        srl     b
-        rr      c
-
-        ;; scale the base increment based on the vibrato depth
-        ;; depth has 16 possible levels [1..16], so parse 4 bits
-        ld      h, #0
-        ld      l, h
-        bit     4, a
-        jr      z, _post_bit4
+modulate_scale_increment:
+        ;; hl: displacement = precalc * depth scaling
+        sla     a
+        jr      nc, _m_post_bit4
         add     hl, bc
-_post_bit4:
-        ;; shift bc 1 bit to the right
-        srl     b
-        rr      c
-        bit     3, a
-        jr      z, _post_bit3
+_m_post_bit4:
+        add     hl, hl
+        add     a, a
+        jr      nc, _m_post_bit3
         add     hl, bc
-_post_bit3:
-        srl     b
-        rr      c
-        bit     2, a
-        jr      z, _post_bit2
+_m_post_bit3:
+        add     hl, hl
+        add     a, a
+        jr      nc, _m_post_bit2
         add     hl, bc
-_post_bit2:
-        srl     b
-        rr      c
-        bit     1, a
-        jr      z, _post_bit1
+_m_post_bit2:
+        add     hl, hl
+        add     a, a
+        jr      nc, _m_post_bit1
         add     hl, bc
-_post_bit1:
+_m_post_bit1:
+        ;; this 16bit shift might overflow now if the precalc is one full
+        ;; note displacement (0x1000) and depth is full (0x10). Recall
+        ;; the potential overflow bit in e
+        add     hl, hl
+        rl      e
+        add     a, a
+        jr      nc, _m_post_bit0
+        add     hl, bc
+_m_post_bit0:
         ret
 
 
@@ -148,10 +143,10 @@ _post_bit1:
 ;;;
 eval_vibrato_step::
         ;; e: next vibrato pos
-        ld      a, VIBRATO_POS(iy)
-        add     a, VIBRATO_SPEED(iy)
+        ld      a, MODULATE_POS(iy)
+        add     a, MODULATE_SPEED(iy)
         and     #(VIBRATO_PRECALC_SIZE-1)
-        ld      VIBRATO_POS(iy), a
+        ld      MODULATE_POS(iy), a
         ;; e: offset for sine precalc
         sla     a
         ld      e, a
@@ -180,40 +175,14 @@ _v_mul:
         srl     b
 
         ;; a effect depth clamped to [1..16] (5 bits)
-        ld      a, VIBRATO_DEPTH(iy)
+        ld      a, MODULATE_DEPTH(iy)
         ;; TODO move shifts in the vibrato setup, and store bounds
         ;; as [0..15], to avoid shifts at every tick (FM and SSG)
         sla     a
         sla     a
         sla     a
-        sla     a
-        jr      nc, _v_post_bit4
-        add     hl, bc
-_v_post_bit4:
-        add     hl, hl
-        add     a, a
-        jr      nc, _v_post_bit3
-        add     hl, bc
-_v_post_bit3:
-        add     hl, hl
-        add     a, a
-        jr      nc, _v_post_bit2
-        add     hl, bc
-_v_post_bit2:
-        add     hl, hl
-        add     a, a
-        jr      nc, _v_post_bit1
-        add     hl, bc
-_v_post_bit1:
-        ;; this 16bit shift might overflow now if the precalc is one full
-        ;; note displacement (0x1000) and depth is full (0x10). Recall
-        ;; the potential overflow bit in e
-        add     hl, hl
-        rl      e
-        add     a, a
-        jr      nc, _v_post_bit0
-        add     hl, bc
-_v_post_bit0:
+
+        call    modulate_scale_increment
 
         ;; after scaling, h holds the floating part of the displacement
         ;; and e holds the 9th bit of the displacement
@@ -231,8 +200,54 @@ _v_post_bit0:
         ld      h, a
 _v_post_sign:
 
-        ld      VIBRATO_POS16(iy), l
-        ld      VIBRATO_POS16+1(iy), h
+        ld      MODULATE_POS16(iy), l
+        ld      MODULATE_POS16+1(iy), h
+
+        ret
+
+
+;;; Update the tremolo for the current channel
+;;;
+;;; @param[in] ix: state for channel
+;;; @param[in] iy: FX state for channel
+;;;
+;;; @modified af, bc, de, hl
+;;;
+eval_tremolo_step::
+        ;; e: next vibrato pos
+        ld      a, MODULATE_POS(iy)
+        add     a, MODULATE_SPEED(iy)
+        and     #(TREMOLO_PRECALC_SIZE-1)
+        ld      MODULATE_POS(iy), a
+        ;; bc: offset for sine precalc
+        ld      c, a
+        ld      b, #0
+        ;; hl: pos in sine precalc
+        ld      hl, #tremolo_cosine
+        add     hl, bc
+
+        ;; bc: attenuation tremolo cosine precalc (4:4 fixed point)
+        ld      c, (hl)
+        xor     a
+        ld      b, a
+
+        ;; hl: placeholder for final scaled attenuation
+        ld      h, a
+        ld      l, a
+
+        ;; a: effect depth clamped to [1..16] (5 bits)
+        ld      a, MODULATE_DEPTH(iy)
+        ;; TODO move shifts in the vibrato setup, and store bounds
+        ;; as [0..15], to avoid shifts at every tick (FM and SSG)
+        sla     a
+        sla     a
+        sla     a
+
+        call    modulate_scale_increment
+
+        ;; tremolo scaling doesn't touch carry, so only consider hl
+        ld      MODULATE_POS16(iy), l
+        ld      MODULATE_POS16+1(iy), h
 
         ret
 
@@ -250,7 +265,7 @@ _v_post_sign:
 ;;;
 ;;; @return parse next opcode
 ;;;
-;;; @modified af
+;;; @modified af, hl
 ;;;
 vibrato::
         push    de
@@ -272,6 +287,39 @@ vibrato_off::
         set     BIT_LOAD_NOTE, PIPELINE(ix)
         ld      a, #1
         ret
+
+
+;;; Enable tremolo for the current channel
+;;;
+;;; @param[in] hl: NSS arguments in memory
+;;; @memory
+;;;   hl | speed (4bits) and depth (4bits)
+;;;
+;;; @return parse next opcode
+;;;
+;;; @modified af, hl
+;;;
+tremolo::
+        push    de
+        ld      de, #VOL_CTX
+        jp      vibrato_init
+
+
+;;; Disable tremolo for the current channel
+;;;
+;;; @return parse next opcode
+;;;
+;;; @modified af
+;;;
+tremolo_off::
+        ;; disable FX
+        res     BIT_FX_VIBRATO, FX(ix)
+        ;; since we disable the FX outside of the pipeline process
+        ;; make sure to load this new note at next pipeline run
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+        ld      a, #1
+        ret
+
 
 ;;; @}
 ;;; 

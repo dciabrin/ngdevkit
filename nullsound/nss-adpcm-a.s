@@ -63,6 +63,7 @@ state_a_vol16:                  .blkb   2       ; current decimal volume
 ;;; FX state trackers
 state_a_fx:                     .blkb   1       ; enabled FX for this channel
 state_a_fx_vol_slide:           .blkb   SLIDE_SIZE
+state_a_fx_tremolo:             .blkb   MODULATE_SIZE
 state_a_fx_trigger:             .blkb   TRIGGER_SIZE
 
 ;;; actions to run at the end of every tick
@@ -229,6 +230,18 @@ _a_update_loop:
         ld      hl, #state_a_action_funcs
         call    eval_trigger_step
 _a_post_fx_trigger:
+
+        ;; iy: volume FX state for channel
+        push    ix
+        pop     iy
+        ld      bc, #VOL_CTX
+        add     iy, bc
+
+        bit     BIT_FX_TREMOLO, FX(ix)
+        jr      z, _a_post_fx_tremolo
+        call    eval_tremolo_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_a_post_fx_tremolo:
 
         ;; iy: volume FX state for channel
         push    ix
@@ -648,20 +661,32 @@ _adpcm_a_clamp_level:
 ;;; @param[in] ix: FM pipeline
 ;;; @param[in] iy: Volume FX
 ;;; 
-;;; @modified: af, c
+;;; @modified: af, bc
 ;;;
 compute_ym2610_a_vol::
-        ;; c: instrument attenuation [-0x1f..0]
-        ld      a, #-0x1f
-        add     INSTR_VOL(ix)
+        ;; b: tremolo attenuation
+        xor     a
+        bit     BIT_FX_TREMOLO, FX(ix)
+        jr      z, _a_post_vol_tremolo
+        ld      a, VOL_CTX+MODULATE_POS16+1(ix)
+_a_post_vol_tremolo:
+        ld      b, a
+
+        ;; c: volume attenuation from instrument [-0x1f..0x0]
+        ;;    instrument's vol == 0x1f [max]: no attenuation
+        ;;    instrument's vol == 0x0  [min]: max attenuation
+        ld      a, #0x1f
+        sub     INSTR_VOL(ix)
         ld      c, a
 
-        ;; c: current volume after instrument attenuation [-0x1f..0x1f]
+        ;; c: current volume after all attenuations [-0x1f..0x1f]
         ld      a, VOL16+1(ix)
-        add     c
+        sub     b
+        sub     c
         ld      c, a
 
-        ;; attenuation to match the configured ADPCM-A output level
+        ;; master attenuation to match the configured ADPCM-A output level
+        ;; clamped to YM2610 level [0x0..0x1f]
         ld      a, (state_adpcm_a_volume_attenuation)
         neg
         add     c
