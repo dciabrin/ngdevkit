@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024-2025 Damien Ciabrini
+;;; Copyright (c) 2024-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -28,10 +28,10 @@
         .local  _data_ctx, _data_fx, _data_cfg, _data16
         .local  pipeline
         .local  fx_fx, cfg_vol, vol16, fx_vol_slide
-        .local  note_fx, note_cfg, note16, fx_note_slide, fx_vibrato, fx_arpeggio, fx_legato
+        .local  note_fx, note_cfg, note16, fx_note_slide, fx_vibrato, fx_arpeggio, fx_legato, fx_tremolo
         .local  _trigger, _trigger_action, _trigger_note, _trigger_vol, _trigger_arg, _trigger_cur, _trigger_size
         .local  _vol_slide, _vol_slide_cfg, _vol_slide_inc16, _vol_slide_end, _vol_slide_max, _vol_slide_size
-        .local  _vibrato, _vibrato_speed, _vibrato_depth, _vibrato_pos, _vibrato_pos16, _vibrato_size
+        .local  _modulate, _modulate_speed, _modulate_depth, _modulate_pos, _modulate_pos16, _modulate_size
         .local  _arpeggio, _arpeggio_speed, _arpeggio_count, _arpeggio_2nd, _arpeggio_3rd, _arpeggio_pos, _arpeggio_pos8, _arpeggio_size
         .local  _legato, _legato_cfg, _legato_delay, _legato_transpose, _legato_size
         .local  fx_trigger
@@ -63,7 +63,7 @@ note16:                 .blkb 2         ; current decimal note
 ;;; optional note FX state tracker
 note_fx:                .blkb 1         ; enabled note FX
 fx_note_slide:          .blkb SLIDE_SIZE
-fx_vibrato:             .blkb VIBRATO_SIZE
+fx_vibrato:             .blkb MODULATE_SIZE
 fx_arpeggio:            .blkb ARPEGGIO_SIZE
 fx_legato:              .blkb LEGATO_SIZE
 
@@ -73,6 +73,7 @@ vol16:                  .blkb 2         ; current decimal volume
 ;;; common FX state tracker
 fx_fx:                  .blkb 1         ; enabled FX
 fx_vol_slide:           .blkb SLIDE_SIZE
+fx_tremolo:             .blkb MODULATE_SIZE
 fx_trigger:             .blkb TRIGGER_SIZE
 
 ;;; strean pipeline
@@ -98,13 +99,13 @@ _vol_slide_end:         .blkw 1         ; volume slide end
 _vol_slide_max:         .blkb 1         ; volume slide max for channel
 _vol_slide_size:
 
-;;; FX: vibrato/tremolo
-_vibrato:
-_vibrato_speed:         .blkb 1         ; vibrato_speed
-_vibrato_depth:         .blkb 1         ; vibrato_depth
-_vibrato_pos:           .blkb 1         ; vibrato_pos
-_vibrato_pos16:         .blkw 1         ; vibrato_pos16
-_vibrato_size:
+;;; FX: modulate (note: vibrato, volume: tremolo)
+_modulate:
+_modulate_speed:         .blkb 1         ; modulation speed
+_modulate_depth:         .blkb 1         ; modulation depth (higher = bigger)
+_modulate_pos:           .blkb 1         ; position in the modulation curve
+_modulate_pos16:         .blkw 1         ; computed modulation displacement
+_modulate_size:
 
 ;;; FX: arpeggio
 _arpeggio:
@@ -167,12 +168,12 @@ _trigger_size:
         .lclequ SLIDE_END,  (_vol_slide_end    - _data_ctx)
         .lclequ SLIDE_MAX,  (_vol_slide_max    - _data_ctx)
         .lclequ SLIDE_SIZE, (_vol_slide_size   - _vol_slide)
-        ;; FX vibrato/tremolo
-        .lclequ VIBRATO_SPEED,  (_vibrato_speed - _data_ctx)
-        .lclequ VIBRATO_DEPTH,  (_vibrato_depth - _data_ctx)
-        .lclequ VIBRATO_POS,    (_vibrato_pos   - _data_ctx)
-        .lclequ VIBRATO_POS16,  (_vibrato_pos16 - _data_ctx)
-        .lclequ VIBRATO_SIZE,   (_vibrato_size  - _vibrato)
+        ;; FX modulate (vibrato/tremolo)
+        .lclequ MODULATE_SPEED,  (_modulate_speed - _data_ctx)
+        .lclequ MODULATE_DEPTH,  (_modulate_depth - _data_ctx)
+        .lclequ MODULATE_POS,    (_modulate_pos   - _data_ctx)
+        .lclequ MODULATE_POS16,  (_modulate_pos16 - _data_ctx)
+        .lclequ MODULATE_SIZE,   (_modulate_size  - _modulate)
 
         ;; other FX are relative to the pipeline field, so they can be
         ;; addressed directly as an offset from register ix
@@ -204,7 +205,9 @@ _trigger_size:
         ;; Enabled FX
         .lclequ BIT_FX_TRIGGER,         0
         .lclequ BIT_FX_SLIDE,           1
-        .lclequ BIT_FX_VIBRATO,         2
+        .lclequ BIT_FX_MODULATE,        2
+        .lclequ BIT_FX_VIBRATO,         BIT_FX_MODULATE
+        .lclequ BIT_FX_TREMOLO,         BIT_FX_MODULATE
         .lclequ BIT_FX_ARPEGGIO,        3
         .lclequ BIT_FX_LEGATO,          4
         .lclequ BIT_FX_QUICK_LEGATO,    5

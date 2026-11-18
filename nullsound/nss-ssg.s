@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024-2025 Damien Ciabrini
+;;; Copyright (c) 2024-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -83,7 +83,7 @@ state_ssg_note16:               .blkb   2       ; current decimal note
 ;;; note FX state tracker
 state_ssg_note_fx:              .blkb   1       ; enabled note FX for this channel
 state_ssg_fx_note_slide:        .blkb   SLIDE_SIZE
-state_ssg_fx_vibrato:           .blkb   VIBRATO_SIZE
+state_ssg_fx_vibrato:           .blkb   MODULATE_SIZE
 state_ssg_fx_arpeggio:          .blkb   ARPEGGIO_SIZE
 state_ssg_fx_legato:            .blkb   LEGATO_SIZE
 
@@ -93,6 +93,7 @@ state_ssg_vol16:                .blkb   2       ; current decimal volume
 ;;; common FX state tracker
 state_ssg_fx:                   .blkb   1       ; enabled FX for this channel
 state_ssg_fx_vol_slide:         .blkb   SLIDE_SIZE
+state_ssg_fx_tremolo:           .blkb   MODULATE_SIZE
 state_ssg_trigger:              .blkb   TRIGGER_SIZE
 
 ;;; actions to run at the end of every tick
@@ -323,6 +324,11 @@ _ssg_post_fx_trigger:
         call    eval_slide_step
         set     #BIT_LOAD_VOL, PIPELINE(ix)
 _ssg_post_fx_vol_slide:
+        bit     BIT_FX_TREMOLO, FX(ix)
+        jr      z, _ssg_post_fx_tremolo
+        call    eval_tremolo_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_ssg_post_fx_tremolo:
 
         ;; iy: note FX state for channel
         push    ix
@@ -496,8 +502,8 @@ compute_ssg_fixed_point_note::
         ;; + vibrato offset if the vibrato FX is enabled
         bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _ssg_post_add_vibrato
-        ld      c, NOTE_CTX+VIBRATO_POS16(ix)
-        ld      b, NOTE_CTX+VIBRATO_POS16+1(ix)
+        ld      c, NOTE_CTX+MODULATE_POS16(ix)
+        ld      b, NOTE_CTX+MODULATE_POS16+1(ix)
         add     hl, bc
 _ssg_post_add_vibrato::
 
@@ -593,11 +599,24 @@ compute_ym2610_ssg_note::
 
 ;;; Blend all volumes together to yield the volume for the ym2610 register
 ;;;
-;;; @modified af, b
+;;; @modified af, bc
 ;;; 
 compute_ym2610_ssg_vol::
-        ;; a: note volume for channel
+        ;; a: integer part of the decimal volume
         ld      a, VOL16+1(ix)
+
+        ;; b: tremolo attenuation
+        bit     BIT_FX_TREMOLO, FX(ix)
+        jr      z, _ssg_post_add_tremolo
+        ld      b, VOL_CTX+MODULATE_POS16+1(ix)
+
+        ;; a: vol - tremolo attenuation (min-clamped to 0)
+        ;; only consider the integer-part of the tremolo (8bit)
+        ;; for a slightly faster computation
+        sub     b
+        jp      nc, _ssg_post_add_tremolo
+        xor     a
+_ssg_post_add_tremolo:
 
         ;; a: volume converted to attenuation
         sub     #SSG_MAX_VOL
