@@ -31,7 +31,7 @@ OBJS=\
   nss-ssg \
   nss-adpcm-a \
   nss-adpcm-b \
-  fx-vibrato \
+  fx-modulate \
   fx-slide \
   fx-trigger \
   fx-arpeggio \

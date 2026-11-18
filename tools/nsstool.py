@@ -346,11 +346,14 @@ def register_nss_ops():
         ("fm2_vibrato", ["op", "speed_depth"]),
         ("fm2_vibrato_off", ["op"]),
         ("fm2_note_porta",  ["op", "speed"]),
+        # 0x68
         ("fm2_legato"   , ["op"]),
         ("fm2_legato_off", ["op"]),
         ("fm2_vol_slide_off", ["op"]),
         ("fm2_vol_slide_u"  , ["op", "increment"]),
         ("fm2_vol_slide_d"  , ["op", "increment"]),
+        ("tremolo",     ["speed_depth"]),
+        ("tremolo_off", ),
 
         # reserved opcodes
         ("nss_label", ["pat"]),
@@ -678,6 +681,13 @@ def furnace_row_to_nss_actions(fur_pattern, pos):
                 out.fx.append(mkfx(vol_slide_u, fxval>>4))
             else:
                 out.fx.append(mkfx(vol_slide_d, fxval))
+        # tremolo
+        elif fx == 0x07:
+            if fxval in [-1, 0]:
+                # opcode must be executed before a vol opcode
+                out.pre_fx.append(mkfx(tremolo_off))
+            else:
+                out.fx.append(mkfx(tremolo, fxval))
         # retrigger
         elif fx == 0x0c:
             trigger_op = factory.retrigger(fxval)

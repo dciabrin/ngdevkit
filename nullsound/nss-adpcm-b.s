@@ -1,6 +1,6 @@
 ;;;
 ;;; nullsound - modular sound driver
-;;; Copyright (c) 2024-2025 Damien Ciabrini
+;;; Copyright (c) 2024-2026 Damien Ciabrini
 ;;; This file is part of ngdevkit
 ;;;
 ;;; ngdevkit is free software: you can redistribute it and/or modify
@@ -65,7 +65,7 @@ state_b_note16:                 .blkb   2       ; current decimal note
 ;;; note FX state tracker
 state_b_note_fx:                .blkb   1       ; enabled note FX for this channel
 state_b_fx_note_slide:          .blkb   SLIDE_SIZE
-state_b_fx_vibrato:             .blkb   VIBRATO_SIZE
+state_b_fx_vibrato:             .blkb   MODULATE_SIZE
 state_b_fx_arpeggio:            .blkb   ARPEGGIO_SIZE
 state_b_fx_legato:              .blkb   LEGATO_SIZE
 ;;; volume state tracker
@@ -74,6 +74,7 @@ state_b_vol16:                  .blkb   2       ; current decimal volume
 ;;; FX state trackers
 state_b_fx:                     .blkb   1       ; enabled FX for this channel
 state_b_fx_vol_slide:           .blkb   SLIDE_SIZE
+state_b_fx_tremolo:             .blkb   MODULATE_SIZE
 state_b_trigger:                .blkb   TRIGGER_SIZE
 
 ;;; actions to run at the end of every tick
@@ -183,6 +184,11 @@ _b_post_fx_trigger:
         call    eval_slide_step
         set     BIT_LOAD_VOL, PIPELINE(ix)
 _b_post_fx_vol_slide:
+        bit     BIT_FX_TREMOLO, FX(ix)
+        jr      z, _b_post_fx_tremolo
+        call    eval_tremolo_step
+        set     BIT_LOAD_VOL, PIPELINE(ix)
+_b_post_fx_tremolo:
 
         ;; iy: note FX state for channel
         push    ix
@@ -561,8 +567,21 @@ _b_note_on_end:
 ;;; @modified af, bc
 ;;;
 compute_ym2610_adpcm_b_vol::
-        ;; a: note vol
+        ;; b: tremolo attenuation
+        xor     a
+        bit     BIT_FX_TREMOLO, FX(ix)
+        jr      z, _b_post_vol_tremolo
+        ld      a, VOL_CTX+MODULATE_POS16+1(ix)
+_b_post_vol_tremolo:
+        ld      b, a
+
+        ;; a: current volume after attenuations
+        ;; clamped to YM2610 level [0x0..0xff]
         ld      a, VOL16+1(ix)
+        sub     b
+        jr      nc, _b_post_vol_clamp
+        xor     a
+_b_post_vol_clamp:
 
         ;; scale volume based on global attenuation
         call    adpcm_b_scale_output
@@ -589,8 +608,8 @@ compute_adpcm_b_fixed_point_note::
         ;; + vibrato offset if the vibrato FX is enabled
         bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _b_post_add_vibrato
-        ld      c, NOTE_CTX+VIBRATO_POS16(ix)
-        ld      b, NOTE_CTX+VIBRATO_POS16+1(ix)
+        ld      c, NOTE_CTX+MODULATE_POS16(ix)
+        ld      b, NOTE_CTX+MODULATE_POS16+1(ix)
         add     hl, bc
 _b_post_add_vibrato::
 
