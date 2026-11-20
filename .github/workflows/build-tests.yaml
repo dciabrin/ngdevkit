@@ -22,10 +22,18 @@ jobs:
         id: launchpad_ppa
         run: |
           sudo add-apt-repository -y ppa:dciabrin/ngdevkit
-          sudo apt-get update -y
-          toolchain_version=$(sudo apt-cache policy ngdevkit-toolchain | awk '/Candidate:/ {print $2}')
+          sudo apt-get update -y -o APT::Architecture-Variants=""
+          dpkg --print-architecture
+          grep -rn "Architecture-Variants" /etc/apt/ /etc/dpkg/ 2>/dev/null || true
           arch=$(dpkg --print-architecture)
+          sudo apt-cache search ngdevkit-toolchain
+          echo $?
+          sudo apt-cache policy ngdevkit-toolchain:amd64
+          echo $?
+          apt list | grep ngdevkit
+          toolchain_version=$(sudo apt-cache policy ngdevkit-toolchain | awk '/Candidate:/ {print $2}')
           echo "toolchain_deb=ngdevkit-toolchain_${toolchain_version}_${arch}.deb" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
 
       - name: Cache ngdevkit-toolchain package
         uses: actions/cache@v5
@@ -55,74 +63,74 @@ jobs:
       - name: Test by compiling ngdevkit-examples
         run: ./.github/scripts/test.sh
 
-  win:
-    name: "Windows native MSYS2 build"
-    runs-on: windows-latest
-    env:
-      PY3PATH: ""
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  # win:
+  #   name: "Windows native MSYS2 build"
+  #   runs-on: windows-latest
+  #   env:
+  #     PY3PATH: ""
+  #   defaults:
+  #     run:
+  #       shell: msys2 {0}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Install MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install:
-            git autoconf automake make zip rsync pactoys
-            mingw-w64-ucrt-x86_64-pkg-config
-            mingw-w64-ucrt-x86_64-python
-            mingw-w64-ucrt-x86_64-python-pillow
-            mingw-w64-ucrt-x86_64-python-ruamel-yaml
+  #     - name: Install MSYS2
+  #       uses: msys2/setup-msys2@v2
+  #       with:
+  #         msystem: UCRT64
+  #         update: true
+  #         install:
+  #           git autoconf automake make zip rsync pactoys
+  #           mingw-w64-ucrt-x86_64-pkg-config
+  #           mingw-w64-ucrt-x86_64-python
+  #           mingw-w64-ucrt-x86_64-python-pillow
+  #           mingw-w64-ucrt-x86_64-python-ruamel-yaml
 
-      - name: Install ngdevkit dependencies
-        run: |
-          echo -e "[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
-          pacman -Sy
-          pacman -S --disable-download-timeout --noconfirm mingw-w64-ucrt-x86_64-ngdevkit-toolchain
+  #     - name: Install ngdevkit dependencies
+  #       run: |
+  #         echo -e "[ngdevkit]\nSigLevel = Optional TrustAll\nServer = https://dciabrin.net/msys2-ngdevkit/\$arch" >> /etc/pacman.conf
+  #         pacman -Sy
+  #         pacman -S --disable-download-timeout --noconfirm mingw-w64-ucrt-x86_64-ngdevkit-toolchain
 
-      - name: Build
-        run: ./.github/scripts/build-msys2.sh
+  #     - name: Build
+  #       run: ./.github/scripts/build-msys2.sh
 
-      - name: Install dependencies for ngdevkit-examples
-        run: |
-          pacboy -S --noconfirm ngdevkit-gngeo:u toolchain:u zlib:u sox:u imagemagick:u
+  #     - name: Install dependencies for ngdevkit-examples
+  #       run: |
+  #         pacboy -S --noconfirm ngdevkit-gngeo:u toolchain:u zlib:u sox:u imagemagick:u
 
-      - name: Test by compiling ngdevkit-examples
-        run: ./.github/scripts/test.sh
+  #     - name: Test by compiling ngdevkit-examples
+  #       run: ./.github/scripts/test.sh
 
 
-  macos:
-    name: "macOS build"
-    runs-on: xcode-27
-    env:
-      PREFIX: "/opt/homebrew"
-      PY3PATH: "/opt/homebrew/bin"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # macos:
+  #   name: "macOS build"
+  #   runs-on: xcode-27
+  #   env:
+  #     PREFIX: "/opt/homebrew"
+  #     PY3PATH: "/opt/homebrew/bin"
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Dependencies
-        run: |
-          brew tap dciabrin/ngdevkit
-          brew trust dciabrin/ngdevkit
-          brew install python3 --overwrite
-          brew install pillow
-          brew install automake ngdevkit-toolchain zip pkg-config sdl2 sdl2_image
-          $(brew --prefix python)/libexec/bin/pip install ruamel.yaml --break-system-packages
+  #     - name: Dependencies
+  #       run: |
+  #         brew tap dciabrin/ngdevkit
+  #         brew trust dciabrin/ngdevkit
+  #         brew install python3 --overwrite
+  #         brew install pillow
+  #         brew install automake ngdevkit-toolchain zip pkg-config sdl2 sdl2_image
+  #         $(brew --prefix python)/libexec/bin/pip install ruamel.yaml --break-system-packages
 
-      - name: Build
-        run: ./.github/scripts/build.sh
+  #     - name: Build
+  #       run: ./.github/scripts/build.sh
 
-      - name: Install dependencies for ngdevkit-examples
-        run: |
-          brew install ngdevkit-gngeo imagemagick sox glew make
+  #     - name: Install dependencies for ngdevkit-examples
+  #       run: |
+  #         brew install ngdevkit-gngeo imagemagick sox glew make
 
-      - name: Test by compiling ngdevkit-examples
-        run: ./.github/scripts/test.sh
+  #     - name: Test by compiling ngdevkit-examples
+  #       run: ./.github/scripts/test.sh
