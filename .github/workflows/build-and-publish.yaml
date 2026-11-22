@@ -21,8 +21,8 @@ jobs:
         run: |
           sudo add-apt-repository -y ppa:dciabrin/ngdevkit
           sudo apt-get update -y
-          toolchain_version=$(sudo apt-cache policy ngdevkit-toolchain | awk '/Candidate:/ {print $2}')
-          arch=$(dpkg --print-architecture)
+          toolchain_version=$(sudo apt-cache policy ngdevkit-toolchain | awk '/Candidate:/ {print $2; exit}')
+          arch=$(sudo apt-cache policy ngdevkit-toolchain | awk '/Packages$/ {print $(NF-1); exit}')
           echo "toolchain_deb=ngdevkit-toolchain_${toolchain_version}_${arch}.deb" >> "$GITHUB_OUTPUT"
 
       - name: Cache ngdevkit-toolchain package
