@@ -630,7 +630,11 @@ def furnace_row_to_nss_actions(fur_pattern, pos):
                 out.fx.append(mkfx(note_pitch_slide_d, fxval))
         # portamento
         elif fx == 0x03:
-            out.fx.append(mkfx(note_porta, fxval))
+            if fxval in [-1, 0]:
+                # opcode must be executed before a note opcode
+                out.pre_fx.append(mkfx(note_slide_off))
+            else:
+                out.fx.append(mkfx(note_porta, fxval))
         # vibrato
         elif fx == 0x04:
             if fxval in [-1, 0]:
