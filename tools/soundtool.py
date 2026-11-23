@@ -381,7 +381,8 @@ def dump_makefile(desc, f):
                 print("")
                 if group >= 0:
                     print("$(BUILDDIR_NSS)/%s-%s.s: NSS_FLAGS=-b %d"%(ntype, filename, group), file=f)
-                print("$(BUILDDIR_NSS)/%s-%s.s: %s"%(ntype, filename, path), file=f)
+                print("$(Z80_SAMPLES_IN_VROM): %s"%(path,), file=f)
+                print("$(BUILDDIR_NSS)/%s-%s.s: %s $(Z80_SAMPLES_IN_VROM)"%(ntype, filename, path), file=f)
                 print("$(%s): $(BUILDDIR_NSS)/%s-%s.rel"%(drv, ntype, filename), file=f)
                 if group >= 0:
                     print("$(%s): $(BUILDDIR_NSS)/%s-%s.rel"%(bank, ntype, filename), file=f)
