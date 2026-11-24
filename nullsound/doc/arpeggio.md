@@ -6,7 +6,10 @@ Play a 3-note chord in succession, each note separated by a fixed number of tick
 
   - The first note of the chord is the currently configured note
   - FX specifies the 2nd and 3rd note to play, as a positive semitone offset
-  - arpeggio stops when explicitely disabled (01..)
+  - arpeggio stops if explicitely disabled (`0000`)
+  - arpeggio stops if a note slide effect is triggered (`01`, `02`, `03`, `E1`, `E2`)
+  - arpeggio stops if a SSG or ADPCM-B note is stopped (but not a FM note)
+  - arpeggio is not applied if a note slide is in progress
   - By default, there are two ticks between two notes
   - As soon as the FX is applied, it adds to the current note's decimal position
   - When changing current note when slide is in progress, the chord resets to the first note

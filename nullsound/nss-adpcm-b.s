@@ -190,16 +190,18 @@ _b_post_fx_vol_slide:
         ld      bc, #NOTE_CTX
         add     iy, bc
 
-        bit     BIT_FX_SLIDE, NOTE_FX(ix)
-        jr      z, _b_post_fx_slide
-        call    eval_slide_step
-        set     BIT_LOAD_NOTE, PIPELINE(ix)
-_b_post_fx_slide:
         bit     BIT_FX_VIBRATO, NOTE_FX(ix)
         jr      z, _b_post_fx_vibrato
         call    eval_vibrato_step
         set     BIT_LOAD_NOTE, PIPELINE(ix)
 _b_post_fx_vibrato:
+        bit     BIT_FX_SLIDE, NOTE_FX(ix)
+        jr      z, _b_post_fx_slide
+        call    eval_slide_step
+        set     BIT_LOAD_NOTE, PIPELINE(ix)
+        ;; skip arpeggio while a slide is in progress
+        jr      _b_post_fx_arpeggio
+_b_post_fx_slide:
         bit     BIT_FX_ARPEGGIO, NOTE_FX(ix)
         jr      z, _b_post_fx_arpeggio
         call    eval_arpeggio_step
@@ -696,6 +698,9 @@ adpcm_b_note_off::
         ld      b, #REG_ADPCM_B_START_STOP
         ld      c, #1           ; reset flag (clears start and repeat in YM2610)
         call    ym2610_write_port_a
+
+        ;; Furnace quirk: stopping a SSG note clears the arpeggio FX
+        res     BIT_FX_ARPEGGIO, NOTE_FX(ix)
 
         ;; record that playback is stopped
         xor     a
