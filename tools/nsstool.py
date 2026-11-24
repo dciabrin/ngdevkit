@@ -122,9 +122,9 @@ def set_location_context(m, p, order, channel, row):
 
 def fmt_location_context():
     if ext_fm2:
-        ch_names = ['F1','O1','O2','O3','O4','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
+        ch_names = ['F1','O1','O2','O3','O4','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B ']
     else:
-        ch_names = ['F1','F2','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B']
+        ch_names = ['F1','F2','F3','F4','S1','S2','S3','A1','A2','A3','A4','A5','A6','B ']
     loc = "order %02X, row %3d (%s)"%(location_order, location_row, ch_names[location_channel])
     ansi_start = "\033[31;1;4m"
     ansi_stop = "\033[0m"
