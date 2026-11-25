@@ -674,7 +674,9 @@ def furnace_row_to_nss_actions(fur_pattern, pos):
         elif fx == 0x15:
             out.fx.append(op4_lvl(fxval))
         # volume slide up/down
-        elif fx == 0x0a:
+        elif fx in [0x0a, 0x05]:
+            if fx == 0x05:
+                row_warn("Compability FX, switched to 0A")
             if fxval in [-1, 0]:
                 # opcode must be executed before a vol opcode
                 out.pre_fx.append(mkfx(vol_slide_off))
