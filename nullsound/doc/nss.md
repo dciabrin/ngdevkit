@@ -42,6 +42,7 @@ This document details the current level of support for Furnace features in NSS. 
 
 | FX   | Description                   | Status | Note |
 |------|-------------------------------|--------|------|
+| `05` | Compat only! Volume slide     | 💚️     |      |
 | `0A` | Volume slide                  | 💚️     |      |
 | `FA` | Fast volume slide             | 💜     |      |
 | `F3` | Fine volume slide up          | 💜     |      |
